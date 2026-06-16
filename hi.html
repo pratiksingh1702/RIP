@@ -1,0 +1,1102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RIP — Repository Intelligence Platform · Data Flow</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #f8fafc;
+    --surface: #ffffff;
+    --surface2: #f1f5f9;
+    --border: rgba(0,0,0,0.1);
+    --text: #0f172a;
+    --text2: #475569;
+    --text3: #94a3b8;
+    --teal: #00a87d;
+    --teal2: #008f6a;
+    --purple: #6366f1;
+    --purple2: #4f46e5;
+    --amber: #d97706;
+    --coral: #e11d48;
+    --blue: #2563eb;
+    --green: #16a34a;
+    --pink: #db2777;
+    --font: 'Inter', sans-serif;
+    --mono: 'JetBrains Mono', monospace;
+  }
+
+  html, body { width: 100%; height: 100%; overflow: hidden; background: var(--bg); color: var(--text); }
+
+  /* ── Canvas ── */
+  #canvas { position: fixed; inset: 0; z-index: 0; }
+
+  /* ── UI Shell ── */
+  #ui { position: fixed; inset: 0; z-index: 10; pointer-events: none; font-family: var(--font); }
+
+  /* ── Header ── */
+  #header {
+    position: absolute; top: 0; left: 0; right: 0;
+    padding: 18px 28px;
+    display: flex; align-items: center; justify-content: space-between;
+    background: linear-gradient(180deg, rgba(248,250,252,0.95) 0%, transparent 100%);
+    pointer-events: auto;
+  }
+  #header-left { display: flex; align-items: center; gap: 14px; }
+  #logo {
+    width: 34px; height: 34px; border-radius: 8px;
+    background: linear-gradient(135deg, var(--teal), var(--purple));
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px; font-weight: 700; color: #fff; font-family: var(--mono);
+  }
+  #title { font-size: 14px; font-weight: 600; color: var(--text); letter-spacing: 0.01em; }
+  #subtitle { font-size: 11px; color: var(--text3); font-family: var(--mono); margin-top: 1px; }
+  #view-tabs {
+    display: flex; gap: 4px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 4px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+  }
+  .vtab {
+    font-size: 11px; font-weight: 500; padding: 5px 12px;
+    border-radius: 6px; border: none; background: transparent;
+    color: var(--text2); cursor: pointer; transition: all .2s; font-family: var(--font);
+  }
+  .vtab.active { background: var(--surface2); color: var(--text); }
+  .vtab:hover:not(.active) { color: var(--text); }
+
+  /* ── Side Panel ── */
+  #side-panel {
+    position: absolute; left: 20px; top: 80px; bottom: 20px;
+    width: 240px;
+    background: rgba(255,255,255,0.92); border: 1px solid var(--border);
+    border-radius: 14px; padding: 16px;
+    backdrop-filter: blur(12px);
+    display: flex; flex-direction: column; gap: 6px;
+    overflow-y: auto; pointer-events: auto;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.08);
+  }
+  #side-panel::-webkit-scrollbar { width: 4px; }
+  #side-panel::-webkit-scrollbar-track { background: transparent; }
+  #side-panel::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  .panel-section { margin-bottom: 4px; }
+  .panel-label {
+    font-size: 10px; font-weight: 500; color: var(--text3);
+    letter-spacing: .08em; text-transform: uppercase; margin-bottom: 8px;
+  }
+  .node-btn {
+    width: 100%; text-align: left; padding: 8px 10px;
+    border-radius: 8px; border: 1px solid transparent;
+    background: transparent; cursor: pointer; transition: all .15s;
+    display: flex; align-items: center; gap: 9px;
+    font-family: var(--font); pointer-events: auto;
+  }
+  .node-btn:hover { background: var(--surface2); border-color: var(--border); }
+  .node-btn.active { border-color: currentColor; background: var(--surface2); }
+  .node-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .node-btn-label { font-size: 12px; font-weight: 500; color: var(--text); }
+  .node-btn-sub { font-size: 10px; color: var(--text3); margin-top: 1px; }
+
+  /* ── Tooltip ── */
+  #tooltip {
+    position: fixed; z-index: 100; pointer-events: none;
+    max-width: 300px; opacity: 0; transition: opacity .2s;
+    background: rgba(255,255,255,0.97); border: 1px solid var(--border);
+    border-radius: 12px; padding: 14px 16px;
+    backdrop-filter: blur(16px);
+    box-shadow: 0 20px 60px rgba(0,0,0,0.12);
+  }
+  #tooltip.visible { opacity: 1; }
+  .tt-tag {
+    display: inline-block; font-size: 10px; font-weight: 500;
+    padding: 2px 8px; border-radius: 20px; margin-bottom: 8px;
+    font-family: var(--mono);
+  }
+  .tt-title { font-size: 14px; font-weight: 600; color: var(--text); margin-bottom: 6px; }
+  .tt-body { font-size: 12px; color: var(--text2); line-height: 1.6; }
+  .tt-connects { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); }
+  .tt-connects-label { font-size: 10px; color: var(--text3); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 5px; }
+  .tt-connects-item { font-size: 11px; color: var(--text2); margin-bottom: 2px; }
+  .tt-connects-item::before { content: '→ '; color: var(--text3); }
+
+  /* ── Info Panel (right) ── */
+  #info-panel {
+    position: absolute; right: 20px; top: 80px;
+    width: 260px;
+    background: rgba(255,255,255,0.92); border: 1px solid var(--border);
+    border-radius: 14px; padding: 16px;
+    backdrop-filter: blur(12px);
+    pointer-events: auto;
+    transition: opacity .3s;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.08);
+  }
+  #info-title { font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 4px; }
+  #info-sub { font-size: 11px; color: var(--text3); font-family: var(--mono); margin-bottom: 12px; }
+  #info-body { font-size: 12px; color: var(--text2); line-height: 1.65; }
+  #info-tags { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 10px; }
+  .info-tag {
+    font-size: 10px; font-family: var(--mono); padding: 3px 8px;
+    border-radius: 5px; border: 1px solid var(--border); color: var(--text3);
+  }
+
+  /* ── Flow Log (bottom) ── */
+  #flow-log {
+    position: absolute; bottom: 20px; left: 280px; right: 300px;
+    background: rgba(255,255,255,0.92); border: 1px solid var(--border);
+    border-radius: 12px; padding: 12px 16px;
+    backdrop-filter: blur(12px);
+    pointer-events: auto;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.06);
+  }
+  #flow-log-title {
+    font-size: 10px; font-weight: 500; color: var(--text3);
+    text-transform: uppercase; letter-spacing: .08em; margin-bottom: 8px;
+    display: flex; align-items: center; gap: 6px;
+  }
+  #flow-log-title::before {
+    content: ''; display: block; width: 6px; height: 6px;
+    border-radius: 50%; background: var(--green);
+    animation: pulse 2s ease-in-out infinite;
+  }
+  #flow-entries {
+    display: flex; gap: 0; overflow: hidden;
+    font-family: var(--mono); font-size: 11px;
+  }
+  .flow-entry {
+    display: flex; align-items: center; gap: 4px;
+    white-space: nowrap; color: var(--text2);
+    animation: slideIn .4s ease;
+  }
+  .flow-entry + .flow-entry::before { content: ' → '; color: var(--text3); margin: 0 2px; }
+  .flow-entry .fe-dot { width: 5px; height: 5px; border-radius: 50%; }
+
+  /* ── Legend ── */
+  #legend {
+    position: absolute; bottom: 80px; right: 20px;
+    background: rgba(255,255,255,0.92); border: 1px solid var(--border);
+    border-radius: 12px; padding: 12px 14px;
+    backdrop-filter: blur(12px);
+    box-shadow: 0 8px 24px rgba(0,0,0,0.06);
+  }
+  #legend-title { font-size: 10px; color: var(--text3); text-transform: uppercase; letter-spacing:.07em; margin-bottom:8px; }
+  .legend-item { display: flex; align-items: center; gap: 7px; margin-bottom: 5px; }
+  .legend-item:last-child { margin-bottom: 0; }
+  .legend-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .legend-label { font-size: 11px; color: var(--text2); }
+
+  /* ── Animations ── */
+  @keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.5; transform: scale(0.8); }
+  }
+  @keyframes slideIn {
+    from { opacity: 0; transform: translateX(-8px); }
+    to { opacity: 1; transform: translateX(0); }
+  }
+  @keyframes fadeIn {
+    from { opacity: 0; } to { opacity: 1; }
+  }
+
+  /* ── Controls hint ── */
+  #controls-hint {
+    position: absolute; bottom: 22px; right: 290px;
+    font-size: 10px; color: var(--text3); font-family: var(--mono);
+    text-align: right;
+  }
+
+  /* ── Scrollbar ── */
+  * { scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+</style>
+</head>
+<body>
+
+<canvas id="canvas"></canvas>
+
+<div id="ui">
+  <!-- Header -->
+  <div id="header">
+    <div id="header-left">
+      <div id="logo">R</div>
+      <div>
+        <div id="title">Repository Intelligence Platform</div>
+        <div id="subtitle">data flow · 3d architecture</div>
+      </div>
+    </div>
+    <div id="view-tabs">
+      <button class="vtab active" onclick="setView('full')" id="tab-full">Full System</button>
+      <button class="vtab" onclick="setView('rip')" id="tab-rip">RIP Layers</button>
+      <button class="vtab" onclick="setView('gateway')" id="tab-gateway">Context Gateway</button>
+      <button class="vtab" onclick="setView('agents')" id="tab-agents">Agent Flow</button>
+    </div>
+  </div>
+
+  <!-- Side Panel -->
+  <div id="side-panel">
+    <div class="panel-section">
+      <div class="panel-label">Phase 1 — RIP</div>
+      <button class="node-btn" onclick="focusNode('treesitter')" style="color:var(--teal)">
+        <div class="node-dot" style="background:var(--teal)"></div>
+        <div><div class="node-btn-label">Tree-sitter</div><div class="node-btn-sub">Parser</div></div>
+      </button>
+      <button class="node-btn" onclick="focusNode('neo4j')" style="color:var(--teal)">
+        <div class="node-dot" style="background:var(--teal)"></div>
+        <div><div class="node-btn-label">Neo4j</div><div class="node-btn-sub">Code Graph</div></div>
+      </button>
+      <button class="node-btn" onclick="focusNode('qdrant')" style="color:var(--teal)">
+        <div class="node-dot" style="background:var(--teal)"></div>
+        <div><div class="node-btn-label">Qdrant</div><div class="node-btn-sub">Vector Search</div></div>
+      </button>
+      <button class="node-btn" onclick="focusNode('postgres')" style="color:var(--teal)">
+        <div class="node-dot" style="background:var(--teal)"></div>
+        <div><div class="node-btn-label">PostgreSQL</div><div class="node-btn-sub">Metadata</div></div>
+      </button>
+      <button class="node-btn" onclick="focusNode('redis')" style="color:var(--teal)">
+        <div class="node-dot" style="background:var(--teal)"></div>
+        <div><div class="node-btn-label">Redis</div><div class="node-btn-sub">Cache</div></div>
+      </button>
+      <button class="node-btn" onclick="focusNode('ollama')" style="color:var(--teal)">
+        <div class="node-dot" style="background:var(--teal)"></div>
+        <div><div class="node-btn-label">Ollama / LLM</div><div class="node-btn-sub">Explanation</div></div>
+      </button>
+    </div>
+    <div class="panel-section">
+      <div class="panel-label">Phase 2 — Gateway</div>
+      <button class="node-btn" onclick="focusNode('gateway')" style="color:var(--purple)">
+        <div class="node-dot" style="background:var(--purple)"></div>
+        <div><div class="node-btn-label">Context Gateway</div><div class="node-btn-sub">Orchestrator</div></div>
+      </button>
+      <button class="node-btn" onclick="focusNode('mcp')" style="color:var(--purple)">
+        <div class="node-dot" style="background:var(--purple)"></div>
+        <div><div class="node-btn-label">MCP Server</div><div class="node-btn-sub">Protocol</div></div>
+      </button>
+      <button class="node-btn" onclick="focusNode('planner')" style="color:var(--purple)">
+        <div class="node-dot" style="background:var(--purple)"></div>
+        <div><div class="node-btn-label">Tool Planner</div><div class="node-btn-sub">Routing</div></div>
+      </button>
+      <button class="node-btn" onclick="focusNode('ranker')" style="color:var(--purple)">
+        <div class="node-dot" style="background:var(--purple)"></div>
+        <div><div class="node-btn-label">Context Ranker</div><div class="node-btn-sub">Budget + Compress</div></div>
+      </button>
+    </div>
+    <div class="panel-section">
+      <div class="panel-label">Phase 3 — Agents</div>
+      <button class="node-btn" onclick="focusNode('claude')" style="color:var(--amber)">
+        <div class="node-dot" style="background:var(--amber)"></div>
+        <div><div class="node-btn-label">Claude Code</div><div class="node-btn-sub">AI Agent</div></div>
+      </button>
+      <button class="node-btn" onclick="focusNode('codex')" style="color:var(--amber)">
+        <div class="node-dot" style="background:var(--amber)"></div>
+        <div><div class="node-btn-label">Codex / GPT</div><div class="node-btn-sub">AI Agent</div></div>
+      </button>
+      <button class="node-btn" onclick="focusNode('vscode')" style="color:var(--amber)">
+        <div class="node-dot" style="background:var(--amber)"></div>
+        <div><div class="node-btn-label">VS Code Ext.</div><div class="node-btn-sub">Interface</div></div>
+      </button>
+      <button class="node-btn" onclick="focusNode('cli')" style="color:var(--amber)">
+        <div class="node-dot" style="background:var(--amber)"></div>
+        <div><div class="node-btn-label">CLI</div><div class="node-btn-sub">Interface</div></div>
+      </button>
+    </div>
+    <div class="panel-section">
+      <div class="panel-label">External Sources</div>
+      <button class="node-btn" onclick="focusNode('github')" style="color:var(--blue)">
+        <div class="node-dot" style="background:var(--blue)"></div>
+        <div><div class="node-btn-label">GitHub MCP</div><div class="node-btn-sub">PRs / Commits</div></div>
+      </button>
+      <button class="node-btn" onclick="focusNode('jira')" style="color:var(--blue)">
+        <div class="node-dot" style="background:var(--blue)"></div>
+        <div><div class="node-btn-label">Jira MCP</div><div class="node-btn-sub">Tickets</div></div>
+      </button>
+      <button class="node-btn" onclick="focusNode('slack')" style="color:var(--blue)">
+        <div class="node-dot" style="background:var(--blue)"></div>
+        <div><div class="node-btn-label">Slack MCP</div><div class="node-btn-sub">Discussions</div></div>
+      </button>
+    </div>
+  </div>
+
+  <!-- Info Panel -->
+  <div id="info-panel">
+    <div id="info-title">Repository Intelligence Platform</div>
+    <div id="info-sub">hover or click nodes to explore</div>
+    <div id="info-body">
+      A three-phase platform that transforms any codebase into a queryable knowledge graph, 
+      then delivers surgical context to AI agents via an orchestrated gateway — reducing token 
+      usage by up to 60× on large repositories.
+    </div>
+    <div id="info-tags">
+      <span class="info-tag">Tree-sitter</span>
+      <span class="info-tag">Neo4j</span>
+      <span class="info-tag">Qdrant</span>
+      <span class="info-tag">MCP</span>
+      <span class="info-tag">LiteLLM</span>
+    </div>
+  </div>
+
+  <!-- Flow Log -->
+  <div id="flow-log">
+    <div id="flow-log-title">Live data flow</div>
+    <div id="flow-entries"></div>
+  </div>
+
+  <!-- Legend -->
+  <div id="legend">
+    <div id="legend-title">Layers</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--teal)"></div><div class="legend-label">Phase 1 · RIP</div></div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--purple)"></div><div class="legend-label">Phase 2 · Gateway</div></div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--amber)"></div><div class="legend-label">Phase 3 · Agents</div></div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--blue)"></div><div class="legend-label">External MCP</div></div>
+  </div>
+
+  <div id="controls-hint">drag · scroll · click</div>
+</div>
+
+<!-- Tooltip -->
+<div id="tooltip">
+  <div class="tt-tag" id="tt-tag"></div>
+  <div class="tt-title" id="tt-title"></div>
+  <div class="tt-body" id="tt-body"></div>
+  <div class="tt-connects" id="tt-connects">
+    <div class="tt-connects-label">Connects to</div>
+    <div id="tt-connects-items"></div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+// ═══════════════════════════════════════════════════════════
+//  NODE DATA — full knowledge for every node in the system
+// ═══════════════════════════════════════════════════════════
+const NODES = {
+  // ── RIP Layer ──
+  treesitter: {
+    label: 'Tree-sitter',
+    sub: 'Parser',
+    layer: 'rip',
+    color: 0x00d4aa,
+    hexColor: '#00d4aa',
+    tag: 'Layer 1 · Parsing',
+    desc: 'Parses every source file into a full AST using language-specific grammars. Extracts classes, functions, interfaces, API routes, DB models, imports, decorators. Runs entirely offline — no LLM involved. Target: 100k LOC in under 60s.',
+    connects: ['Neo4j (via GraphBuilder)', 'Qdrant (via Embedder)', 'PostgreSQL (file hashes)'],
+    pos: [-6, 2, 0]
+  },
+  neo4j: {
+    label: 'Neo4j',
+    sub: 'Code Graph',
+    layer: 'rip',
+    color: 0x00d4aa,
+    hexColor: '#00d4aa',
+    tag: 'Layer 2 · Graph DB',
+    desc: 'Stores the full code knowledge graph. Nodes: File, Class, Function, Interface, APIRoute, DBEntity, Developer, Commit. Edges: CALLS, IMPORTS, EXTENDS, IMPLEMENTS, OWNS, CHANGED_BY. Enables Cypher traversals for trace, impact, dead-code, and coupling analysis.',
+    connects: ['Analysis Engines (FlowTracer, ImpactAnalyser)', 'Context Assembler (LLM)', 'Context Gateway (via RIP MCP)'],
+    pos: [-2, 2, 0]
+  },
+  qdrant: {
+    label: 'Qdrant',
+    sub: 'Vector Search',
+    layer: 'rip',
+    color: 0x00d4aa,
+    hexColor: '#00d4aa',
+    tag: 'Layer 3 · Vector DB',
+    desc: 'Stores BGE-M3 embeddings of code chunks alongside metadata payload: entity type, language, service, owner, change frequency. Enables semantic search — "find retry logic" returns semantically similar functions, not just keyword matches. Supports vector + metadata hybrid filtering.',
+    connects: ['Context Assembler (LLM)', 'Context Gateway (semantic search)', 'Reranker (cross-encoder)'],
+    pos: [2, 2, 0]
+  },
+  postgres: {
+    label: 'PostgreSQL',
+    sub: 'Metadata Store',
+    layer: 'rip',
+    color: 0x00d4aa,
+    hexColor: '#00d4aa',
+    tag: 'Layer 4 · Relational DB',
+    desc: 'Tracks index state, file SHA-256 hashes (for incremental indexing), analysis job history, and configuration. ACID-compliant. Powers the incremental indexer — only re-parses files whose hash changed since last run. SQLite available for zero-config single-user mode.',
+    connects: ['IncrementalIndexer (file hashes)', 'IndexPipeline (job state)', 'Risk Scorer (churn data)'],
+    pos: [-4, 0, 2]
+  },
+  redis: {
+    label: 'Redis',
+    sub: 'Query Cache',
+    layer: 'rip',
+    color: 0x00d4aa,
+    hexColor: '#00d4aa',
+    tag: 'Layer 4 · Cache',
+    desc: 'Caches hot graph query results with TTL. A repeated "repo trace CheckoutService" query returns instantly from cache instead of re-running the Cypher traversal. Also used for async job signaling when running background indexing. Optional — system degrades gracefully without it.',
+    connects: ['FastAPI routers (cache layer)', 'Neo4j (reduces load)', 'Background worker (pub/sub)'],
+    pos: [4, 0, 2]
+  },
+  ollama: {
+    label: 'Ollama / LLM',
+    sub: 'Explanation Engine',
+    layer: 'rip',
+    color: 0x00d4aa,
+    hexColor: '#00d4aa',
+    tag: 'Layer 6 · LLM',
+    desc: 'Local LLM runtime serving Qwen2.5-Coder-7B by default. Receives a compact context package (3,000–8,000 tokens) assembled from graph traversal + vector search results. The LLM never sees the raw codebase — it only narrates findings. Cloud fallback via LiteLLM (Claude / GPT-4o) is opt-in.',
+    connects: ['Context Assembler (receives package)', 'CLI output (narration)', 'VS Code panels (explanations)'],
+    pos: [6, 2, 0]
+  },
+
+  // ── Gateway Layer ──
+  gateway: {
+    label: 'Context Gateway',
+    sub: 'Orchestrator',
+    layer: 'gateway',
+    color: 0x7c6fff,
+    hexColor: '#7c6fff',
+    tag: 'Phase 2 · Core',
+    desc: 'The intelligent middleware between agents and all data sources. Intercepts every agent tool call and performs five operations before delivery: intent classification, multi-source planning, token budgeting, context ranking + compression, and permission filtering. Never generates — only orchestrates.',
+    connects: ['Claude Code / Codex (serves)', 'RIP (queries)', 'GitHub / Jira / Slack MCP (queries)', 'Session Memory (persists)'],
+    pos: [0, 0, -3]
+  },
+  mcp: {
+    label: 'MCP Server',
+    sub: 'Protocol Layer',
+    layer: 'gateway',
+    color: 0x7c6fff,
+    hexColor: '#7c6fff',
+    tag: 'Phase 2 · Protocol',
+    desc: 'Two-tier MCP topology. Tier 1: Gateway exposes high-level tools to agents (get_task_context, validate_change, search_codebase). Tier 2: Gateway is an MCP client consuming RIP, GitHub, Jira, Slack as MCP servers. Agents always see one clean interface regardless of how many sources the gateway queries behind the scenes.',
+    connects: ['Context Gateway (adapter)', 'Claude Code (Tier 1 client)', 'RIP engine (Tier 2 server)', 'External MCPs (Tier 2 servers)'],
+    pos: [-3, 0, -3]
+  },
+  planner: {
+    label: 'Tool Planner',
+    sub: 'Routing + Order',
+    layer: 'gateway',
+    color: 0x7c6fff,
+    hexColor: '#7c6fff',
+    tag: 'Phase 2 · Planner',
+    desc: 'Determines which tools to call, in what order, under what conditions. Example: for an auth task, it calls RIP trace first, then RIP search, then GitHub MCP if confidence < 80%, then Jira MCP for ticket context. Conditional chains reduce unnecessary tool calls and save tokens.',
+    connects: ['Context Gateway (sub-component)', 'RIP trace / search / impact', 'GitHub / Jira / Slack (conditional)'],
+    pos: [3, 0, -3]
+  },
+  ranker: {
+    label: 'Context Ranker',
+    sub: 'Budget + Compress',
+    layer: 'gateway',
+    color: 0x7c6fff,
+    hexColor: '#7c6fff',
+    tag: 'Phase 2 · Compressor',
+    desc: 'Receives raw tool outputs (may be 30,000+ tokens), ranks nodes by relevance to the current task, allocates the model\'s token budget across sources (e.g. RIP: 18k, Code snippets: 10k, GitHub: 6k, Jira: 4k), compresses to fit. The agent receives a surgical package — complete but minimal.',
+    connects: ['Context Gateway (sub-component)', 'LLM context window (outputs to)', 'All data sources (inputs from)'],
+    pos: [0, -2, -3]
+  },
+
+  // ── Agent / Interface Layer ──
+  claude: {
+    label: 'Claude Code',
+    sub: 'AI Agent',
+    layer: 'agents',
+    color: 0xf0a832,
+    hexColor: '#f0a832',
+    tag: 'Phase 3 · Agent',
+    desc: 'Anthropic\'s agentic coding tool. Calls the Context Gateway via MCP instead of reading raw files. Receives pre-assembled context with call chains, relevant files, existing patterns, and impact warnings. Uses 8,000–15,000 tokens per task instead of 200,000+. Generates patches; RIP validates them post-generation.',
+    connects: ['Context Gateway (MCP client)', 'RIP (post-task impact validation)', 'Codebase (writes patches)'],
+    pos: [3, -3, -5]
+  },
+  codex: {
+    label: 'Codex / GPT-4o',
+    sub: 'AI Agent',
+    layer: 'agents',
+    color: 0xf0a832,
+    hexColor: '#f0a832',
+    tag: 'Phase 3 · Agent',
+    desc: 'OpenAI\'s coding model. Same MCP integration pattern as Claude Code. Gateway abstracts the difference — the same context package can be delivered to any agent. Enables model-agnostic workflows where the best model for each task type is selected automatically.',
+    connects: ['Context Gateway (MCP client)', 'RIP (post-task validation)', 'Codebase (writes patches)'],
+    pos: [-3, -3, -5]
+  },
+  vscode: {
+    label: 'VS Code Extension',
+    sub: 'Editor Interface',
+    layer: 'agents',
+    color: 0xf0a832,
+    hexColor: '#f0a832',
+    tag: 'Phase 1 · Interface',
+    desc: 'TypeScript extension that spawns the Python core as a child process (no HTTP server needed). Right-click any symbol for trace, impact, or explanation. D3 force-directed graph renders dependency views in webview panels. File save triggers incremental re-index. LSP used as fallback for symbol resolution.',
+    connects: ['Python core (child process via stdout/JSON)', 'VS Code LSP (symbol fallback)', 'D3.js webviews (visualization)'],
+    pos: [6, -3, -2]
+  },
+  cli: {
+    label: 'CLI (Typer)',
+    sub: 'Terminal Interface',
+    layer: 'agents',
+    color: 0xf0a832,
+    hexColor: '#f0a832',
+    tag: 'Phase 1 · Interface',
+    desc: 'Python CLI built with Typer. Direct function calls into core/ — no HTTP server. Commands: repo init, repo index, repo trace, repo impact, repo search, repo explain, repo dead-code, repo onboard, repo architecture, repo metrics. Rich library for formatted terminal output.',
+    connects: ['core/ engine (direct Python imports)', 'Neo4j (graph queries)', 'Qdrant (search)', 'Ollama (explanations)'],
+    pos: [-6, -3, -2]
+  },
+
+  // ── External ──
+  github: {
+    label: 'GitHub MCP',
+    sub: 'PRs + Commits',
+    layer: 'external',
+    color: 0x4fa3f7,
+    hexColor: '#4fa3f7',
+    tag: 'External · MCP',
+    desc: 'Provides open PR context for files the agent is about to modify. If two sessions touch the same files, the gateway detects the conflict via GitHub PR data and surfaces a warning to both agents. Also provides CI status and code review comments for context-aware generation.',
+    connects: ['Context Gateway (Tier 2)', 'Tool Planner (conditional)', 'Context Ranker (6k token allocation)'],
+    pos: [5, -1, -6]
+  },
+  jira: {
+    label: 'Jira MCP',
+    sub: 'Tickets + Specs',
+    layer: 'external',
+    color: 0x4fa3f7,
+    hexColor: '#4fa3f7',
+    tag: 'External · MCP',
+    desc: 'Provides the ticket requirements and acceptance criteria for the current task. The agent receives the Jira spec alongside architectural context from RIP — ensuring generated code matches both the codebase patterns and the business requirements simultaneously.',
+    connects: ['Context Gateway (Tier 2)', 'Tool Planner (conditional)', 'Context Ranker (4k token allocation)'],
+    pos: [0, -1, -7]
+  },
+  slack: {
+    label: 'Slack MCP',
+    sub: 'Discussions',
+    layer: 'external',
+    color: 0x4fa3f7,
+    hexColor: '#4fa3f7',
+    tag: 'External · MCP',
+    desc: 'Retrieves relevant Slack discussions about the affected service or API. Answers "why was this decision made?" questions that code alone cannot answer. Called conditionally — only when the planner determines intent or historical context is needed for the task.',
+    connects: ['Context Gateway (Tier 2)', 'Tool Planner (confidence-gated)', 'Context Ranker (variable allocation)'],
+    pos: [-5, -1, -6]
+  },
+};
+
+// ═══════════════════════════════════════════════════════════
+//  EDGES — directed connections between nodes
+// ═══════════════════════════════════════════════════════════
+const EDGES = [
+  // Parsing → Storage
+  { from: 'treesitter', to: 'neo4j', label: 'ParsedFile', animated: true },
+  { from: 'treesitter', to: 'qdrant', label: 'Embeddings', animated: true },
+  { from: 'treesitter', to: 'postgres', label: 'File hashes', animated: false },
+  // Storage → LLM
+  { from: 'neo4j', to: 'ollama', label: 'Graph context', animated: true },
+  { from: 'qdrant', to: 'ollama', label: 'Code snippets', animated: true },
+  { from: 'neo4j', to: 'redis', label: 'Cache results', animated: false },
+  // RIP → Gateway
+  { from: 'neo4j', to: 'gateway', label: 'Graph traversal', animated: true },
+  { from: 'qdrant', to: 'gateway', label: 'Semantic search', animated: true },
+  { from: 'ollama', to: 'gateway', label: 'Explanations', animated: false },
+  // Gateway internals
+  { from: 'gateway', to: 'mcp', label: 'Protocol', animated: true },
+  { from: 'gateway', to: 'planner', label: 'Route query', animated: false },
+  { from: 'gateway', to: 'ranker', label: 'Compress ctx', animated: false },
+  { from: 'planner', to: 'ranker', label: 'Ordered results', animated: true },
+  // Gateway → External
+  { from: 'gateway', to: 'github', label: 'PR context', animated: false },
+  { from: 'gateway', to: 'jira', label: 'Ticket data', animated: false },
+  { from: 'gateway', to: 'slack', label: 'Discussions', animated: false },
+  // MCP → Agents
+  { from: 'mcp', to: 'claude', label: 'Tool response', animated: true },
+  { from: 'mcp', to: 'codex', label: 'Tool response', animated: true },
+  // RIP → Interfaces
+  { from: 'neo4j', to: 'vscode', label: 'Graph viz', animated: false },
+  { from: 'qdrant', to: 'vscode', label: 'Search', animated: false },
+  { from: 'neo4j', to: 'cli', label: 'Analysis', animated: false },
+  { from: 'qdrant', to: 'cli', label: 'Search', animated: false },
+  // Agents → RIP (feedback)
+  { from: 'claude', to: 'neo4j', label: 'Patch feedback', animated: false },
+  { from: 'codex', to: 'neo4j', label: 'Patch feedback', animated: false },
+];
+
+// Flow sequences for the log display
+const FLOW_SEQUENCES = [
+  [
+    { node: 'cli', label: 'repo trace' },
+    { node: 'neo4j', label: 'Cypher query' },
+    { node: 'qdrant', label: 'vector search' },
+    { node: 'ollama', label: 'LLM explain' },
+    { node: 'cli', label: 'output' }
+  ],
+  [
+    { node: 'claude', label: 'task request' },
+    { node: 'mcp', label: 'MCP call' },
+    { node: 'gateway', label: 'orchestrate' },
+    { node: 'planner', label: 'plan tools' },
+    { node: 'neo4j', label: 'graph query' },
+    { node: 'qdrant', label: 'search' },
+    { node: 'ranker', label: 'compress' },
+    { node: 'claude', label: 'patch' }
+  ],
+  [
+    { node: 'treesitter', label: 'parse files' },
+    { node: 'neo4j', label: 'build graph' },
+    { node: 'qdrant', label: 'embed chunks' },
+    { node: 'postgres', label: 'store hashes' },
+    { node: 'redis', label: 'warm cache' }
+  ],
+  [
+    { node: 'vscode', label: 'file save' },
+    { node: 'treesitter', label: 'incremental' },
+    { node: 'neo4j', label: 'update graph' },
+    { node: 'qdrant', label: 'update vectors' }
+  ]
+];
+
+// ═══════════════════════════════════════════════════════════
+//  THREE.JS SETUP
+// ═══════════════════════════════════════════════════════════
+const canvas = document.getElementById('canvas');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setClearColor(0xf8fafc, 1);
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.1, 200);
+camera.position.set(0, 4, 18);
+camera.lookAt(0, 0, 0);
+
+// Ambient + directional lighting
+const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
+scene.add(ambientLight);
+const dirLight = new THREE.DirectionalLight(0xffffff, 0.5);
+dirLight.position.set(10, 20, 10);
+scene.add(dirLight);
+
+// Fog
+scene.fog = new THREE.FogExp2(0xf8fafc, 0.025);
+
+// ─ Starfield (Subtle dots for light mode) ─
+const starGeo = new THREE.BufferGeometry();
+const starCount = 800;
+const starPos = new Float32Array(starCount * 3);
+for (let i = 0; i < starCount * 3; i++) starPos[i] = (Math.random() - 0.5) * 120;
+starGeo.setAttribute('position', new THREE.BufferAttribute(starPos, 3));
+const starMat = new THREE.PointsMaterial({ color: 0x94a3b8, size: 0.05, transparent: true, opacity: 0.3 });
+scene.add(new THREE.Points(starGeo, starMat));
+
+// ─ Grid plane ─
+const gridHelper = new THREE.GridHelper(40, 40, 0xe2e8f0, 0xf1f5f9);
+gridHelper.position.y = -5;
+scene.add(gridHelper);
+
+// ─ Node meshes ─
+const nodeMeshes = {};
+const nodeObjects = {};
+const LAYER_COLOR = { rip: 0x00d4aa, gateway: 0x7c6fff, agents: 0xf0a832, external: 0x4fa3f7 };
+
+Object.entries(NODES).forEach(([id, node]) => {
+  const size = id === 'gateway' ? 0.55 : id === 'neo4j' ? 0.5 : 0.42;
+  const geo = id === 'gateway'
+    ? new THREE.OctahedronGeometry(size, 0)
+    : id === 'neo4j' || id === 'qdrant'
+    ? new THREE.IcosahedronGeometry(size, 0)
+    : new THREE.SphereGeometry(size, 16, 16);
+
+  const mat = new THREE.MeshStandardMaterial({
+    color: node.color,
+    emissive: node.color,
+    emissiveIntensity: 0.3,
+    metalness: 0.4,
+    roughness: 0.3,
+    transparent: true,
+    opacity: 0.95,
+  });
+
+  const mesh = new THREE.Mesh(geo, mat);
+  const [x, y, z] = node.pos;
+  mesh.position.set(x, y, z);
+  mesh.userData = { id, ...node };
+  scene.add(mesh);
+  nodeMeshes[id] = mesh;
+
+  // Glow ring
+  const ringGeo = new THREE.RingGeometry(size + 0.08, size + 0.15, 32);
+  const ringMat = new THREE.MeshBasicMaterial({
+    color: node.color, transparent: true, opacity: 0.2, side: THREE.DoubleSide
+  });
+  const ring = new THREE.Mesh(ringGeo, ringMat);
+  ring.rotation.x = Math.PI / 2;
+  mesh.add(ring);
+  nodeObjects[id] = { mesh, ring };
+});
+
+// ─ Edge lines ─
+const edgeMeshes = [];
+
+function createEdge(fromId, toId, animated, color = 0x94a3b8) {
+  const from = nodeMeshes[fromId];
+  const to = nodeMeshes[toId];
+  if (!from || !to) return;
+
+  const points = [];
+  const start = from.position.clone();
+  const end = to.position.clone();
+  const mid = start.clone().add(end).multiplyScalar(0.5);
+  mid.y += 0.8;
+
+  for (let i = 0; i <= 20; i++) {
+    const t = i / 20;
+    const p = new THREE.Vector3(
+      (1-t)*(1-t)*start.x + 2*(1-t)*t*mid.x + t*t*end.x,
+      (1-t)*(1-t)*start.y + 2*(1-t)*t*mid.y + t*t*end.y,
+      (1-t)*(1-t)*start.z + 2*(1-t)*t*mid.z + t*t*end.z
+    );
+    points.push(p);
+  }
+
+  const geo = new THREE.BufferGeometry().setFromPoints(points);
+  const mat = new THREE.LineBasicMaterial({
+    color: animated ? color : 0xe2e8f0,
+    transparent: true,
+    opacity: animated ? 0.8 : 0.4,
+  });
+  const line = new THREE.Line(geo, mat);
+  scene.add(line);
+  edgeMeshes.push({ line, from: fromId, to: toId, animated, points });
+}
+
+EDGES.forEach(e => {
+  const fromNode = NODES[e.from];
+  const col = fromNode ? LAYER_COLOR[fromNode.layer] : 0x94a3b8;
+  createEdge(e.from, e.to, e.animated, col);
+});
+
+// ─ Particle flow along animated edges ─
+const particles = [];
+class FlowParticle {
+  constructor(edgeData) {
+    this.edge = edgeData;
+    this.t = Math.random();
+    this.speed = 0.003 + Math.random() * 0.003;
+    const fromNode = NODES[edgeData.from];
+    const col = fromNode ? fromNode.color : 0xffffff;
+    const geo = new THREE.SphereGeometry(0.07, 6, 6);
+    const mat = new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.9 });
+    this.mesh = new THREE.Mesh(geo, mat);
+    scene.add(this.mesh);
+  }
+  update() {
+    this.t += this.speed;
+    if (this.t >= 1) this.t = 0;
+    const pts = this.edge.points;
+    const idx = Math.floor(this.t * (pts.length - 1));
+    const next = Math.min(idx + 1, pts.length - 1);
+    const sub = (this.t * (pts.length - 1)) - idx;
+    this.mesh.position.lerpVectors(pts[idx], pts[next], sub);
+  }
+  dispose() { scene.remove(this.mesh); }
+}
+
+edgeMeshes.filter(e => e.animated).forEach(e => {
+  const count = 2 + Math.floor(Math.random() * 2);
+  for (let i = 0; i < count; i++) particles.push(new FlowParticle(e));
+});
+
+// ─ Orbital rings around gateway ─
+const ringGeos = [];
+for (let i = 0; i < 3; i++) {
+  const r = 1.5 + i * 0.6;
+  const rGeo = new THREE.RingGeometry(r, r + 0.02, 64);
+  const rMat = new THREE.MeshBasicMaterial({
+    color: 0x7c6fff, transparent: true, opacity: 0.15 - i * 0.04, side: THREE.DoubleSide
+  });
+  const ring = new THREE.Mesh(rGeo, rMat);
+  ring.position.copy(nodeMeshes['gateway'].position);
+  ring.rotation.x = Math.PI / 2 + i * 0.3;
+  scene.add(ring);
+  ringGeos.push({ ring, speed: 0.003 + i * 0.002, axis: i });
+}
+
+// ═══════════════════════════════════════════════════════════
+//  RAYCASTER + INTERACTION
+// ═══════════════════════════════════════════════════════════
+const raycaster = new THREE.Raycaster();
+const mouse = new THREE.Vector2();
+let hoveredId = null;
+let selectedId = null;
+const tooltip = document.getElementById('tooltip');
+
+function showTooltip(id, x, y) {
+  const node = NODES[id];
+  if (!node) return;
+  document.getElementById('tt-tag').textContent = node.tag;
+  document.getElementById('tt-tag').style.background = node.hexColor + '22';
+  document.getElementById('tt-tag').style.color = node.hexColor;
+  document.getElementById('tt-title').textContent = node.label;
+  document.getElementById('tt-body').textContent = node.desc;
+  const items = document.getElementById('tt-connects-items');
+  items.innerHTML = node.connects.map(c => `<div class="tt-connects-item">${c}</div>`).join('');
+  tooltip.classList.add('visible');
+  const tx = Math.min(x + 16, window.innerWidth - 320);
+  const ty = Math.min(y - 10, window.innerHeight - 260);
+  tooltip.style.left = tx + 'px';
+  tooltip.style.top = ty + 'px';
+}
+
+function hideTooltip() { tooltip.classList.remove('visible'); }
+
+function updateInfoPanel(id) {
+  const node = NODES[id];
+  if (!node) return;
+  document.getElementById('info-title').textContent = node.label;
+  document.getElementById('info-sub').style.color = node.hexColor;
+  document.getElementById('info-sub').textContent = node.tag;
+  document.getElementById('info-body').textContent = node.desc;
+  const tags = node.connects.slice(0, 4).map(c => `<span class="info-tag">${c.split(' ')[0]}</span>`).join('');
+  document.getElementById('info-tags').innerHTML = tags;
+}
+
+canvas.addEventListener('mousemove', (e) => {
+  mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+  mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+
+  raycaster.setFromCamera(mouse, camera);
+  const meshList = Object.values(nodeMeshes);
+  const hits = raycaster.intersectObjects(meshList);
+
+  if (hits.length > 0) {
+    const id = hits[0].object.userData.id;
+    if (id !== hoveredId) {
+      if (hoveredId) resetNodeScale(hoveredId);
+      hoveredId = id;
+      scaleNode(id, 1.25);
+      document.body.style.cursor = 'pointer';
+    }
+    showTooltip(id, e.clientX, e.clientY);
+    updateInfoPanel(id);
+  } else {
+    if (hoveredId && hoveredId !== selectedId) resetNodeScale(hoveredId);
+    hoveredId = null;
+    hideTooltip();
+    document.body.style.cursor = 'default';
+  }
+});
+
+canvas.addEventListener('click', (e) => {
+  raycaster.setFromCamera(mouse, camera);
+  const hits = raycaster.intersectObjects(Object.values(nodeMeshes));
+  if (hits.length > 0) {
+    const id = hits[0].object.userData.id;
+    if (selectedId && selectedId !== id) resetNodeGlow(selectedId);
+    selectedId = id;
+    pulseNode(id);
+    highlightEdgesFor(id);
+    triggerFlowSequenceFor(id);
+  }
+});
+
+function scaleNode(id, s) {
+  if (nodeMeshes[id]) {
+    nodeMeshes[id].scale.setScalar(s);
+  }
+}
+function resetNodeScale(id) {
+  if (nodeMeshes[id] && id !== selectedId) nodeMeshes[id].scale.setScalar(1);
+}
+function pulseNode(id) {
+  if (!nodeMeshes[id]) return;
+  nodeMeshes[id].material.emissiveIntensity = 0.8;
+  setTimeout(() => {
+    if (nodeMeshes[id]) nodeMeshes[id].material.emissiveIntensity = 0.3;
+  }, 600);
+}
+function resetNodeGlow(id) {
+  if (nodeMeshes[id]) {
+    nodeMeshes[id].material.emissiveIntensity = 0.3;
+    nodeMeshes[id].scale.setScalar(1);
+  }
+}
+
+function highlightEdgesFor(id) {
+  edgeMeshes.forEach(e => {
+    const connected = e.from === id || e.to === id;
+    e.line.material.opacity = connected ? 0.85 : 0.1;
+  });
+  setTimeout(() => {
+    edgeMeshes.forEach(e => {
+      e.line.material.opacity = e.animated ? 0.6 : 0.25;
+    });
+  }, 3000);
+}
+
+// ═══════════════════════════════════════════════════════════
+//  FLOW LOG
+// ═══════════════════════════════════════════════════════════
+let currentFlowIdx = 0;
+function animateFlowLog(seq) {
+  const container = document.getElementById('flow-entries');
+  container.innerHTML = '';
+  seq.forEach((step, i) => {
+    setTimeout(() => {
+      const node = NODES[step.node];
+      const color = node ? node.hexColor : '#8892a4';
+      const el = document.createElement('div');
+      el.className = 'flow-entry';
+      el.innerHTML = `<div class="fe-dot" style="background:${color}"></div>${step.label}`;
+      container.appendChild(el);
+      if (container.children.length > 8) container.removeChild(container.children[0]);
+    }, i * 380);
+  });
+}
+
+function triggerFlowSequenceFor(id) {
+  const seq = FLOW_SEQUENCES.find(s => s.some(step => step.node === id));
+  if (seq) animateFlowLog(seq);
+}
+
+setInterval(() => {
+  animateFlowLog(FLOW_SEQUENCES[currentFlowIdx]);
+  currentFlowIdx = (currentFlowIdx + 1) % FLOW_SEQUENCES.length;
+}, 5000);
+animateFlowLog(FLOW_SEQUENCES[0]);
+
+// ═══════════════════════════════════════════════════════════
+//  CAMERA CONTROLS (drag + scroll)
+// ═══════════════════════════════════════════════════════════
+let isDragging = false, prevMouse = { x: 0, y: 0 };
+let spherical = { theta: 0, phi: Math.PI / 4, radius: 18 };
+let targetSpherical = { ...spherical };
+
+canvas.addEventListener('mousedown', e => {
+  if (e.target !== canvas) return;
+  isDragging = true;
+  prevMouse = { x: e.clientX, y: e.clientY };
+});
+window.addEventListener('mouseup', () => isDragging = false);
+window.addEventListener('mousemove', e => {
+  if (!isDragging) return;
+  const dx = e.clientX - prevMouse.x;
+  const dy = e.clientY - prevMouse.y;
+  targetSpherical.theta -= dx * 0.005;
+  targetSpherical.phi = Math.max(0.2, Math.min(Math.PI / 2, targetSpherical.phi + dy * 0.005));
+  prevMouse = { x: e.clientX, y: e.clientY };
+});
+canvas.addEventListener('wheel', e => {
+  targetSpherical.radius = Math.max(8, Math.min(35, targetSpherical.radius + e.deltaY * 0.02));
+});
+
+// ═══════════════════════════════════════════════════════════
+//  VIEW MODES
+// ═══════════════════════════════════════════════════════════
+const VIEW_POSITIONS = {
+  full:    { theta: 0,    phi: 0.5, radius: 20 },
+  rip:     { theta: 0.3, phi: 0.4, radius: 14 },
+  gateway: { theta: -0.2, phi: 0.6, radius: 12 },
+  agents:  { theta: 0.1, phi: 0.7, radius: 15 },
+};
+
+function setView(name) {
+  document.querySelectorAll('.vtab').forEach(t => t.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+  const v = VIEW_POSITIONS[name];
+  targetSpherical = { ...v };
+
+  const showLayers = {
+    full: null,
+    rip: ['rip'],
+    gateway: ['rip', 'gateway'],
+    agents: ['rip', 'gateway', 'agents', 'external']
+  };
+  const layers = showLayers[name];
+
+  Object.entries(nodeMeshes).forEach(([id, mesh]) => {
+    const node = NODES[id];
+    const visible = !layers || layers.includes(node.layer);
+    mesh.visible = visible;
+    mesh.material.opacity = visible ? 0.95 : 0;
+  });
+
+  edgeMeshes.forEach(e => {
+    const fv = nodeMeshes[e.from]?.visible;
+    const tv = nodeMeshes[e.to]?.visible;
+    e.line.visible = !layers || (fv && tv);
+  });
+  particles.forEach(p => {
+    const fv = nodeMeshes[p.edge.from]?.visible;
+    const tv = nodeMeshes[p.edge.to]?.visible;
+    p.mesh.visible = !layers || (fv && tv);
+  });
+}
+
+// ═══════════════════════════════════════════════════════════
+//  FOCUS NODE (from side panel)
+// ═══════════════════════════════════════════════════════════
+function focusNode(id) {
+  const node = NODES[id];
+  if (!node) return;
+  const [x, y, z] = node.pos;
+  targetSpherical = {
+    theta: Math.atan2(x, 12),
+    phi: 0.45,
+    radius: 13
+  };
+  if (selectedId) resetNodeGlow(selectedId);
+  selectedId = id;
+  pulseNode(id);
+  highlightEdgesFor(id);
+  updateInfoPanel(id);
+  triggerFlowSequenceFor(id);
+  document.querySelectorAll('.node-btn').forEach(b => b.classList.remove('active'));
+}
+
+// ═══════════════════════════════════════════════════════════
+//  ANIMATION LOOP
+// ═══════════════════════════════════════════════════════════
+const clock = new THREE.Clock();
+
+function animate() {
+  requestAnimationFrame(animate);
+  const t = clock.getElapsedTime();
+
+  // Smooth camera
+  spherical.theta += (targetSpherical.theta - spherical.theta) * 0.05;
+  spherical.phi += (targetSpherical.phi - spherical.phi) * 0.05;
+  spherical.radius += (targetSpherical.radius - spherical.radius) * 0.05;
+  camera.position.set(
+    spherical.radius * Math.sin(spherical.theta) * Math.cos(spherical.phi - Math.PI/2),
+    spherical.radius * Math.sin(spherical.phi - Math.PI/2),
+    spherical.radius * Math.cos(spherical.theta) * Math.cos(spherical.phi - Math.PI/2)
+  );
+  camera.lookAt(0, 0, 0);
+
+  // Animate nodes
+  Object.entries(nodeObjects).forEach(([id, obj]) => {
+    const node = NODES[id];
+    const isHovered = id === hoveredId;
+    const isSelected = id === selectedId;
+    obj.mesh.rotation.y = t * 0.3 + node.pos[0];
+    if (id === 'gateway') obj.mesh.rotation.x = t * 0.2;
+    const baseScale = isHovered || isSelected ? 1.2 : 1.0;
+    const pulse = 1 + Math.sin(t * 2 + node.pos[0]) * 0.04;
+    obj.mesh.scale.setScalar(baseScale * pulse);
+    obj.ring.material.opacity = 0.12 + Math.sin(t * 1.5 + node.pos[2]) * 0.06;
+  });
+
+  // Orbital rings
+  ringGeos.forEach(({ ring, speed, axis }) => {
+    if (axis === 0) ring.rotation.z += speed;
+    else if (axis === 1) ring.rotation.x += speed * 0.7;
+    else ring.rotation.y += speed * 0.5;
+  });
+
+  // Flow particles
+  particles.forEach(p => { if (p.mesh.visible) p.update(); });
+
+  // Star shimmer
+  starMat.opacity = 0.5 + Math.sin(t * 0.2) * 0.2;
+
+  renderer.render(scene, camera);
+}
+animate();
+
+// ─ Resize ─
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+// ─ Initial flow ─
+setTimeout(() => animateFlowLog(FLOW_SEQUENCES[1]), 2000);
+</script>
+</body>
+</html>

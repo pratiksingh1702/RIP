@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--font-sans);color:var(--color-text-primary);background:transparent;padding:16px 0}
+h2.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)}
+
+.tabs{display:flex;gap:4px;margin-bottom:16px;flex-wrap:wrap}
+.tab{font-size:12px;font-weight:500;padding:5px 12px;border-radius:20px;border:0.5px solid var(--color-border-secondary);background:transparent;color:var(--color-text-secondary);cursor:pointer;transition:all .15s}
+.tab.active{background:var(--color-text-primary);color:var(--color-background-primary);border-color:var(--color-text-primary)}
+
+.table-wrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:13px}
+thead tr{border-bottom:1px solid var(--color-border-secondary)}
+th{text-align:left;padding:8px 12px;font-size:11px;font-weight:500;color:var(--color-text-tertiary);letter-spacing:.06em;text-transform:uppercase;white-space:nowrap}
+td{padding:10px 12px;border-bottom:0.5px solid var(--color-border-tertiary);vertical-align:top;line-height:1.55}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:var(--color-background-secondary)}
+
+.badge{display:inline-block;font-size:11px;font-weight:500;padding:2px 8px;border-radius:20px;white-space:nowrap}
+.b-teal{background:#E1F5EE;color:#085041}
+.b-purple{background:#EEEDFE;color:#3C3489}
+.b-amber{background:#FAEEDA;color:#633806}
+.b-coral{background:#FAECE7;color:#712B13}
+.b-blue{background:#E6F1FB;color:#0C447C}
+.b-gray{background:#F1EFE8;color:#444441}
+.b-green{background:#EAF3DE;color:#27500A}
+.b-pink{background:#FBEAF0;color:#72243E}
+
+.tech{font-family:var(--font-mono);font-size:12px;color:var(--color-text-primary);background:var(--color-background-secondary);padding:2px 6px;border-radius:4px;border:0.5px solid var(--color-border-tertiary);white-space:nowrap}
+td.name{font-weight:500;font-size:13px;min-width:160px}
+td.layer{min-width:110px}
+td.role{min-width:180px}
+td.connects{min-width:200px;color:var(--color-text-secondary)}
+td.why{color:var(--color-text-secondary)}
+
+.conn-arrow{color:var(--color-text-tertiary);margin:0 4px;font-size:11px}
+</style>
+</head>
+<body>
+<h2 class="sr-only">Repository Intelligence Platform — full tech stack with connections and roles</h2>
+
+<div class="tabs">
+  <button class="tab active" onclick="show('all',this)">All</button>
+  <button class="tab" onclick="show('parsing',this)">Parsing</button>
+  <button class="tab" onclick="show('graph',this)">Graph</button>
+  <button class="tab" onclick="show('search',this)">Search</button>
+  <button class="tab" onclick="show('storage',this)">Storage</button>
+  <button class="tab" onclick="show('llm',this)">LLM</button>
+  <button class="tab" onclick="show('api',this)">API / CLI</button>
+  <button class="tab" onclick="show('vscode',this)">VS Code</button>
+  <button class="tab" onclick="show('dev',this)">Dev tools</button>
+</div>
+
+<div class="table-wrap">
+<table>
+  <thead>
+    <tr>
+      <th>Technology</th>
+      <th>Layer</th>
+      <th>Role in this system</th>
+      <th>Connects to</th>
+      <th>Why this, not X</th>
+    </tr>
+  </thead>
+  <tbody id="tbody"></tbody>
+</table>
+</div>
+
+<script>
+const rows = [
+  {
+    name:"Tree-sitter", layer:"parsing", badge:"b-teal", label:"Parsing",
+    role:"Parses every source file into a full AST. Extracts classes, functions, imports, decorators, API routes, DB models.",
+    connects:"Feeds ParsedFile objects → GraphBuilder and Embedder",
+    why:"Language-agnostic, C core (blazing fast), incremental, exact. LSP needs an editor running. Regex is brittle."
+  },
+  {
+    name:"tree-sitter-languages", layer:"parsing", badge:"b-teal", label:"Parsing",
+    role:"Pre-built grammar bundle for Python, Java, TypeScript, Go, Rust — no manual grammar compilation.",
+    connects:"Loaded by Tree-sitter parser at startup",
+    why:"Single pip install covers all grammars. Building grammars manually is unnecessary complexity."
+  },
+  {
+    name:"GitPython", layer:"parsing", badge:"b-teal", label:"Parsing",
+    role:"Reads git history — commits, blame, file churn, ownership. Powers risk scoring and ownership analysis.",
+    connects:"Writes Developer, Commit nodes → Neo4j via GraphBuilder",
+    why:"Pure Python, well-maintained, full git API. subprocess git calls are fragile and slow."
+  },
+  {
+    name:"watchdog", layer:"parsing", badge:"b-teal", label:"Parsing",
+    role:"File system watcher. On file save, triggers incremental re-index of only the changed file.",
+    connects:"Fires event → IncrementalIndexer → re-parses one file → updates Neo4j + Qdrant",
+    why:"Cross-platform (Linux inotify, macOS FSEvents, Windows ReadDirectoryChanges). Pure Python."
+  },
+  {
+    name:"Neo4j Community", layer:"graph", badge:"b-purple", label:"Graph",
+    role:"Stores the full code knowledge graph. Every file, class, function, API, DB entity is a node. Every import, call, dependency is an edge.",
+    connects:"Written by GraphBuilder. Queried by all Analysis Engines (FlowTracer, ImpactAnalyser, DeadCodeDetector). Results fed to ContextAssembler.",
+    why:"Native graph DB — Cypher traversals are orders of magnitude faster than recursive SQL CTEs. NetworkX is in-memory only (no persistence). DGraph is less mature."
+  },
+  {
+    name:"neo4j Python driver", layer:"graph", badge:"b-purple", label:"Graph",
+    role:"Async Python client for Neo4j. Connection pool, transaction management, Cypher execution.",
+    connects:"Used by GraphBuilder (writes) and all query modules (reads)",
+    why:"Official async driver. Only production-quality option."
+  },
+  {
+    name:"Qdrant", layer:"search", badge:"b-amber", label:"Search",
+    role:"Vector database. Stores code chunk embeddings alongside metadata payload (language, service, owner, entity type). Powers semantic search.",
+    connects:"Written by SearchIndexer. Queried by Searcher. Results merged with Neo4j results in ContextAssembler.",
+    why:"Self-hostable, Rust core (fast), payload filtering built-in. Chroma is less production-ready. Pinecone is cloud-only. Weaviate is heavier."
+  },
+  {
+    name:"sentence-transformers", layer:"search", badge:"b-amber", label:"Search",
+    role:"Runs the embedding model locally. Converts code chunks and user queries to 1024-dim vectors.",
+    connects:"Called by Embedder → vectors stored in Qdrant",
+    why:"Best open-source code embedding models (BGE-M3, Nomic) are available here. Runs on CPU. No API key."
+  },
+  {
+    name:"BGE-M3", layer:"search", badge:"b-amber", label:"Search",
+    role:"Default embedding model. State-of-the-art multilingual code embeddings. 1024 dimensions.",
+    connects:"Loaded by sentence-transformers. Produces vectors stored in Qdrant.",
+    why:"Best open-source code embedding quality as of 2025. Outperforms OpenAI ada-002 on code retrieval."
+  },
+  {
+    name:"cross-encoder reranker", layer:"search", badge:"b-amber", label:"Search",
+    role:"Reranks top-40 vector search results using a cross-encoder model. Boosts precision before results reach the LLM.",
+    connects:"Takes Qdrant results + original query → returns reranked top-20",
+    why:"Bi-encoder (vector) search optimizes for recall. Cross-encoder reranking fixes precision. Standard RAG best practice."
+  },
+  {
+    name:"PostgreSQL", layer:"storage", badge:"b-gray", label:"Storage",
+    role:"Relational metadata store. Tracks index state, file hashes (for incremental indexing), analysis job history.",
+    connects:"Written/read by IncrementalIndexer and IndexPipeline. Also stores config state.",
+    why:"ACID, battle-tested, async via asyncpg. SQLite available for zero-config single-user mode."
+  },
+  {
+    name:"SQLAlchemy 2.0", layer:"storage", badge:"b-gray", label:"Storage",
+    role:"Async ORM over PostgreSQL. Defines IndexState, FileHash, AnalysisJob models. Migrations via Alembic.",
+    connects:"Used by all modules that read/write PostgreSQL metadata",
+    why:"Industry standard Python ORM. Async support in v2. Alembic migration tooling is best-in-class."
+  },
+  {
+    name:"Alembic", layer:"storage", badge:"b-gray", label:"Storage",
+    role:"Database schema migration tool. Tracks and applies schema changes to PostgreSQL.",
+    connects:"Reads SQLAlchemy models → generates and runs migration scripts",
+    why:"Built for SQLAlchemy. Auto-generates migrations from model diffs."
+  },
+  {
+    name:"Redis", layer:"storage", badge:"b-gray", label:"Storage",
+    role:"Cache for hot graph query results and session state. Reduces Neo4j load on repeated identical queries.",
+    connects:"Sits between FastAPI routers and Neo4j/Qdrant. TTL-based cache.",
+    why:"Standard caching layer. Optional — system works without it (slightly slower). Pub/sub for background job signaling."
+  },
+  {
+    name:"Ollama", layer:"llm", badge:"b-coral", label:"LLM",
+    role:"Local LLM runtime. Serves Qwen2.5-Coder or DeepSeek-Coder on localhost. Zero API cost, fully offline.",
+    connects:"Called by LiteLLMClient → receives context package from ContextAssembler → returns explanation text",
+    why:"Easiest local model server. Single binary. OpenAI-compatible API. Privacy-preserving."
+  },
+  {
+    name:"Qwen2.5-Coder-7B", layer:"llm", badge:"b-coral", label:"LLM",
+    role:"Default local model for code explanation. Best code understanding in 7B class. Runs on 8GB RAM.",
+    connects:"Loaded into Ollama. Receives assembled context, returns natural language explanation.",
+    why:"Best 7B code model as of 2025. Outperforms CodeLlama-13B on code understanding benchmarks."
+  },
+  {
+    name:"LiteLLM", layer:"llm", badge:"b-coral", label:"LLM",
+    role:"Unified LLM abstraction. Single API for Ollama (local), Claude, GPT-4o, Gemini. Swap models without changing code.",
+    connects:"Used by LiteLLMClient. Routes to Ollama, Anthropic SDK, or OpenAI SDK based on config.",
+    why:"Without LiteLLM, swapping models means rewriting API call code. One interface for all providers."
+  },
+  {
+    name:"Anthropic SDK", layer:"llm", badge:"b-coral", label:"LLM",
+    role:"Optional cloud fallback for Claude API. Better explanation quality on complex architectural queries.",
+    connects:"Called via LiteLLM when provider=claude in config. Opt-in only.",
+    why:"Claude is best-in-class for code explanation. Optional — never required. Privacy opt-in."
+  },
+  {
+    name:"FastAPI", layer:"api", badge:"b-blue", label:"API / CLI",
+    role:"HTTP server. Serves all intelligence queries over localhost:8000. Used by both CLI and VS Code extension.",
+    connects:"Receives requests from Typer CLI and VS Code extension. Calls Core Engine (parsers, graph, search, analysis, LLM).",
+    why:"Async, Pydantic-native, auto OpenAPI docs, fastest Python HTTP framework. Flask is too bare. Django too heavy."
+  },
+  {
+    name:"Typer", layer:"api", badge:"b-blue", label:"API / CLI",
+    role:"CLI framework. Defines all repo commands (init, index, trace, impact, search, dead-code, onboard, metrics).",
+    connects:"Each command calls FastAPI server via httpx. Formats JSON response for terminal output.",
+    why:"Built on Click, auto-generates help text, type-safe arguments. Click alone is lower-level than needed."
+  },
+  {
+    name:"Pydantic v2", layer:"api", badge:"b-blue", label:"API / CLI",
+    role:"Data validation and schema definitions across all layers. Request/response models for FastAPI. ParsedEntity contracts.",
+    connects:"Used everywhere: parser output, graph models, FastAPI schemas, LLM context models",
+    why:"Rust-backed (10x faster than v1). Enforces contracts between layers so nothing passes malformed data silently."
+  },
+  {
+    name:"httpx", layer:"api", badge:"b-blue", label:"API / CLI",
+    role:"Async HTTP client. Used by CLI commands to call the FastAPI server.",
+    connects:"CLI commands → httpx → FastAPI server",
+    why:"Async, modern, supports both sync and async modes. requests is sync-only."
+  },
+  {
+    name:"Rich", layer:"api", badge:"b-blue", label:"API / CLI",
+    role:"Terminal output formatting. Colors, tables, progress bars, syntax highlighting for CLI responses.",
+    connects:"Used by CLI output formatters to render FastAPI JSON responses",
+    why:"Best Python terminal formatting library. Makes CLI output readable and professional."
+  },
+  {
+    name:"VS Code Extension API", layer:"vscode", badge:"b-green", label:"VS Code",
+    role:"Provides workspace.findFiles, onDidSaveTextDocument, HoverProvider, CodeActionProvider, Webview panels.",
+    connects:"Extension registers providers → on file save, calls FastAPI server. On command, opens webview panel.",
+    why:"Required. The extension host. No alternative for VS Code integration."
+  },
+  {
+    name:"TypeScript", layer:"vscode", badge:"b-green", label:"VS Code",
+    role:"Extension implementation language. ServerManager, ApiClient, all providers and panels.",
+    connects:"Compiles to JS loaded by VS Code extension host",
+    why:"Required by VS Code Extension API. Type safety helps manage the async API calls."
+  },
+  {
+    name:"D3.js", layer:"vscode", badge:"b-green", label:"VS Code",
+    role:"Force-directed graph visualization inside VS Code webview panels. Renders dependency graphs and architecture views.",
+    connects:"Loaded in webview HTML. Receives graph data from FastAPI /graph endpoint via extension message passing.",
+    why:"Best graph visualization library. Force-directed layout handles arbitrary graphs automatically."
+  },
+  {
+    name:"vscode-webview-ui-toolkit", layer:"vscode", badge:"b-green", label:"VS Code",
+    role:"Microsoft's official Webview UI components. Buttons, dropdowns, badges that match VS Code theme automatically.",
+    connects:"Used in webview HTML panels (dependency graph, impact, trace, architecture views)",
+    why:"Auto-adapts to VS Code light/dark theme. No custom theming needed."
+  },
+  {
+    name:"uv", layer:"dev", badge:"b-pink", label:"Dev tools",
+    role:"Python package manager and virtual environment tool. Replaces pip + venv.",
+    connects:"Manages all Python dependencies defined in pyproject.toml",
+    why:"10x faster than pip. Lock file ensures reproducible installs. Modern standard."
+  },
+  {
+    name:"ruff", layer:"dev", badge:"b-pink", label:"Dev tools",
+    role:"Linter + formatter. Replaces flake8 + black + isort in one tool.",
+    connects:"Runs in CI and on pre-commit. Formats all Python files in core/, server/, cli/",
+    why:"Rust-based, extremely fast. One tool instead of three. Standard in new Python projects."
+  },
+  {
+    name:"pytest + pytest-asyncio", layer:"dev", badge:"b-pink", label:"Dev tools",
+    role:"Test runner. Unit tests for parsers, graph queries, analysis engines. Integration tests for full pipeline.",
+    connects:"Tests call core/ modules directly or via the FastAPI test client",
+    why:"Standard Python test framework. pytest-asyncio handles async test functions natively."
+  },
+  {
+    name:"Docker Compose", layer:"dev", badge:"b-pink", label:"Dev tools",
+    role:"Spins up Neo4j, Qdrant, PostgreSQL, Redis locally with one command.",
+    connects:"docker-compose up -d → all storage services available on localhost",
+    why:"No manual database installation. Reproducible dev environment. One command setup."
+  },
+];
+
+const BADGE_MAP = {
+  parsing:"b-teal", graph:"b-purple", search:"b-amber",
+  storage:"b-gray", llm:"b-coral", api:"b-blue",
+  vscode:"b-green", dev:"b-pink"
+};
+const LABEL_MAP = {
+  parsing:"Parsing", graph:"Graph", search:"Search",
+  storage:"Storage", llm:"LLM", api:"API / CLI",
+  vscode:"VS Code", dev:"Dev tools"
+};
+
+function render(filter) {
+  const data = filter === 'all' ? rows : rows.filter(r => r.layer === filter);
+  const tbody = document.getElementById('tbody');
+  tbody.innerHTML = data.map(r => `
+    <tr>
+      <td class="name"><span class="tech">${r.name}</span></td>
+      <td class="layer"><span class="badge ${BADGE_MAP[r.layer]}">${LABEL_MAP[r.layer]}</span></td>
+      <td class="role">${r.role}</td>
+      <td class="connects"><span style="font-size:12px">${r.connects}</span></td>
+      <td class="why"><span style="font-size:12px">${r.why}</span></td>
+    </tr>
+  `).join('');
+}
+
+function show(filter, btn) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  btn.classList.add('active');
+  render(filter);
+}
+
+render('all');
+</script>
+</body>
+</html>

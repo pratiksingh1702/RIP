@@ -1,0 +1,39 @@
+[project]
+name = "python_simple"
+root = "C:/Users/Dell/Downloads/RIP/tests/fixtures/sample_repos/python_simple"
+languages = ["python", "java", "typescript"]
+exclude = ["node_modules", "__pycache__", "*.min.js", "vendor/", "dist/"]
+
+[indexing]
+incremental = true
+watch = false
+max_file_size_kb = 500
+
+[graph]
+neo4j_uri = "bolt://localhost:7687"
+neo4j_user = "neo4j"
+neo4j_password = "password"
+max_trace_depth = 15
+
+[search]
+qdrant_host = "localhost"
+qdrant_port = 6333
+embedding_model = "BAAI/bge-m3"
+top_k = 20
+
+[storage]
+postgres_url = "postgresql+asyncpg://repo_intel:repo_intel@localhost:5432/repo_intel"
+redis_url = "redis://localhost:6379"
+use_sqlite = false
+
+[llm]
+provider = "ollama"
+model = "qwen2.5-coder:7b"
+ollama_host = "http://localhost:11434"
+max_context_tokens = 6000
+explain_by_default = false
+
+[server]
+host = "127.0.0.1"
+port = 8000
+auto_start = true

@@ -1,0 +1,880 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RIP — Repository Intelligence Platform · 3D Data Flow</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#f0f4fb;--bg2:#e8edf8;--surface:#ffffff;--surface2:#f7f9ff;--surface3:#eef2fb;
+  --border:#dde5f4;--border2:#c8d4ea;
+  --text:#18243a;--text2:#445069;--text3:#8fa1bc;
+  --teal:#0088bb;--teal-l:#e0f5ff;--teal-d:#005580;
+  --purple:#5b48d9;--purple-l:#eeebff;--purple-d:#3d2faa;
+  --amber:#c96f00;--amber-l:#fff3e0;--amber-d:#994d00;
+  --coral:#cc2222;--coral-l:#fff0f0;
+  --blue:#1d4ed8;--blue-l:#eff6ff;
+  --green:#047857;--green-l:#ecfdf5;
+  --sh:0 2px 14px rgba(20,40,90,0.09);
+  --sh2:0 8px 36px rgba(20,40,90,0.14);
+  --font:'Inter',sans-serif;--mono:'JetBrains Mono',monospace;
+}
+html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-family:var(--font);color:var(--text)}
+canvas#c3d{position:fixed;inset:0;z-index:0}
+#ui{position:fixed;inset:0;z-index:10;pointer-events:none}
+
+/* HEADER */
+#hdr{position:absolute;top:0;left:0;right:0;height:56px;padding:0 20px;
+  display:flex;align-items:center;justify-content:space-between;
+  background:rgba(255,255,255,0.93);border-bottom:1px solid var(--border);
+  backdrop-filter:blur(18px);pointer-events:auto;box-shadow:0 1px 10px rgba(20,40,90,0.08);}
+#hl{display:flex;align-items:center;gap:11px}
+#logo{width:34px;height:34px;border-radius:9px;
+  background:linear-gradient(135deg,var(--teal),var(--purple));
+  display:flex;align-items:center;justify-content:center;
+  font-size:14px;font-weight:700;color:#fff;font-family:var(--mono);
+  box-shadow:0 2px 8px rgba(91,72,217,0.28);}
+#htitle{font-size:13px;font-weight:700;color:var(--text);letter-spacing:-.01em}
+#hsub{font-size:10px;color:var(--text3);font-family:var(--mono);margin-top:1px}
+#vtabs{display:flex;gap:3px;background:var(--surface3);border:1px solid var(--border);border-radius:9px;padding:3px;pointer-events:auto}
+.vtab{font-size:11px;font-weight:500;padding:4px 11px;border-radius:6px;border:none;
+  background:transparent;color:var(--text2);cursor:pointer;transition:all .16s;font-family:var(--font);}
+.vtab.active{background:var(--surface);color:var(--text);box-shadow:var(--sh)}
+.vtab:hover:not(.active){color:var(--text);background:rgba(255,255,255,.55)}
+#hbtns{display:flex;gap:6px;pointer-events:auto}
+.hbtn{font-size:11px;font-weight:500;padding:4px 11px;border-radius:7px;
+  border:1px solid var(--border);background:var(--surface);color:var(--text2);
+  cursor:pointer;transition:all .15s;font-family:var(--font);}
+.hbtn:hover{border-color:var(--teal);color:var(--teal);background:var(--teal-l)}
+.hbtn.on{background:var(--teal-l);color:var(--teal);border-color:var(--teal)}
+
+/* LEFT PANEL */
+#lp{position:absolute;left:12px;top:66px;bottom:12px;width:216px;
+  display:flex;flex-direction:column;gap:5px;pointer-events:auto;overflow-y:auto;}
+#lp::-webkit-scrollbar{width:3px}
+#lp::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
+.lpcard{background:var(--surface);border:1px solid var(--border);border-radius:11px;padding:11px 13px;box-shadow:var(--sh)}
+.slabel{font-size:9.5px;font-weight:700;color:var(--text3);letter-spacing:.09em;
+  text-transform:uppercase;margin-bottom:7px;display:flex;align-items:center;gap:5px;}
+.slabel::before{content:'';display:inline-block;width:12px;height:2px;border-radius:1px;background:currentColor}
+.nb{width:100%;text-align:left;padding:6px 8px;border-radius:7px;border:1px solid transparent;
+  background:transparent;cursor:pointer;transition:all .14s;display:flex;align-items:center;gap:8px;
+  font-family:var(--font);margin-bottom:2px;}
+.nb:last-child{margin-bottom:0}
+.nb:hover{background:var(--surface3);border-color:var(--border)}
+.nb.sel{border-color:currentColor;background:color-mix(in srgb,currentColor 7%,transparent)}
+.nd{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.nbl{font-size:11.5px;font-weight:500;color:var(--text)}
+.nbs{font-size:9.5px;color:var(--text3);margin-top:1px}
+
+/* RIGHT PANEL */
+#rp{position:absolute;right:12px;top:66px;width:272px;display:flex;flex-direction:column;gap:5px;pointer-events:auto}
+#dcard{background:var(--surface);border:1px solid var(--border);border-radius:11px;padding:14px;box-shadow:var(--sh)}
+.dbadge{display:inline-flex;align-items:center;gap:4px;font-size:9.5px;font-weight:700;
+  padding:2px 8px;border-radius:12px;margin-bottom:9px;font-family:var(--mono);border:1px solid transparent}
+#dtitle{font-size:14px;font-weight:700;color:var(--text);margin-bottom:5px;line-height:1.3}
+#dbody{font-size:11.5px;color:var(--text2);line-height:1.68;margin-bottom:11px}
+.dctitle{font-size:9.5px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:5px}
+.dci{font-size:11px;color:var(--text2);margin-bottom:3px;padding-left:12px;position:relative;line-height:1.4}
+.dci::before{content:'→';position:absolute;left:0;color:var(--text3)}
+
+/* TOKEN BAR */
+#tkcard{background:var(--surface);border:1px solid var(--border);border-radius:11px;padding:12px 13px;box-shadow:var(--sh)}
+.tctop{display:flex;justify-content:space-between;align-items:center;margin-bottom:9px}
+.tctitle{font-size:11px;font-weight:600;color:var(--text)}
+.tctotal{font-size:9.5px;color:var(--text3);font-family:var(--mono)}
+.tbwrap{margin-bottom:6px}
+.tbrow{display:flex;justify-content:space-between;align-items:center;margin-bottom:2px}
+.tbname{font-size:10.5px;color:var(--text2)}
+.tbval{font-size:9.5px;color:var(--text3);font-family:var(--mono)}
+.tbtrack{height:6px;background:var(--surface3);border-radius:3px;overflow:hidden}
+.tbfill{height:100%;border-radius:3px;transition:width 1.1s cubic-bezier(.4,0,.2,1)}
+
+/* PHASES */
+#phcard{background:var(--surface);border:1px solid var(--border);border-radius:11px;padding:11px 13px;box-shadow:var(--sh)}
+.ph{display:flex;align-items:center;gap:8px;padding:5px 6px;border-radius:7px;cursor:pointer;transition:background .14s;margin-bottom:3px}
+.ph:last-child{margin-bottom:0}
+.ph:hover{background:var(--surface3)}
+.phnum{width:26px;height:26px;border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0}
+.phname{font-size:11.5px;font-weight:600;color:var(--text)}
+.phsub{font-size:9.5px;color:var(--text3);margin-top:1px}
+.phst{font-size:9px;font-weight:600;padding:2px 6px;border-radius:9px;white-space:nowrap}
+
+/* BOTTOM BAR */
+#bb{position:absolute;bottom:12px;left:238px;right:298px;
+  background:var(--surface);border:1px solid var(--border);border-radius:11px;
+  padding:11px 14px;box-shadow:var(--sh);pointer-events:auto}
+#bbh{display:flex;justify-content:space-between;align-items:center;margin-bottom:9px}
+#bbtitle{font-size:11px;font-weight:600;color:var(--text);display:flex;align-items:center;gap:6px}
+.bbd{width:6px;height:6px;border-radius:50%;background:var(--green);animation:bpulse 1.8s ease-in-out infinite}
+@keyframes bpulse{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(.7);opacity:.5}}
+#bbsc{font-size:9.5px;color:var(--teal);font-family:var(--mono)}
+#fsteps{display:flex;align-items:center;gap:3px;flex-wrap:wrap}
+.fs{display:flex;align-items:center;gap:4px;font-size:10.5px;color:var(--text2);
+  background:var(--surface3);border:1px solid var(--border);border-radius:5px;padding:3px 8px;transition:all .25s}
+.fs.act{background:var(--teal-l);border-color:var(--teal);color:var(--teal-d);font-weight:600}
+.fsd{width:5px;height:5px;border-radius:50%;flex-shrink:0}
+.fsa{color:var(--text3);font-size:11px;flex-shrink:0}
+
+/* CHARTS */
+#cpanel{position:absolute;bottom:12px;right:12px;width:272px;
+  background:var(--surface);border:1px solid var(--border);border-radius:11px;
+  padding:12px 13px;box-shadow:var(--sh);pointer-events:auto}
+#cptabs{display:flex;gap:2px;margin-bottom:10px}
+.ctab{font-size:10px;font-weight:500;padding:3px 8px;border-radius:5px;border:none;
+  background:transparent;color:var(--text3);cursor:pointer;font-family:var(--font);transition:all .14s}
+.ctab.active{background:var(--surface3);color:var(--text);font-weight:600}
+.chartarea{height:108px;position:relative}
+
+/* TOOLTIP */
+#tt{position:fixed;z-index:200;pointer-events:none;max-width:270px;opacity:0;transition:opacity .16s;
+  background:var(--surface);border:1px solid var(--border);border-radius:11px;
+  padding:11px 13px;box-shadow:var(--sh2)}
+#tt.vis{opacity:1}
+.ttag{display:inline-block;font-size:9.5px;font-weight:700;padding:2px 8px;border-radius:11px;
+  margin-bottom:6px;font-family:var(--mono);border:1px solid transparent}
+.ttitle{font-size:12.5px;font-weight:700;color:var(--text);margin-bottom:3px}
+.tbody{font-size:10.5px;color:var(--text2);line-height:1.6}
+
+/* ANIMS */
+@keyframes fadeup{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
+</style>
+</head>
+<body>
+<canvas id="c3d"></canvas>
+<div id="ui">
+"""
+
+part2 = r"""
+<!-- HEADER -->
+<div id="hdr">
+  <div id="hl">
+    <div id="logo">R</div>
+    <div><div id="htitle">Repository Intelligence Platform</div><div id="hsub">3d data flow · interactive architecture</div></div>
+  </div>
+  <div id="vtabs">
+    <button class="vtab active" onclick="setView('full')" id="tab-full">Full System</button>
+    <button class="vtab" onclick="setView('rip')" id="tab-rip">Phase 1 · RIP</button>
+    <button class="vtab" onclick="setView('gw')" id="tab-gw">Phase 2 · Gateway</button>
+    <button class="vtab" onclick="setView('ag')" id="tab-ag">Phase 3 · Agents</button>
+    <button class="vtab" onclick="setView('fl')" id="tab-fl">Query Flow</button>
+  </div>
+  <div id="hbtns">
+    <button class="hbtn" onclick="toggleRot()" id="btn-rot">⟳ Auto-rotate</button>
+    <button class="hbtn" onclick="resetCam()">⌖ Reset View</button>
+    <button class="hbtn on" onclick="togglePart()" id="btn-part">⚡ Particles</button>
+    <button class="hbtn" onclick="toggleLabels()" id="btn-labels">🏷 Labels</button>
+  </div>
+</div>
+
+<!-- LEFT PANEL -->
+<div id="lp">
+  <div class="lpcard">
+    <div class="slabel" style="color:var(--teal)">Phase 1 — RIP Core</div>
+    <button class="nb" onclick="focusNode('ts')" id="nb-ts" style="color:var(--teal)"><div class="nd" style="background:var(--teal)"></div><div><div class="nbl">Tree-sitter</div><div class="nbs">AST Parser</div></div></button>
+    <button class="nb" onclick="focusNode('neo4j')" id="nb-neo4j" style="color:var(--teal)"><div class="nd" style="background:var(--teal)"></div><div><div class="nbl">Neo4j</div><div class="nbs">Code Graph DB</div></div></button>
+    <button class="nb" onclick="focusNode('qdrant')" id="nb-qdrant" style="color:var(--teal)"><div class="nd" style="background:var(--teal)"></div><div><div class="nbl">Qdrant</div><div class="nbs">Vector Search</div></div></button>
+    <button class="nb" onclick="focusNode('bge')" id="nb-bge" style="color:var(--teal)"><div class="nd" style="background:var(--teal)"></div><div><div class="nbl">BGE-M3</div><div class="nbs">Embeddings</div></div></button>
+    <button class="nb" onclick="focusNode('pg')" id="nb-pg" style="color:var(--teal)"><div class="nd" style="background:var(--teal)"></div><div><div class="nbl">PostgreSQL</div><div class="nbs">Metadata Store</div></div></button>
+    <button class="nb" onclick="focusNode('redis')" id="nb-redis" style="color:var(--teal)"><div class="nd" style="background:var(--teal)"></div><div><div class="nbl">Redis</div><div class="nbs">Query Cache</div></div></button>
+    <button class="nb" onclick="focusNode('llm')" id="nb-llm" style="color:var(--teal)"><div class="nd" style="background:var(--teal)"></div><div><div class="nbl">Ollama / LiteLLM</div><div class="nbs">Local LLM Engine</div></div></button>
+    <button class="nb" onclick="focusNode('gitp')" id="nb-gitp" style="color:var(--teal)"><div class="nd" style="background:var(--teal)"></div><div><div class="nbl">GitPython</div><div class="nbs">History + Blame</div></div></button>
+    <button class="nb" onclick="focusNode('fastapi')" id="nb-fastapi" style="color:var(--teal)"><div class="nd" style="background:var(--teal)"></div><div><div class="nbl">FastAPI</div><div class="nbs">HTTP Server</div></div></button>
+  </div>
+  <div class="lpcard">
+    <div class="slabel" style="color:var(--purple)">Phase 2 — Context Gateway</div>
+    <button class="nb" onclick="focusNode('gw')" id="nb-gw" style="color:var(--purple)"><div class="nd" style="background:var(--purple)"></div><div><div class="nbl">Context Gateway</div><div class="nbs">Orchestrator</div></div></button>
+    <button class="nb" onclick="focusNode('mcp')" id="nb-mcp" style="color:var(--purple)"><div class="nd" style="background:var(--purple)"></div><div><div class="nbl">MCP Server</div><div class="nbs">Protocol Adapter</div></div></button>
+    <button class="nb" onclick="focusNode('planner')" id="nb-planner" style="color:var(--purple)"><div class="nd" style="background:var(--purple)"></div><div><div class="nbl">Tool Planner</div><div class="nbs">Intent + Routing</div></div></button>
+    <button class="nb" onclick="focusNode('ranker')" id="nb-ranker" style="color:var(--purple)"><div class="nd" style="background:var(--purple)"></div><div><div class="nbl">Context Ranker</div><div class="nbs">Budget + Compress</div></div></button>
+    <button class="nb" onclick="focusNode('mem')" id="nb-mem" style="color:var(--purple)"><div class="nd" style="background:var(--purple)"></div><div><div class="nbl">Session Memory</div><div class="nbs">Cross-agent State</div></div></button>
+    <button class="nb" onclick="focusNode('perm')" id="nb-perm" style="color:var(--purple)"><div class="nd" style="background:var(--purple)"></div><div><div class="nbl">Permission Filter</div><div class="nbs">Role-based Access</div></div></button>
+  </div>
+  <div class="lpcard">
+    <div class="slabel" style="color:var(--amber)">Phase 3 — Agents + UI</div>
+    <button class="nb" onclick="focusNode('claude')" id="nb-claude" style="color:var(--amber)"><div class="nd" style="background:var(--amber)"></div><div><div class="nbl">Claude Code</div><div class="nbs">AI Agent</div></div></button>
+    <button class="nb" onclick="focusNode('codex')" id="nb-codex" style="color:var(--amber)"><div class="nd" style="background:var(--amber)"></div><div><div class="nbl">Codex / GPT-4o</div><div class="nbs">AI Agent</div></div></button>
+    <button class="nb" onclick="focusNode('vscode')" id="nb-vscode" style="color:var(--amber)"><div class="nd" style="background:var(--amber)"></div><div><div class="nbl">VS Code Ext.</div><div class="nbs">Editor UI</div></div></button>
+    <button class="nb" onclick="focusNode('cli')" id="nb-cli" style="color:var(--amber)"><div class="nd" style="background:var(--amber)"></div><div><div class="nbl">CLI (Typer)</div><div class="nbs">Terminal UI</div></div></button>
+  </div>
+  <div class="lpcard">
+    <div class="slabel" style="color:var(--blue)">External MCP Sources</div>
+    <button class="nb" onclick="focusNode('gh')" id="nb-gh" style="color:var(--blue)"><div class="nd" style="background:var(--blue)"></div><div><div class="nbl">GitHub MCP</div><div class="nbs">PRs + CI Status</div></div></button>
+    <button class="nb" onclick="focusNode('jira')" id="nb-jira" style="color:var(--blue)"><div class="nd" style="background:var(--blue)"></div><div><div class="nbl">Jira MCP</div><div class="nbs">Tickets + Specs</div></div></button>
+    <button class="nb" onclick="focusNode('slack')" id="nb-slack" style="color:var(--blue)"><div class="nd" style="background:var(--blue)"></div><div><div class="nbl">Slack MCP</div><div class="nbs">Team Discussions</div></div></button>
+  </div>
+</div>
+
+<!-- RIGHT PANEL -->
+<div id="rp">
+  <div id="dcard">
+    <div id="dbadge" class="dbadge">System · Overview</div>
+    <div id="dtitle">Repository Intelligence Platform</div>
+    <div id="dbody">A three-phase AI middleware: RIP builds a live code knowledge graph from static analysis. The Context Gateway orchestrates surgical context delivery to AI agents via MCP. Together they cut agent token usage by 60× and enable AI-assisted engineering on codebases of any size.</div>
+    <div class="dctitle">Key Connections</div>
+    <div id="dconns"><div class="dci">Click any node to see its connections</div></div>
+  </div>
+  <div id="tkcard">
+    <div class="tctop"><span class="tctitle">Token Budget Allocation</span><span class="tctotal" id="tctot">40k ctx window</span></div>
+    <div id="tbars"></div>
+  </div>
+  <div id="phcard">
+    <div class="slabel" style="color:var(--text3);margin-bottom:6px">Build Phases</div>
+    <div class="ph" onclick="setView('rip')">
+      <div class="phnum" style="background:var(--teal-l);color:var(--teal-d)">1</div>
+      <div style="flex:1"><div class="phname">Repository Intelligence</div><div class="phsub">Parser → Graph → Search → LLM</div></div>
+      <div class="phst" style="background:var(--teal-l);color:var(--teal-d)">Build first</div>
+    </div>
+    <div class="ph" onclick="setView('gw')">
+      <div class="phnum" style="background:var(--purple-l);color:var(--purple-d)">2</div>
+      <div style="flex:1"><div class="phname">Context Gateway</div><div class="phsub">MCP + Budget + Orchestration</div></div>
+      <div class="phst" style="background:var(--purple-l);color:var(--purple-d)">On top</div>
+    </div>
+    <div class="ph" onclick="setView('ag')">
+      <div class="phnum" style="background:var(--amber-l);color:var(--amber-d)">3</div>
+      <div style="flex:1"><div class="phname">Agent Connections</div><div class="phsub">Claude Code · Codex · VS Code</div></div>
+      <div class="phst" style="background:var(--amber-l);color:var(--amber-d)">Connect last</div>
+    </div>
+  </div>
+</div>
+
+<!-- BOTTOM FLOW BAR -->
+<div id="bb">
+  <div id="bbh"><div id="bbtitle"><div class="bbd"></div>Live Data Flow</div><div id="bbsc">scenario: initializing...</div></div>
+  <div id="fsteps"></div>
+</div>
+
+<!-- MINI CHARTS -->
+<div id="cpanel">
+  <div id="cptabs">
+    <button class="ctab active" onclick="showChart('tok')" id="ct-tok">Token Savings</button>
+    <button class="ctab" onclick="showChart('pip')" id="ct-pip">Pipeline</button>
+    <button class="ctab" onclick="showChart('risk')" id="ct-risk">Risk Scores</button>
+    <button class="ctab" onclick="showChart('cpl')" id="ct-cpl">Coupling</button>
+  </div>
+  <div class="chartarea"><canvas id="mc" width="248" height="108"></canvas></div>
+</div>
+
+</div><!-- /ui -->
+<div id="tt"><div class="ttag" id="ttag"></div><div class="ttitle" id="ttitle"></div><div class="tbody" id="tbody"></div></div>
+"""
+
+part3 = r"""
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+// ═══ NODE DATA ═══
+const ND={
+ts:{l:'Tree-sitter',s:'AST Parser',ly:'rip',c:0x0088bb,h:'#0088bb',tag:'Layer 1 · Parsing',
+  d:'Parses every source file into a complete AST. Extracts classes, functions, interfaces, API routes, DB entities, imports, and decorators across Python, Java, TypeScript, Go, Rust. Fully offline, 100k LOC/min. No LLM — pure static analysis using language-specific tree-sitter grammars.',
+  co:['→ GraphBuilder (ParsedFile objects with entities + relationships)','→ EmbeddingPipeline (code chunks for Qdrant)','→ PostgreSQL (SHA-256 file hashes for incremental index)'],pos:[-7,2.5,0],sz:.44},
+neo4j:{l:'Neo4j',s:'Code Graph DB',ly:'rip',c:0x0088bb,h:'#0088bb',tag:'Layer 2 · Graph DB',
+  d:'Stores the full code knowledge graph. Nodes: File, Class, Function, Interface, APIRoute, DBEntity, Developer, Commit. Edges: CALLS, IMPORTS, EXTENDS, IMPLEMENTS, EXPOSES_API, OWNS, CHANGED_BY. Powers Cypher traversals for trace, impact, dead-code, and coupling analysis. The core intelligence of RIP.',
+  co:['← GraphBuilder (writes all nodes + edges after parsing)','→ FlowTracer (CALLS*1..10 traversal)','→ ImpactAnalyser (reverse traversal for what-depends-on-X)','→ Context Gateway (graph context for agents)'],pos:[-2.5,2.5,0],sz:.52},
+qdrant:{l:'Qdrant',s:'Vector Search',ly:'rip',c:0x0088bb,h:'#0088bb',tag:'Layer 3 · Vector DB',
+  d:'Self-hosted vector database (Rust core, very fast). Stores BGE-M3 embeddings of code chunks alongside metadata: entity type, language, service, owner, change frequency. Enables semantic search — "find retry logic" returns semantically similar code. Supports hybrid vector + metadata filter queries.',
+  co:['← SearchIndexer (embeds entities, stores with payload)','→ Searcher (top-k ANN query with filters)','→ CrossEncoder Reranker (improve precision from top-40)','→ Context Gateway (semantic search results)'],pos:[2.5,2.5,0],sz:.48},
+bge:{l:'BGE-M3',s:'Embedding Model',ly:'rip',c:0x0088bb,h:'#0088bb',tag:'Layer 3 · Embeddings',
+  d:'BAAI/bge-m3 — state-of-the-art multilingual code embedding model (1024 dimensions). Runs locally via sentence-transformers on CPU, no API key required. Outperforms OpenAI ada-002 on code retrieval. Used to embed functions, classes, docstrings, commit messages.',
+  co:['→ Qdrant (1024-dim vectors)','← sentence-transformers library (model runtime)','← EmbeddingPipeline (batched inference calls)'],pos:[2.5,0.2,2],sz:.37},
+pg:{l:'PostgreSQL',s:'Metadata Store',ly:'rip',c:0x0088bb,h:'#0088bb',tag:'Layer 4 · Relational',
+  d:'ACID-compliant metadata store. Tables: IndexState (current status, file count, last run), FileHash (SHA-256 per file for incremental re-index), AnalysisJob (async job history). SQLAlchemy 2.0 async ORM. Alembic migrations. SQLite mode available for zero-config local use.',
+  co:['← IncrementalIndexer (reads + writes file hashes)','← IndexPipeline (writes job state)','→ RiskScorer (reads churn history)'],pos:[-5,0.2,2],sz:.37},
+redis:{l:'Redis',s:'Query Cache',ly:'rip',c:0x0088bb,h:'#0088bb',tag:'Layer 4 · Cache',
+  d:'TTL-based cache for hot graph query results. A repeated "repo trace CheckoutService" returns in <5ms instead of re-running the Cypher traversal. Pub/sub for background async indexing job signaling. Optional — system degrades gracefully without Redis, just slightly slower.',
+  co:['← FastAPI routers (cache writes on first query)','→ Neo4j (reduces repeat query load by ~80%)','← Background worker (job queue via pub/sub)'],pos:[-1.5,0.2,2],sz:.37},
+llm:{l:'Ollama / LiteLLM',s:'LLM Engine',ly:'rip',c:0x0088bb,h:'#0088bb',tag:'Layer 6 · LLM',
+  d:'Ollama runs Qwen2.5-Coder-7B locally (fits in 8GB RAM). LiteLLM provides a single unified interface to swap models without code changes: Ollama → Claude → GPT-4o → Gemini. The LLM receives only a 3k–8k token context package — never the raw codebase. It narrates findings, not understands them.',
+  co:['← ContextAssembler (compact graph + search package)','→ CLI output (natural language narration)','→ Context Gateway (explanation capability)','← LiteLLM router (model selection)'],pos:[7,2.5,0],sz:.44},
+gitp:{l:'GitPython',s:'History Ingestor',ly:'rip',c:0x0088bb,h:'#0088bb',tag:'Layer 1 · Git',
+  d:'Reads full git history — commits, blame per line, file churn frequency, contributor ownership. Writes Developer and Commit nodes to Neo4j with AUTHORED and MODIFIES edges. Powers RiskScorer: Risk = (graph centrality × change_frequency) / test_coverage. Identifies the most dangerous modules to touch.',
+  co:['→ Neo4j (Developer + Commit nodes, AUTHORED + MODIFIES edges)','→ PostgreSQL (per-file churn metrics)','→ RiskScorer (change frequency input)'],pos:[-7,0.2,2],sz:.37},
+fastapi:{l:'FastAPI',s:'HTTP Server',ly:'rip',c:0x0088bb,h:'#0088bb',tag:'Layer · Server',
+  d:'Optional local HTTP server (localhost:8000). Used only when VS Code extension needs to communicate with the Python core. CLI uses direct function calls — no server needed. Auto-generates OpenAPI docs. Pydantic v2 request/response schemas. All 10 core commands exposed as REST endpoints.',
+  co:['← VS Code Extension (HTTP calls for panels)','→ core/ engine (direct function calls)','→ Redis (cache layer between router and Neo4j)'],pos:[0,0.2,2],sz:.37},
+gw:{l:'Context Gateway',s:'Orchestrator',ly:'gw',c:0x5b48d9,h:'#5b48d9',tag:'Phase 2 · Core',
+  d:'The intelligent middleware between agents and all data sources. Every agent tool call passes through 5 interception steps: (1) intent classification, (2) multi-source planning, (3) token budget allocation across sources, (4) context ranking + compression, (5) permission filtering by role. Never generates — only orchestrates. The "librarian" of the system.',
+  co:['← Claude Code / Codex (MCP tool requests)','→ RIP engine (graph + semantic queries)','→ GitHub / Jira / Slack MCP (external sources)','→ Session Memory (cross-agent state)'],pos:[0,0,-4.5],sz:.58},
+mcp:{l:'MCP Server',s:'Protocol Adapter',ly:'gw',c:0x5b48d9,h:'#5b48d9',tag:'Phase 2 · Protocol',
+  d:'Two-tier MCP topology. Tier 1: Gateway exposes 4 clean high-level tools to agents: get_task_context, validate_change, search_codebase, explain_architecture. Agents make ONE call and receive a complete answer. Tier 2: Gateway is an MCP client consuming RIP, GitHub, Jira, Slack in parallel. Backend complexity is invisible to agents.',
+  co:['→ Claude Code (Tier 1: tool call responses)','→ Codex (Tier 1: tool call responses)','← RIP engine (Tier 2: MCP server)','← GitHub / Jira / Slack (Tier 2: external MCP servers)'],pos:[-3.5,0,-4.5],sz:.42},
+planner:{l:'Tool Planner',s:'Intent + Routing',ly:'gw',c:0x5b48d9,h:'#5b48d9',tag:'Phase 2 · Planner',
+  d:'Classifies agent intent and plans which tools to call, in what order, conditionally. Example for auth task: → call RIP trace, → call RIP search, → call GitHub MCP only if confidence < 80%, → call Jira for requirements. Conditional chains eliminate redundant tool calls. Result: 2x fewer tokens from MCP tier alone.',
+  co:['→ RIP trace/search/impact (always primary)','→ GitHub MCP (confidence-gated)','→ Context Ranker (passes ordered, weighted results)'],pos:[3.5,0,-4.5],sz:.42},
+ranker:{l:'Context Ranker',s:'Budget + Compress',ly:'gw',c:0x5b48d9,h:'#5b48d9',tag:'Phase 2 · Compressor',
+  d:'Receives raw multi-source tool outputs (may be 30,000+ tokens total), scores each node by relevance to the current task, then fills the token budget by source allocation: RIP Graph 18k + Code Snippets 10k + GitHub 6k + Jira 4k + Reserve 2k. Drops low-relevance nodes. 3x compression on top of RIP\'s 10x.',
+  co:['← All tool outputs (raw, potentially 30k+ tokens)','→ Agent context window (trimmed, 8k–15k tokens)','← Tool Planner (relevance weights per source)'],pos:[0,-2,-4.5],sz:.42},
+mem:{l:'Session Memory',s:'Cross-agent State',ly:'gw',c:0x5b48d9,h:'#5b48d9',tag:'Phase 2 · Memory',
+  d:'Persists which RIP nodes were accessed, files modified, and patterns used across agent sessions. Pre-loads context for related follow-up tasks automatically. Crucially: detects concurrent conflicts — if Claude Code and Codex both modify PaymentService simultaneously, both sessions receive a conflict warning from the gateway.',
+  co:['← Context Gateway (writes session state)','→ Context Gateway (pre-loads for next session)','→ Conflict Detector (concurrent file overlap)'],pos:[-3.5,-2,-4.5],sz:.37},
+perm:{l:'Permission Filter',s:'Role-based Access',ly:'gw',c:0x5b48d9,h:'#5b48d9',tag:'Phase 2 · Security',
+  d:'Applies role-based access control before any context leaves the gateway. Junior dev session: read docs + tickets only. Senior engineer: full graph traversal + production logs. Enforced at session level, not at the model level — the model never receives data it shouldn\'t have in the first place.',
+  co:['← Context Gateway (applies before every delivery)','→ Context Ranker (filters before compression)','← User role config (session metadata)'],pos:[3.5,-2,-4.5],sz:.37},
+claude:{l:'Claude Code',s:'AI Agent',ly:'ag',c:0xc96f00,h:'#c96f00',tag:'Phase 3 · Agent',
+  d:'Anthropic agentic coding tool. Calls the Context Gateway via MCP instead of reading raw files. Receives a pre-assembled briefing: call chain, relevant files, existing patterns, impact warnings. Uses 8k–15k tokens per task vs 200k+ without RIP. Post-task: RIP validates the generated patch via impact analysis.',
+  co:['→ MCP Server (get_task_context, validate_change)','← Context Ranker (assembled 8k–15k token package)','→ Neo4j (post-generation patch validation feedback)','→ Repository (writes final patch)'],pos:[4.5,-1,-7.5],sz:.44},
+codex:{l:'Codex / GPT-4o',s:'AI Agent',ly:'ag',c:0xc96f00,h:'#c96f00',tag:'Phase 3 · Agent',
+  d:'OpenAI coding model. Same MCP integration pattern as Claude Code. Gateway abstracts the model difference — identical context packages serve any agent. Enables model-agnostic workflows: best model per task type is auto-selected. Session memory ensures Codex and Claude Code don\'t conflict on the same files.',
+  co:['→ MCP Server (tool calls)','← Context Ranker (same context package format)','→ Session Memory (conflict detection)'],pos:[-4.5,-1,-7.5],sz:.44},
+vscode:{l:'VS Code Extension',s:'Editor UI',ly:'ag',c:0xc96f00,h:'#c96f00',tag:'Phase 1 · Interface',
+  d:'TypeScript extension spawning the Python core as a child process via stdout JSON — no HTTP server required for basic use. Right-click any symbol for: trace call chain, impact analysis, explanation. D3 force-directed dependency graphs in webview panels. File save triggers incremental re-index via onDidSaveTextDocument API.',
+  co:['→ Python core (child_process + stdout JSON)','→ FastAPI (optional, for heavy webview data)','→ VS Code LSP (fallback for dynamic symbol resolution)','→ D3.js webviews (interactive dependency graphs)'],pos:[7,-1,-6],sz:.42},
+cli:{l:'CLI (Typer)',s:'Terminal UI',ly:'ag',c:0xc96f00,h:'#c96f00',tag:'Phase 1 · Interface',
+  d:'Python CLI with direct imports into core/ — zero HTTP overhead. All 10 commands: repo init, index, trace, impact, search, explain, dead-code, onboard, architecture, metrics. Rich library for colored terminal output, tables, progress bars. --explain flag invokes LLM only when explicitly requested.',
+  co:['→ core/ engine (direct Python function calls)','→ Neo4j (graph analysis)','→ Qdrant (semantic search)','→ Ollama (natural language explanation)'],pos:[-7,-1,-6],sz:.42},
+gh:{l:'GitHub MCP',s:'PRs + CI',ly:'ext',c:0x1d4ed8,h:'#1d4ed8',tag:'External · MCP Source',
+  d:'Provides open PR context for files the agent is about to touch. Enables concurrent conflict detection: if two sessions modify the same files, gateway surfaces a warning. Also provides CI pass/fail status and code review comments for more context-aware generation.',
+  co:['← Context Gateway Tier 2 (parallel query)','→ Context Ranker (6k token allocation)','→ Conflict Detector (file overlap check)'],pos:[5.5,1.5,-8],sz:.37},
+jira:{l:'Jira MCP',s:'Tickets + Specs',ly:'ext',c:0x1d4ed8,h:'#1d4ed8',tag:'External · MCP Source',
+  d:'Provides ticket requirements and acceptance criteria for the current development task. Agent receives the Jira spec alongside RIP architectural context — generated code matches both codebase patterns and business requirements simultaneously. Used by Tool Planner as a primary context source for feature tasks.',
+  co:['← Context Gateway Tier 2 (parallel query)','→ Context Ranker (4k token allocation)','→ Tool Planner (task intent + requirements)'],pos:[0,1.5,-9],sz:.37},
+slack:{l:'Slack MCP',s:'Team Discussions',ly:'ext',c:0x1d4ed8,h:'#1d4ed8',tag:'External · MCP Source',
+  d:'Retrieves relevant Slack discussions about the affected service or architectural decision. Answers "why was this designed this way?" questions that code alone cannot answer. Called conditionally by Tool Planner — only when confidence score < 80% on intent, or when the task explicitly involves historical context.',
+  co:['← Context Gateway Tier 2 (confidence-gated query)','→ Context Ranker (variable allocation, usually 2k–4k)','→ Tool Planner (gates on confidence threshold)'],pos:[-5.5,1.5,-8],sz:.37},
+};
+
+const LHEX={rip:'#0088bb',gw:'#5b48d9',ag:'#c96f00',ext:'#1d4ed8'};
+const LCOL={rip:0x0088bb,gw:0x5b48d9,ag:0xc96f00,ext:0x1d4ed8};
+
+const EDGES=[
+  {f:'ts',t:'neo4j',a:true},{f:'ts',t:'qdrant',a:true},{f:'ts',t:'pg',a:false},{f:'bge',t:'qdrant',a:true},
+  {f:'gitp',t:'neo4j',a:false},{f:'gitp',t:'pg',a:false},{f:'neo4j',t:'redis',a:false},{f:'neo4j',t:'llm',a:true},
+  {f:'qdrant',t:'llm',a:true},{f:'neo4j',t:'gw',a:true},{f:'qdrant',t:'gw',a:true},{f:'llm',t:'gw',a:false},
+  {f:'fastapi',t:'neo4j',a:false},{f:'fastapi',t:'qdrant',a:false},{f:'gw',t:'mcp',a:true},{f:'gw',t:'planner',a:false},
+  {f:'gw',t:'ranker',a:false},{f:'gw',t:'mem',a:false},{f:'gw',t:'perm',a:false},{f:'planner',t:'ranker',a:true},
+  {f:'gw',t:'gh',a:false},{f:'gw',t:'jira',a:false},{f:'gw',t:'slack',a:false},
+  {f:'mcp',t:'claude',a:true},{f:'mcp',t:'codex',a:true},
+  {f:'neo4j',t:'vscode',a:false},{f:'qdrant',t:'vscode',a:false},{f:'fastapi',t:'vscode',a:false},
+  {f:'neo4j',t:'cli',a:false},{f:'qdrant',t:'cli',a:false},
+  {f:'claude',t:'neo4j',a:false},{f:'codex',t:'neo4j',a:false},
+];
+
+// ═══ THREE.JS SETUP ═══
+const canvas=document.getElementById('c3d');
+const renderer=new THREE.WebGLRenderer({canvas,antialias:true,alpha:true});
+renderer.setPixelRatio(Math.min(window.devicePixelRatio,2));
+renderer.setSize(window.innerWidth,window.innerHeight);
+renderer.setClearColor(0xf0f4fb,1);
+const scene=new THREE.Scene();
+scene.fog=new THREE.Fog(0xf0f4fb,35,90);
+const camera=new THREE.PerspectiveCamera(50,window.innerWidth/window.innerHeight,.1,300);
+camera.position.set(0,7,24);
+camera.lookAt(0,0,-2);
+
+scene.add(new THREE.AmbientLight(0xffffff,0.9));
+const sun=new THREE.DirectionalLight(0xfffbe8,0.7); sun.position.set(12,22,12); scene.add(sun);
+const fill=new THREE.DirectionalLight(0xe0e8ff,0.35); fill.position.set(-12,4,-14); scene.add(fill);
+const rim=new THREE.DirectionalLight(0xd0f0ff,0.2); rim.position.set(0,-8,0); scene.add(rim);
+
+// Ground grid
+const grid=new THREE.GridHelper(100,80,0xdde5f4,0xe8edf8);
+grid.position.y=-7; scene.add(grid);
+
+// Background ambient spheres
+for(let i=0;i<22;i++){
+  const r=0.12+Math.random()*.32;
+  const m=new THREE.Mesh(new THREE.SphereGeometry(r,7,7),
+    new THREE.MeshBasicMaterial({color:0xc8d8f0,transparent:true,opacity:.14+Math.random()*.12}));
+  m.position.set((Math.random()-.5)*40,(Math.random()-.5)*14,(Math.random()-.5)*24-5);
+  scene.add(m);
+}
+
+// ═══ NODE MESHES ═══
+const MESH={},RING={},SPRITE={};
+let labelsOn=true;
+
+function sprite(txt,hex){
+  const cv=document.createElement('canvas'); cv.width=200; cv.height=44;
+  const ctx=cv.getContext('2d');
+  ctx.fillStyle='rgba(255,255,255,0.88)';
+  ctx.strokeStyle=hex; ctx.lineWidth=1.6;
+  const r=9;
+  ctx.beginPath(); ctx.moveTo(r,0); ctx.lineTo(cv.width-r,0);
+  ctx.quadraticCurveTo(cv.width,0,cv.width,r);
+  ctx.lineTo(cv.width,cv.height-r); ctx.quadraticCurveTo(cv.width,cv.height,cv.width-r,cv.height);
+  ctx.lineTo(r,cv.height); ctx.quadraticCurveTo(0,cv.height,0,cv.height-r);
+  ctx.lineTo(0,r); ctx.quadraticCurveTo(0,0,r,0); ctx.closePath(); ctx.fill(); ctx.stroke();
+  ctx.fillStyle=hex; ctx.font='bold 13px Inter,sans-serif';
+  ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(txt,100,22);
+  const tex=new THREE.CanvasTexture(cv);
+  const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:tex,transparent:true,opacity:.88}));
+  sp.scale.set(2.2,.55,1); return sp;
+}
+
+Object.entries(ND).forEach(([id,nd])=>{
+  const s=nd.sz;
+  let geo;
+  if(id==='gw') geo=new THREE.OctahedronGeometry(s*1.25,0);
+  else if(id==='neo4j'||id==='qdrant') geo=new THREE.IcosahedronGeometry(s,0);
+  else if(id==='mcp') geo=new THREE.TorusKnotGeometry(s*.7,s*.18,72,9);
+  else if(id==='planner'||id==='ranker') geo=new THREE.TetrahedronGeometry(s*1.1,0);
+  else if(id==='pg'||id==='redis') geo=new THREE.BoxGeometry(s*1.4,s*1.4,s*1.4);
+  else geo=new THREE.SphereGeometry(s,22,22);
+  const mat=new THREE.MeshStandardMaterial({color:nd.c,emissive:nd.c,emissiveIntensity:.12,metalness:.25,roughness:.45,transparent:true,opacity:.9});
+  const mesh=new THREE.Mesh(geo,mat);
+  const [x,y,z]=nd.pos; mesh.position.set(x,y,z);
+  mesh.userData={id}; scene.add(mesh); MESH[id]=mesh;
+  // glow ring
+  const rg=new THREE.RingGeometry(s+.13,s+.23,38);
+  const rm=new THREE.MeshBasicMaterial({color:nd.c,transparent:true,opacity:.16,side:THREE.DoubleSide});
+  const ring=new THREE.Mesh(rg,rm); ring.rotation.x=Math.PI/2; mesh.add(ring); RING[id]=ring;
+  // extra rings for gateway
+  if(id==='gw'){
+    [[s+.5,s+.58,0],[s+.9,s+.96,.3]].forEach(([r1,r2,rx])=>{
+      const rg2=new THREE.RingGeometry(r1,r2,52);
+      const rm2=new THREE.MeshBasicMaterial({color:nd.c,transparent:true,opacity:.09,side:THREE.DoubleSide});
+      const r=new THREE.Mesh(rg2,rm2); r.rotation.x=Math.PI/2+rx; mesh.add(r);
+    });
+  }
+  // sprite label
+  const sp=sprite(nd.l,nd.h);
+  sp.position.set(x,y+s+.75,z); scene.add(sp); SPRITE[id]=sp;
+});
+
+// ═══ EDGES ═══
+const EMESH=[],EANIM=[];
+function mkEdge(f,t,anim){
+  const a=MESH[f],b=MESH[t]; if(!a||!b)return;
+  const s=a.position.clone(),e=b.position.clone();
+  const mid=s.clone().add(e).multiplyScalar(.5);
+  mid.y+=1.1+Math.random()*.5;
+  const pts=[];
+  for(let i=0;i<=28;i++){const t2=i/28;pts.push(new THREE.Vector3(
+    (1-t2)**2*s.x+2*(1-t2)*t2*mid.x+t2**2*e.x,
+    (1-t2)**2*s.y+2*(1-t2)*t2*mid.y+t2**2*e.y,
+    (1-t2)**2*s.z+2*(1-t2)*t2*mid.z+t2**2*e.z));}
+  const col=anim?LCOL[ND[f].ly]:0xcbd5e8;
+  const line=new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts),
+    new THREE.LineBasicMaterial({color:col,transparent:true,opacity:anim?.52:.2}));
+  scene.add(line);
+  EMESH.push({line,f,t,anim,pts,col});
+  if(anim)EANIM.push({pts,col});
+}
+EDGES.forEach(e=>mkEdge(e.f,e.t,e.a));
+
+// ═══ PARTICLES ═══
+let PARTS=[];
+let partsOn=true;
+
+class Part{
+  constructor(ea){
+    this.pts=ea.pts; this.t=Math.random(); this.spd=.0035+Math.random()*.0045;
+    const g=new THREE.SphereGeometry(.065,6,6);
+    const m=new THREE.MeshBasicMaterial({color:ea.col,transparent:true,opacity:.88});
+    this.mesh=new THREE.Mesh(g,m); scene.add(this.mesh);
+  }
+  update(){
+    this.t+=this.spd; if(this.t>=1)this.t=0;
+    const n=this.pts.length,raw=this.t*(n-1),i=Math.floor(raw),j=Math.min(i+1,n-1);
+    this.mesh.position.lerpVectors(this.pts[i],this.pts[j],raw-i);
+  }
+}
+
+function buildParts(){
+  PARTS.forEach(p=>scene.remove(p.mesh)); PARTS=[];
+  if(!partsOn)return;
+  EANIM.forEach(ea=>{
+    const n=2+Math.floor(Math.random()*3);
+    for(let i=0;i<n;i++)PARTS.push(new Part(ea));
+  });
+}
+buildParts();
+
+// ═══ GATEWAY PULSE RINGS ═══
+const PRINGS=[];
+function spawnPulse(){
+  const gp=MESH['gw'].position.clone();
+  [.7,1.3,2.1].forEach((r,i)=>{
+    const rg=new THREE.RingGeometry(r,r+.035,44);
+    const rm=new THREE.MeshBasicMaterial({color:0x5b48d9,transparent:true,opacity:.38-i*.08,side:THREE.DoubleSide});
+    const ring=new THREE.Mesh(rg,rm); ring.position.copy(gp); ring.rotation.x=Math.PI/2;
+    scene.add(ring); PRINGS.push({ring,life:1,decay:.007+i*.003,gr:2.8+i*.6});
+  });
+}
+setInterval(spawnPulse,2500);
+
+// ═══ FLOATING DATA PACKETS ═══
+const PACKETS=[];
+function spawnPacket(){
+  const animEdge=EANIM[Math.floor(Math.random()*EANIM.length)];
+  if(!animEdge)return;
+  const g=new THREE.BoxGeometry(.12,.08,.08);
+  const m=new THREE.MeshStandardMaterial({color:animEdge.col,emissive:animEdge.col,emissiveIntensity:.4,metalness:.5,roughness:.2});
+  const mesh=new THREE.Mesh(g,m);
+  scene.add(mesh);
+  PACKETS.push({mesh,pts:animEdge.pts,t:0,spd:.006+Math.random()*.006});
+}
+setInterval(spawnPacket,600);
+
+// ═══ RAYCASTER ═══
+const ray=new THREE.Raycaster();
+const mouse=new THREE.Vector2();
+let hovN=null,selN=null;
+
+document.getElementById('c3d').addEventListener('mousemove',e=>{
+  mouse.x=(e.clientX/window.innerWidth)*2-1;
+  mouse.y=-(e.clientY/window.innerHeight)*2+1;
+  ray.setFromCamera(mouse,camera);
+  const hits=ray.intersectObjects(Object.values(MESH));
+  if(hits.length){
+    const id=hits[0].object.userData.id;
+    if(id!==hovN){if(hovN&&hovN!==selN)resetHov(hovN);hovN=id;setHov(id);}
+    showTT(id,e.clientX,e.clientY);
+    document.body.style.cursor='pointer';
+  } else {
+    if(hovN&&hovN!==selN)resetHov(hovN); hovN=null; hideTT();
+    document.body.style.cursor='default';
+  }
+});
+document.getElementById('c3d').addEventListener('click',()=>{
+  if(!hovN)return;
+  if(selN&&selN!==hovN)desel(selN);
+  selN=hovN; doSelect(selN);
+});
+
+function setHov(id){if(!MESH[id])return;MESH[id].material.emissiveIntensity=.5;MESH[id].scale.setScalar(1.2);}
+function resetHov(id){if(!MESH[id])return;MESH[id].material.emissiveIntensity=.12;MESH[id].scale.setScalar(1);}
+function desel(id){if(!MESH[id])return;MESH[id].material.emissiveIntensity=.12;MESH[id].scale.setScalar(1);document.getElementById('nb-'+id)?.classList.remove('sel');}
+
+function doSelect(id){
+  const nd=ND[id]; if(!nd)return;
+  MESH[id].material.emissiveIntensity=.6; MESH[id].scale.setScalar(1.28);
+  EMESH.forEach(e=>{const r=e.f===id||e.t===id;e.line.material.opacity=r?.88:.06;});
+  setTimeout(()=>EMESH.forEach(e=>{e.line.material.opacity=e.anim?.52:.2;}),3500);
+  updateDetail(id); updateTokBars(id); triggerFlow(id);
+  focusCam(nd.pos);
+  document.getElementById('nb-'+id)?.classList.add('sel');
+}
+
+function showTT(id,x,y){
+  const nd=ND[id]; if(!nd)return;
+  document.getElementById('ttag').textContent=nd.tag;
+  document.getElementById('ttag').style.cssText=`background:${nd.h}14;color:${nd.h};border-color:${nd.h}44`;
+  document.getElementById('ttitle').textContent=nd.l+' — '+nd.s;
+  document.getElementById('tbody').textContent=nd.d.substring(0,200)+'…';
+  const tt=document.getElementById('tt');
+  tt.classList.add('vis');
+  tt.style.left=Math.min(x+12,window.innerWidth-285)+'px';
+  tt.style.top=Math.min(y-8,window.innerHeight-160)+'px';
+}
+function hideTT(){document.getElementById('tt').classList.remove('vis');}
+
+function updateDetail(id){
+  const nd=ND[id]; if(!nd)return;
+  const b=document.getElementById('dbadge');
+  b.textContent=nd.tag; b.style.cssText=`background:${nd.h}14;color:${nd.h};border-color:${nd.h}44`;
+  document.getElementById('dtitle').textContent=nd.l;
+  document.getElementById('dbody').textContent=nd.d;
+  document.getElementById('dconns').innerHTML=nd.co.map(c=>`<div class="dci">${c.replace(/^[→←]\s*/,'')}</div>`).join('');
+}
+
+// ═══ TOKEN BARS ═══
+const TKCFG={
+  _def:{t:'40k context window',bars:[
+    {n:'RIP Graph Results',v:18000,m:40000,c:'#0088bb'},
+    {n:'Code Snippets (Qdrant)',v:10000,m:40000,c:'#0088bb'},
+    {n:'GitHub PR Context',v:6000,m:40000,c:'#1d4ed8'},
+    {n:'Jira Ticket',v:4000,m:40000,c:'#1d4ed8'},
+    {n:'Reserve (output)',v:2000,m:40000,c:'#5b48d9'},
+  ]},
+  neo4j:{t:'graph traversal depth',bars:[
+    {n:'CALLS edges traversed',v:85,m:100,c:'#0088bb'},
+    {n:'IMPORTS resolved',v:72,m:100,c:'#0088bb'},
+    {n:'Reverse dependents',v:60,m:100,c:'#0088bb'},
+  ]},
+  qdrant:{t:'search quality',bars:[
+    {n:'Vector similarity (raw)',v:94,m:100,c:'#0088bb'},
+    {n:'After metadata filter',v:78,m:100,c:'#0088bb'},
+    {n:'After cross-encoder rerank',v:65,m:100,c:'#047857'},
+  ]},
+  gw:{t:'token reduction stack',bars:[
+    {n:'Without RIP (agent alone)',v:200000,m:200000,c:'#cc2222'},
+    {n:'With RIP only (10x)',v:20000,m:200000,c:'#c96f00'},
+    {n:'With RIP + Gateway (60x)',v:3333,m:200000,c:'#047857'},
+  ]},
+  llm:{t:'LLM context budget',bars:[
+    {n:'Graph context sent',v:3200,m:8000,c:'#0088bb'},
+    {n:'Code snippets sent',v:2800,m:8000,c:'#0088bb'},
+    {n:'Max allowed (config)',v:8000,m:8000,c:'#5b48d9'},
+  ]},
+  claude:{t:'agent efficiency',bars:[
+    {n:'Tokens saved vs raw',v:185000,m:200000,c:'#047857'},
+    {n:'Context used (RIP+GW)',v:12000,m:200000,c:'#c96f00'},
+    {n:'Accuracy (with context)',v:94,m:100,c:'#0088bb'},
+  ]},
+};
+
+function updateTokBars(id){
+  const cfg=TKCFG[id]||TKCFG._def;
+  document.getElementById('tctot').textContent=cfg.t;
+  const el=document.getElementById('tbars');
+  el.innerHTML=cfg.bars.map(b=>`
+    <div class="tbwrap">
+      <div class="tbrow"><span class="tbname">${b.n}</span><span class="tbval">${b.v>=1000?(b.v/1000).toFixed(0)+'k':b.v+'%'}</span></div>
+      <div class="tbtrack"><div class="tbfill" style="width:0%;background:${b.c}" data-p="${Math.round(b.v/b.m*100)}"></div></div>
+    </div>`).join('');
+  requestAnimationFrame(()=>el.querySelectorAll('.tbfill').forEach(f=>f.style.width=f.dataset.p+'%'));
+}
+updateTokBars('_def');
+
+// ═══ FLOW SCENARIOS ═══
+const FLOWS=[
+  {sc:'repo trace CheckoutService → explain',steps:[
+    {id:'cli',l:'repo trace'},{id:'redis',l:'cache miss'},{id:'neo4j',l:'Cypher CALLS*10'},
+    {id:'qdrant',l:'semantic search'},{id:'llm',l:'LLM narrate'},{id:'cli',l:'Rich output'}
+  ]},
+  {sc:'claude code · add retry logic to checkout',steps:[
+    {id:'claude',l:'task intent'},{id:'mcp',l:'get_task_context'},{id:'gw',l:'orchestrate'},
+    {id:'planner',l:'plan: RIP+GH'},{id:'neo4j',l:'graph query'},{id:'qdrant',l:'vec search'},
+    {id:'gh',l:'PR context'},{id:'perm',l:'filter role'},{id:'ranker',l:'compress 60x'},
+    {id:'claude',l:'patch'},{id:'neo4j',l:'impact validate'}
+  ]},
+  {sc:'repo index · incremental on file save',steps:[
+    {id:'vscode',l:'onDidSave'},{id:'ts',l:'parse diff'},{id:'neo4j',l:'delete+rebuild'},
+    {id:'bge',l:'re-embed'},{id:'qdrant',l:'upsert vectors'},{id:'pg',l:'new hash'},{id:'redis',l:'bust cache'}
+  ]},
+  {sc:'cross-agent conflict detection',steps:[
+    {id:'claude',l:'session A · PaymentSvc'},{id:'codex',l:'session B · PaymentSvc'},
+    {id:'mem',l:'overlap detected'},{id:'gw',l:'conflict alert'},
+    {id:'claude',l:'⚠ warned'},{id:'codex',l:'⚠ warned'}
+  ]},
+  {sc:'repo onboard · new engineer',steps:[
+    {id:'cli',l:'repo onboard'},{id:'neo4j',l:'arch query'},{id:'qdrant',l:'entry points'},
+    {id:'gitp',l:'ownership'},{id:'pg',l:'risk scores'},{id:'llm',l:'generate docs'},{id:'cli',l:'ONBOARDING.md'}
+  ]},
+];
+let fIdx=0,stIdx=0,fTimer=null;
+
+function renderFlow(){
+  const fl=FLOWS[fIdx];
+  document.getElementById('bbsc').textContent='scenario: '+fl.sc;
+  const c=document.getElementById('fsteps');
+  c.innerHTML=fl.steps.map((s,i)=>{
+    const nd=ND[s.id]; const col=nd?nd.h:'#8fa1bc';
+    return `<div class="fs" id="fs${i}"><div class="fsd" style="background:${col}"></div>${s.l}</div>`
+      +(i<fl.steps.length-1?'<div class="fsa">→</div>':'');
+  }).join('');
+  stIdx=0; nextStep();
+}
+
+function nextStep(){
+  clearTimeout(fTimer);
+  const fl=FLOWS[fIdx];
+  if(stIdx>0) document.getElementById('fs'+(stIdx-1))?.classList.remove('act');
+  if(stIdx<fl.steps.length){
+    document.getElementById('fs'+stIdx)?.classList.add('act');
+    stIdx++; fTimer=setTimeout(nextStep,700);
+  } else {
+    fTimer=setTimeout(()=>{fIdx=(fIdx+1)%FLOWS.length;renderFlow();},2400);
+  }
+}
+renderFlow();
+
+function triggerFlow(id){
+  const i=FLOWS.findIndex(f=>f.steps.some(s=>s.id===id));
+  if(i>=0){fIdx=i;renderFlow();}
+}
+
+// ═══ MINI CHARTS ═══
+let curChart='tok'; const mc=document.getElementById('mc').getContext('2d');
+let ca=0,caReq=null;
+
+function showChart(n){
+  curChart=n; document.querySelectorAll('.ctab').forEach(t=>t.classList.remove('active'));
+  document.getElementById('ct-'+n).classList.add('active');
+  ca=0; drawChart();
+}
+
+function drawChart(){
+  if(caReq)cancelAnimationFrame(caReq); ca=Math.min(ca+.04,1);
+  mc.clearRect(0,0,248,108);
+  if(curChart==='tok')drawTok(ca);
+  else if(curChart==='pip')drawPip(ca);
+  else if(curChart==='risk')drawRisk(ca);
+  else drawCpl(ca);
+  if(ca<1)caReq=requestAnimationFrame(drawChart);
+}
+
+function drawTok(p){
+  const data=[{l:'No RIP',v:200000,c:'#cc2222'},{l:'RIP only',v:20000,c:'#c96f00'},{l:'RIP+GW',v:3333,c:'#047857'}];
+  mc.fillStyle='#8fa1bc';mc.font='bold 8.5px Inter';mc.textAlign='center';mc.fillText('Token usage (lower = better)',124,9);
+  data.forEach((d,i)=>{
+    const x=20+i*72,bw=48,h=Math.round(d.v/200000*76*p),y=18+76-h;
+    mc.fillStyle=d.c+'18';mc.strokeStyle=d.c;mc.lineWidth=1.5;
+    mc.beginPath();mc.roundRect(x,y,bw,h,3);mc.fill();mc.stroke();
+    mc.fillStyle=d.c;mc.font='bold 8px Inter';mc.textAlign='center';
+    mc.fillText(d.v>=1000?(d.v/1000).toFixed(0)+'k':d.v,x+bw/2,y-3);
+    mc.fillStyle='#445069';mc.font='7.5px Inter';mc.fillText(d.l,x+bw/2,107);
+  });
+  mc.fillStyle='#047857';mc.font='bold 8px Inter';mc.textAlign='right';mc.fillText('60× reduction →',247,100);
+}
+
+function drawPip(p){
+  const steps=[{n:'Files',c:'#94a3b8'},{n:'Parser',c:'#0088bb'},{n:'Graph',c:'#0088bb'},
+    {n:'Vectors',c:'#0088bb'},{n:'Gateway',c:'#5b48d9'},{n:'Agent',c:'#c96f00'}];
+  mc.fillStyle='#8fa1bc';mc.font='bold 8.5px Inter';mc.textAlign='center';mc.fillText('Data transformation pipeline',124,9);
+  steps.forEach((s,i)=>{
+    const frac=Math.min(1,(p-i*.14)/.9); if(frac<=0)return;
+    const x=6+i*40,y=18,bw=30,bh=62*frac;
+    mc.fillStyle=s.c+'20';mc.strokeStyle=s.c;mc.lineWidth=1.5;
+    mc.beginPath();mc.roundRect(x,y+62-bh,bw,bh,3);mc.fill();mc.stroke();
+    if(i<steps.length-1){
+      mc.strokeStyle='#c8d4ea';mc.lineWidth=1;
+      mc.beginPath();mc.moveTo(x+bw,y+31);mc.lineTo(x+40,y+31);mc.stroke();
+      mc.fillStyle='#8fa1bc';mc.font='10px Inter';mc.textAlign='center';mc.fillText('›',x+35,y+34);
+    }
+    mc.fillStyle=s.c;mc.font='7px Inter';mc.textAlign='center';mc.fillText(s.n,x+bw/2,108);
+  });
+}
+
+function drawRisk(p){
+  const mods=[{n:'PaymentSvc',v:.92,c:'#cc2222'},{n:'AuthCtrl',v:.78,c:'#c96f00'},
+    {n:'CheckoutSvc',v:.71,c:'#c96f00'},{n:'UserRepo',v:.55,c:'#c96f00'},{n:'CacheUtil',v:.22,c:'#047857'}];
+  mc.fillStyle='#8fa1bc';mc.font='bold 8.5px Inter';mc.textAlign='center';mc.fillText('Module risk: centrality × churn',124,9);
+  mods.forEach((m,i)=>{
+    const y=16+i*18,bw=(248-72-6)*m.v*p;
+    mc.fillStyle=m.c+'18';mc.strokeStyle=m.c;mc.lineWidth=1;
+    mc.beginPath();mc.roundRect(72,y,bw,13,2);mc.fill();mc.stroke();
+    mc.fillStyle='#445069';mc.font='8px Inter';mc.textAlign='right';mc.fillText(m.n,68,y+10);
+    mc.fillStyle=m.c;mc.font='bold 7.5px Inter';mc.textAlign='left';mc.fillText((m.v*100).toFixed(0)+'%',72+bw+3,y+10);
+  });
+}
+
+function drawCpl(p){
+  const mods=[{n:'PaymentSvc',af:12,ef:3},{n:'AuthSvc',af:8,ef:5},{n:'UserRepo',af:6,ef:2},
+    {n:'CacheSvc',af:9,ef:1},{n:'CheckoutCtrl',af:4,ef:6}];
+  mc.fillStyle='#8fa1bc';mc.font='bold 8.5px Inter';mc.textAlign='center';mc.fillText('Coupling: afferent vs efferent',124,9);
+  mc.fillStyle='#0088bb';mc.fillRect(60,16,10,8);mc.fillStyle='#445069';mc.font='7px Inter';mc.textAlign='left';mc.fillText('Afferent (depends on)',74,23);
+  mc.fillStyle='#5b48d9';mc.fillRect(162,16,10,8);mc.fillText('Efferent (depends on others)',176,23);
+  mods.forEach((m,i)=>{
+    const y=30+i*14,maxV=15;
+    const bw1=(248-72-4)*m.af/maxV*p, bw2=(248-72-4)*m.ef/maxV*p*.45;
+    mc.fillStyle='#0088bb22';mc.strokeStyle='#0088bb';mc.lineWidth=1;
+    mc.beginPath();mc.roundRect(72,y,bw1,10,2);mc.fill();mc.stroke();
+    mc.fillStyle='#5b48d922';mc.strokeStyle='#5b48d9';
+    mc.beginPath();mc.roundRect(72+bw1+2,y,bw2,10,2);mc.fill();mc.stroke();
+    mc.fillStyle='#445069';mc.font='7.5px Inter';mc.textAlign='right';mc.fillText(m.n,68,y+8);
+  });
+}
+
+drawChart();
+setInterval(()=>{ca=0;drawChart();},5500);
+
+// ═══ CAMERA ═══
+let drag=false,prevM={x:0,y:0};
+let sph={th:.05,ph:.3,r:24},tSph={...sph};
+let autoRot=false;
+
+document.getElementById('c3d').addEventListener('mousedown',e=>{drag=true;prevM={x:e.clientX,y:e.clientY};});
+window.addEventListener('mouseup',()=>drag=false);
+window.addEventListener('mousemove',e=>{
+  if(!drag)return;
+  tSph.th-=(e.clientX-prevM.x)*.0055;
+  tSph.ph=Math.max(.1,Math.min(1.45,tSph.ph+(e.clientY-prevM.y)*.0055));
+  prevM={x:e.clientX,y:e.clientY};
+});
+document.getElementById('c3d').addEventListener('wheel',e=>{
+  tSph.r=Math.max(8,Math.min(42,tSph.r+e.deltaY*.022));
+},{passive:true});
+
+function resetCam(){tSph={th:.05,ph:.3,r:24};}
+function toggleRot(){autoRot=!autoRot;document.getElementById('btn-rot').classList.toggle('on',autoRot);}
+function togglePart(){partsOn=!partsOn;document.getElementById('btn-part').classList.toggle('on',partsOn);buildParts();}
+function toggleLabels(){
+  labelsOn=!labelsOn;
+  Object.values(SPRITE).forEach(s=>s.visible=labelsOn);
+  document.getElementById('btn-labels').classList.toggle('on',labelsOn);
+}
+function focusCam(pos){tSph.th=Math.atan2(pos[0],20)+.04;tSph.ph=.33;tSph.r=16;}
+function focusNode(id){
+  const nd=ND[id]; if(!nd)return;
+  if(selN&&selN!==id)desel(selN);
+  selN=id; doSelect(id);
+  document.querySelectorAll('.nb').forEach(b=>b.classList.remove('sel'));
+  document.getElementById('nb-'+id)?.classList.add('sel');
+}
+
+// ═══ VIEWS ═══
+const VIEWS={
+  full:{sph:{th:.05,ph:.3,r:24},layers:null},
+  rip:{sph:{th:.08,ph:.25,r:17},layers:['rip']},
+  gw:{sph:{th:-.04,ph:.38,r:15},layers:['rip','gw']},
+  ag:{sph:{th:.04,ph:.42,r:22},layers:['rip','gw','ag','ext']},
+  fl:{sph:{th:0,ph:.5,r:28},layers:null},
+};
+function setView(n){
+  document.querySelectorAll('.vtab').forEach(t=>t.classList.remove('active'));
+  document.getElementById('tab-'+n)?.classList.add('active');
+  const v=VIEWS[n]; if(!v)return;
+  tSph={...v.sph};
+  const lys=v.layers;
+  Object.entries(MESH).forEach(([id,m])=>{
+    const vis=!lys||lys.includes(ND[id].ly);
+    m.visible=vis;
+    if(SPRITE[id])SPRITE[id].visible=vis&&labelsOn;
+  });
+  EMESH.forEach(e=>{
+    const fv=MESH[e.f]?.visible,tv=MESH[e.t]?.visible;
+    e.line.visible=!lys||(fv&&tv);
+  });
+}
+
+// ═══ ANIMATION LOOP ═══
+const clk=new THREE.Clock(); let T=0;
+function anim(){
+  requestAnimationFrame(anim);
+  T=clk.getElapsedTime();
+  if(autoRot)tSph.th+=.0025;
+  sph.th+=(tSph.th-sph.th)*.055;
+  sph.ph+=(tSph.ph-sph.ph)*.055;
+  sph.r+=(tSph.r-sph.r)*.055;
+  const sp=Math.sin(sph.ph-Math.PI/2),cp=Math.cos(sph.ph-Math.PI/2);
+  camera.position.set(sph.r*Math.sin(sph.th)*cp,sph.r*sp,sph.r*Math.cos(sph.th)*cp);
+  camera.lookAt(0,0,-2);
+
+  Object.entries(ND).forEach(([id,nd])=>{
+    const m=MESH[id]; if(!m||!m.visible)return;
+    m.rotation.y=T*.22+nd.pos[0]*.12;
+    if(id==='gw'){m.rotation.x=T*.16;m.rotation.z=T*.08;}
+    if(id==='mcp')m.rotation.x=T*.38;
+    if(id==='planner'||id==='ranker')m.rotation.z=T*.2;
+    if(id==='pg'||id==='redis'){m.rotation.x=T*.18;m.rotation.y=T*.14;}
+    if(id!==selN&&id!==hovN){
+      const b=1+Math.sin(T*1.7+nd.pos[0]*.9)*.022;
+      m.scale.setScalar(b);
+    }
+    if(RING[id])RING[id].material.opacity=.1+Math.sin(T*1.3+nd.pos[2])*.06;
+    if(SPRITE[id])SPRITE[id].quaternion.copy(camera.quaternion);
+  });
+
+  // Pulse rings
+  for(let i=PRINGS.length-1;i>=0;i--){
+    const pr=PRINGS[i]; pr.life-=pr.decay;
+    pr.ring.scale.setScalar(1+(1-pr.life)*pr.gr);
+    pr.ring.material.opacity=pr.life*.3;
+    if(pr.life<=0){scene.remove(pr.ring);PRINGS.splice(i,1);}
+  }
+
+  // Packets
+  for(let i=PACKETS.length-1;i>=0;i--){
+    const pk=PACKETS[i]; pk.t+=pk.spd;
+    if(pk.t>=1){scene.remove(pk.mesh);PACKETS.splice(i,1);continue;}
+    const n=pk.pts.length,raw=pk.t*(n-1),ii=Math.floor(raw),jj=Math.min(ii+1,n-1);
+    pk.mesh.position.lerpVectors(pk.pts[ii],pk.pts[jj],raw-ii);
+    pk.mesh.rotation.y+=.08; pk.mesh.rotation.x+=.05;
+  }
+
+  PARTS.forEach(p=>p.update());
+  renderer.render(scene,camera);
+}
+anim();
+
+window.addEventListener('resize',()=>{
+  camera.aspect=window.innerWidth/window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth,window.innerHeight);
+});
+</script>
+</body>
+</html>

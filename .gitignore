@@ -1,0 +1,47 @@
+﻿# Dependencies
+node_modules/
+.pytest_cache/
+.ruff_cache/
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# Build outputs
+build/
+dist/
+*.egg-info/
+*.egg
+
+# Large files
+*.whl
+*.pth
+
+# Environment
+.env
+.venv
+
+# IDE
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# PDFs and images (optional - uncomment if not needed)
+# *.pdf
+# *.png
+# *.jpg
+
+# Logs
+*.log
+
+# Database
+*.db
+*.sqlite
+branch_structure.json
+temp_auto_push.bat
+temp_interactive_push.bat
+.gitignore
