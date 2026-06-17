@@ -118,23 +118,20 @@ class DartParser(BaseParser):
                         class_body = child
                         break
                 if class_body:
-                    for child in class_body.children:
+                    children = list(class_body.children)
+                    for index, child in enumerate(children):
                         target_node = child
-                        if child.type == "method_signature":
-                            # Look for function_signature inside method_signature
-                            for grandchild in child.children:
-                                if grandchild.type == "function_signature":
-                                    target_node = grandchild
-                                    break
                         if target_node.type in ("method_signature", "function_signature"):
                             method_name = self._find_function_name(target_node)
                             if method_name:
+                                body_node = self._next_function_body(children, index)
                                 method_entity = self._create_function_entity(
                                     target_node,
                                     method_name,
                                     class_entity.fqn,
                                     file_path,
                                     content,
+                                    body_node=body_node,
                                 )
                                 entities.append(method_entity)
                                 known_symbols[method_name] = method_entity.fqn
@@ -158,6 +155,7 @@ class DartParser(BaseParser):
                             content,
                             class_entity.fqn,
                         )
+                return
 
         elif node.type in ("function_signature", "function_expression") and (
             parent_fqn is None or parent_fqn == module
@@ -165,7 +163,12 @@ class DartParser(BaseParser):
             func_name = self._find_function_name(node)
             if func_name and func_name not in known_symbols:
                 func_entity = self._create_function_entity(
-                    node, func_name, module, file_path, content
+                    node,
+                    func_name,
+                    module,
+                    file_path,
+                    content,
+                    body_node=self._next_sibling_function_body(node),
                 )
                 entities.append(func_entity)
                 known_symbols[func_name] = func_entity.fqn
@@ -203,6 +206,7 @@ class DartParser(BaseParser):
                         node.start_point[0] + 1,
                     )
                 )
+                return
         elif node.type in ("call_expression", "method_invocation", "instance_creation_expression"):
             caller = self._enclosing_fqn(node, entities)
             callee = self._find_call_name(node)
@@ -247,6 +251,10 @@ class DartParser(BaseParser):
         return None
 
     def _find_function_name(self, node: Node) -> str | None:
+        if node.type == "method_signature":
+            for child in node.children:
+                if child.type == "function_signature":
+                    return self._find_function_name(child)
         # Function signature structure: [return_type, function_name, (args)]
         # Skip any leading type identifiers and find the first identifier after that
         identifiers_found = []
@@ -312,20 +320,27 @@ class DartParser(BaseParser):
         )
 
     def _create_function_entity(
-        self, node: Node, name: str, parent_fqn: str, file_path: Path, content: str
+        self,
+        node: Node,
+        name: str,
+        parent_fqn: str,
+        file_path: Path,
+        content: str,
+        body_node: Node | None = None,
     ) -> ParsedEntity:
+        end_node = body_node or node
         return ParsedEntity(
             entity_type="function",
             name=name,
             fqn=f"{parent_fqn}.{name}",
             file_path=str(file_path),
             line_start=node.start_point[0] + 1,
-            line_end=node.end_point[0] + 1,
+            line_end=end_node.end_point[0] + 1,
             language=self.language,
             docstring=None,
             decorators=[],
             is_exported=not name.startswith("_"),
-            raw_code=content[node.start_byte : node.end_byte],
+            raw_code=content[node.start_byte : end_node.end_byte],
         )
 
     def _extract_imports(self, node: Node) -> list[str]:
@@ -334,6 +349,7 @@ class DartParser(BaseParser):
             import_path = self._find_import_path(node)
             if import_path:
                 imports.append(import_path)
+                return imports
         for child in node.children:
             imports.extend(self._extract_imports(child))
         return imports
@@ -391,8 +407,27 @@ class DartParser(BaseParser):
             return max(class_candidates, key=lambda entity: entity.line_start).fqn
         return None
 
+    def _next_function_body(self, siblings: list[Node], index: int) -> Node | None:
+        for sibling in siblings[index + 1 : index + 3]:
+            if sibling.type == "function_body":
+                return sibling
+        return None
+
+    def _next_sibling_function_body(self, node: Node) -> Node | None:
+        parent = node.parent
+        if parent is None:
+            return None
+        siblings = list(parent.children)
+        try:
+            index = siblings.index(node)
+        except ValueError:
+            return None
+        return self._next_function_body(siblings, index)
+
     def _module_name(self, file_path: Path) -> str:
         parts = list(file_path.with_suffix("").parts)
         if "sample_repos" in parts:
             parts = parts[parts.index("sample_repos") + 2 :]
+        elif "lib" in parts:
+            parts = parts[parts.index("lib") :]
         return ".".join(part for part in parts if part not in ("index", "main"))

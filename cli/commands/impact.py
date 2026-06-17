@@ -7,11 +7,12 @@ import asyncio
 from cli.output.formatters import print_json, print_key_values
 from core.graph.client import Neo4jClient
 from core.graph.queries.impact import impact_symbol
+from core.projects import resolve_project_id
 from server.config import get_settings
 
 
-def impact(symbol: str, output_format: str = "text") -> None:
-    result = asyncio.run(_impact(symbol))
+def impact(symbol: str, output_format: str = "text", project: str | None = None) -> None:
+    result = asyncio.run(_impact(symbol, project=project))
     if output_format == "json":
         print_json(result.model_dump())
         return
@@ -26,10 +27,10 @@ def impact(symbol: str, output_format: str = "text") -> None:
     )
 
 
-async def _impact(symbol: str):
+async def _impact(symbol: str, project: str | None = None):
     settings = get_settings()
     client = Neo4jClient(settings.neo4j_uri, settings.neo4j_user, settings.neo4j_password)
     try:
-        return await impact_symbol(client, symbol)
+        return await impact_symbol(client, symbol, project_id=resolve_project_id(project))
     finally:
         await client.close()

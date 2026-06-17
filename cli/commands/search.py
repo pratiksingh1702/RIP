@@ -8,6 +8,7 @@ from rich.console import Console
 from rich.table import Table
 
 from core.graph.client import Neo4jClient
+from core.projects import resolve_project_id
 from core.search.client import QdrantClientWrapper
 from core.search.embedder import EmbeddingPipeline, embedding_dimension
 from core.search.reranker import CrossEncoderReranker
@@ -23,6 +24,7 @@ def search(
     language: str | None = None,
     service: str | None = None,
     entity_type: str | None = None,
+    project: str | None = None,
 ) -> None:
     asyncio.run(
         _search(
@@ -31,6 +33,7 @@ def search(
             language=language,
             service=service,
             entity_type=entity_type,
+            project=project,
         )
     )
 
@@ -41,8 +44,10 @@ async def _search(
     language: str | None,
     service: str | None,
     entity_type: str | None,
+    project: str | None,
 ) -> None:
     settings = get_settings()
+    project_id = resolve_project_id(project)
     qdrant_client = QdrantClientWrapper(
         host=settings.qdrant_host,
         port=settings.qdrant_port,
@@ -63,14 +68,20 @@ async def _search(
             "language": language,
             "service": service,
             "entity_type": entity_type,
+            "project_id": project_id,
         }
-        results = await searcher.hybrid_search(query=query, filters=filters, top_k=limit)
+        results = await searcher.hybrid_search(
+            query=query,
+            filters=filters,
+            top_k=limit,
+            project_id=project_id,
+        )
 
         if not results:
             console.print("[yellow]No semantic matches found.[/yellow]")
             return
 
-        table = Table(title=f"Semantic Search Results for: {query}")
+        table = Table(title=f"Hybrid Search Results for: {query}")
         table.add_column("FQN", style="cyan", no_wrap=True)
         table.add_column("Type", style="magenta")
         table.add_column("File Path", style="green")

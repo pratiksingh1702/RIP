@@ -14,6 +14,7 @@ from core.graph.client import Neo4jClient
 from core.graph.schema import setup_schema
 from core.parser.registry import LanguageParserRegistry, build_default_registry
 from core.parser.traversal import FileTraversal
+from core.projects import ensure_project, project_ref_for_root
 from core.search.client import QdrantClientWrapper
 from core.search.embedder import EmbeddingPipeline, embedding_dimension
 from core.search.indexer import SearchIndexer
@@ -61,7 +62,16 @@ async def incremental_index(
     if registry is None:
         registry = build_default_registry()
 
-    builder = GraphBuilder(neo_client)
+    try:
+        from core.storage.database import ensure_storage_schema
+
+        await ensure_storage_schema()
+        project = await ensure_project(db_session, repo_path)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Project metadata storage unavailable; using deterministic id: %s", exc)
+        project = project_ref_for_root(repo_path)
+
+    builder = GraphBuilder(neo_client, project_id=project.id)
 
     traversal = FileTraversal(registry)
     all_files = traversal.iter_source_files(repo_path)
@@ -132,6 +142,11 @@ async def incremental_index(
             continue
 
         parsed_file.file_path = rel_path
+        parsed_file.project_id = project.id
+        for entity in parsed_file.entities:
+            entity.project_id = project.id
+        for relationship in parsed_file.relationships:
+            relationship.project_id = project.id
         parsed_files.append(parsed_file)
         delete_paths.extend([rel_path, str(filepath.resolve())])
 
@@ -155,18 +170,22 @@ async def incremental_index(
     await qdrant_client.init_collection()
 
     try:
-        delete_indexer = SearchIndexer(qdrant_client, None)
+        delete_indexer = SearchIndexer(qdrant_client, None, project_id=project.id)
 
         # Perform deletions
         for rel_path in to_delete:
             delete_query = """
             MATCH (f:File)
-            WHERE f.path = $rel_path OR f.path ENDS WITH $suffix
+            WHERE f.project_id = $project_id
+              AND (f.path = $rel_path OR f.path ENDS WITH $suffix)
             OPTIONAL MATCH (f)-[:CONTAINS]->(e)
             DETACH DELETE f, e
             """
             suffix = "/" + rel_path.lstrip("/")
-            await neo_client.execute(delete_query, {"rel_path": rel_path, "suffix": suffix})
+            await neo_client.execute(
+                delete_query,
+                {"rel_path": rel_path, "suffix": suffix, "project_id": project.id},
+            )
 
             await delete_indexer.delete_file_embeddings_many(
                 [rel_path, str((repo_path / rel_path).resolve())]
@@ -179,7 +198,12 @@ async def incremental_index(
             await builder.build_from_files(parsed_files)
             qdrant_delete_batches = await delete_indexer.delete_file_embeddings_many(delete_paths)
             embedder = EmbeddingPipeline(model_name=settings.embedding_model)
-            indexer = SearchIndexer(qdrant_client, embedder)
+            indexer = SearchIndexer(
+                qdrant_client,
+                embedder,
+                project_id=project.id,
+                project_name=project.name,
+            )
             all_entities = [
                 entity for parsed_file in parsed_files for entity in parsed_file.entities
             ]

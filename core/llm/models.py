@@ -18,6 +18,7 @@ class ExplanationRequest(BaseModel):
         None,
         description="Optional: LLM model to use (e.g., gemini-2.5-flash)",
     )
+    project_id: str = Field(..., description="Project id to explain within")
 
 
 class ExplanationResponse(BaseModel):

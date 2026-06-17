@@ -25,3 +25,11 @@ async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
     """Dependency injection or utility provider for db sessions."""
     async with async_session_factory() as session:
         yield session
+
+
+async def ensure_storage_schema() -> None:
+    """Create local metadata tables when migrations have not been run yet."""
+    import core.storage.models  # noqa: F401
+
+    async with engine.begin() as connection:
+        await connection.run_sync(Base.metadata.create_all)

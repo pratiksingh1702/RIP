@@ -3,9 +3,13 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import json
 from typing import TYPE_CHECKING
 
 from sentence_transformers import SentenceTransformer
+from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
 
 if TYPE_CHECKING:
     from core.parser.base import ParsedEntity
@@ -70,3 +74,96 @@ class EmbeddingPipeline:
     async def embed_entities_async(self, entities: list[ParsedEntity]) -> list[list[float]]:
         texts = [self.prepare_text(e) for e in entities]
         return await self.embed_texts_async(texts)
+
+    async def embed_entities_with_cache(
+        self,
+        entities: list[ParsedEntity],
+        db_session_factory,
+    ) -> list[list[float]]:
+        """Embed entities, using cached embeddings where available."""
+        import logging
+
+        logger = logging.getLogger(__name__)
+        cache_hits = 0
+        to_embed = []
+        cached_results = {}
+        entity_hashes = []
+
+        # First, check cache for each entity
+        for entity in entities:
+            content = entity.raw_code or entity.name
+            content_hash = hashlib.sha256(content.encode("utf-8", errors="replace")).hexdigest()
+            entity_hashes.append((entity, content_hash))
+
+        try:
+            from core.storage.database import ensure_storage_schema
+
+            await ensure_storage_schema()
+            async with db_session_factory() as session:
+                from core.storage.models.embedding_cache import EmbeddingCache
+                stmt = select(EmbeddingCache).where(
+                    EmbeddingCache.content_hash.in_([h for _, h in entity_hashes]),
+                    EmbeddingCache.model_name == self.model_name,
+                )
+                result = await session.execute(stmt)
+                for cache_entry in result.scalars():
+                    cached_results[cache_entry.content_hash] = json.loads(
+                        cache_entry.embedding_json
+                    )
+                    cache_hits += 1
+        except SQLAlchemyError as exc:
+            logger.warning("Embedding cache unavailable; embedding without cache: %s", exc)
+            return await self.embed_entities_async(entities)
+
+        for entity, content_hash in entity_hashes:
+            if content_hash in cached_results:
+                continue
+            to_embed.append(entity)
+
+        logger.info(
+            "Embedding cache: %s hits, %s need embedding",
+            cache_hits,
+            len(to_embed),
+        )
+
+        # Embed only the uncached entities
+        new_embeddings = []
+        if to_embed:
+            new_embeddings = await self.embed_entities_async(to_embed)
+            # Store new embeddings in cache
+            try:
+                async with db_session_factory() as session:
+                    from sqlalchemy.dialects.postgresql import insert
+
+                    from core.storage.models.embedding_cache import EmbeddingCache
+                    cache_entries = []
+                    for entity, embedding in zip(to_embed, new_embeddings, strict=False):
+                        content = entity.raw_code or entity.name
+                        content_hash = hashlib.sha256(
+                            content.encode("utf-8", errors="replace")
+                        ).hexdigest()
+                        cache_entries.append({
+                            "content_hash": content_hash,
+                            "fqn": entity.fqn,
+                            "embedding_json": json.dumps(embedding),
+                            "model_name": self.model_name,
+                        })
+                    if cache_entries:
+                        stmt = insert(EmbeddingCache).values(cache_entries)
+                        stmt = stmt.on_conflict_do_nothing(index_elements=["content_hash"])
+                        await session.execute(stmt)
+                        await session.commit()
+            except SQLAlchemyError as exc:
+                logger.warning("Embedding cache write skipped: %s", exc)
+
+        # Combine cached and new embeddings
+        final_embeddings = []
+        new_idx = 0
+        for _entity, content_hash in entity_hashes:
+            if content_hash in cached_results:
+                final_embeddings.append(cached_results[content_hash])
+            else:
+                final_embeddings.append(new_embeddings[new_idx])
+                new_idx += 1
+
+        return final_embeddings

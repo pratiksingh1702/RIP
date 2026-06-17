@@ -184,3 +184,15 @@ class QdrantClientWrapper:
             except Exception:
                 pass
             self._client = None
+
+    async def get_points_count(self) -> int:
+        """Get the number of points in the collection."""
+        client = await self._get_client()
+        if client is None:
+            return 0
+        try:
+            collection = await client.get_collection(COLLECTION_NAME)
+            return collection.points_count or 0
+        except Exception as e:
+            logger.warning(f"Failed to get Qdrant points count: {e}")
+            return 0

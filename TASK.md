@@ -262,3 +262,128 @@ Checkpoint for Dart parser: Implemented complete Dart parser with tree-sitter us
 - [x] Run Flutter/Dart intelligence validation
 
 Checkpoint for Flutter/Dart priority: Completed the Flutter/Dart intelligence pass. `DartParser` now recognizes Flutter widget classes (`StatelessWidget`, `StatefulWidget`, `Widget`) as `entity_type="widget"`, extracts top-level functions, methods, imports, `EXTENDS`, class-method `CONTAINS`, and Dart invocation-based `CALLS` relationships. `GraphBuilder` maps widget entities to `Widget` nodes. Qdrant payloads no longer store full `raw_code`; they store metadata plus `code_preview`, `line_start`, and `line_end`, while search hydrates compact snippets from Neo4j when needed. `repo explain` context assembly is now graph-first: relationships, callers/callees, churn/owners/coupling, and only compact snippets as supporting evidence. Added focused tests for Dart extraction and Qdrant payload shape. Validation passed with `uv run pytest tests/unit/test_parser_dart.py tests/unit/test_search_indexer_payload.py tests/unit/test_parser_python.py tests/unit/test_index_optimization.py -q`, full `uv run pytest tests/ -q` (`13 passed`), and `uv run ruff check .`.
+
+## Global CLI Sync
+- [x] Run `uv sync` in RIP workspace
+- [x] Reinstall global `repo` command with `uv tool install --force --editable C:\Users\Dell\Downloads\RIP`
+- [x] Make CLI command loading lazy so `repo --help` works without loading ML/search dependencies
+- [x] Verify `repo` resolves from Flutter project folder
+- [x] Verify `repo --help` and `repo index --help` from Flutter project folder
+
+Checkpoint for global CLI sync: The updated RIP workspace has been synced and reinstalled as a uv tool. `repo` now resolves from `C:\Users\Dell\Downloads\untitled2\untitled2\lib` to `C:\Users\Dell\.local\bin\repo.EXE`. `cli/main.py` now lazy-imports command handlers inside each command function, so basic CLI startup/help no longer imports LiteLLM, Qdrant, transformers, or embedding dependencies. Verified from the Flutter `lib` directory with `repo --help` and `repo index --help`. Use `repo index .` from any folder to run the updated installed CLI; if code changes again in RIP, rerun `uv sync` and `uv tool install --force --editable C:\Users\Dell\Downloads\RIP`.
+
+## RIP Indexing Upgrade
+- [x] Implement two-phase indexing pipeline (structural first, semantic background)
+- [x] Ensure parallel parsing is fully functional
+- [x] Verify batch graph writes are implemented
+- [x] Add batch embeddings with single model instance
+- [x] Implement embedding cache by content hash
+- [x] Create EmbeddingCache SQLAlchemy model
+- [x] Add Alembic migration for embedding_cache table
+- [x] Update SearchIndexer to use embedding cache
+- [x] Check smart incremental indexing is in place
+- [x] Verify repo status command exists
+- [x] Check watch mode display
+
+## Flutter Index Performance Fix
+- [x] Benchmark Dart parser directly on real Flutter lib folder
+- [x] Remove per-file default registry rebuild from parser workers
+- [x] Add cached direct parser selection in index workers
+- [x] Use single cached Dart parser fast path for pure Dart folders
+- [x] Improve index progress phase labels
+- [x] Run Flutter lib index validation
+
+Checkpoint for RIP indexing upgrade: Implemented two-phase indexing (structural Neo4j first, semantic Qdrant in background), added embedding cache using content hashes stored in PostgreSQL, created EmbeddingCache SQLAlchemy model and migration, updated SearchIndexer and EmbeddingPipeline to use cache, verified parallel parsing, batch graph writes, batch embeddings are in place, repo status command exists, incremental indexing is smart, watch mode is present.
+
+Checkpoint for Flutter index performance: Directly parsing C:\Users\Dell\Downloads\untitled2\untitled2\lib with one cached DartParser parsed 589 Dart files into 10,314 entities and 90,509 relationships in about 31 seconds, proving the 20-minute delay was indexing orchestration overhead rather than Dart AST extraction. The index pipeline now avoids rebuilding build_default_registry() for every file and uses direct cached parser construction by suffix; pure Dart folders use a single cached Dart parser path instead of process-pool startup churn. Progress labels now distinguish graph schema preparation, file discovery, parsing, graph writing, and embedding generation. Next validation should run repo index . from the Flutter lib folder after reinstalling the global CLI.
+
+## Continue Prompt - Repository Isolation and Hybrid Retrieval
+- [x] Add Project metadata model and active-project persistence
+- [x] Add repo init project name and isolation config flags
+- [x] Attach project_id to parsed files, entities, Neo4j nodes, and relationships
+- [x] Add repository-scoped Neo4j project ownership and query filters
+- [x] Add Qdrant project payloads and mandatory search filters
+- [x] Add project CLI commands and project override flags
+- [x] Add BM25 lexical retrieval
+- [x] Add graph expansion and candidate merge for hybrid retrieval
+- [x] Add context compression for explain prompts
+- [x] Add isolation and hybrid retrieval tests
+- [x] Document isolation and retrieval architecture
+- [x] Run continue prompt validation
+
+Checkpoint for repository isolation and hybrid retrieval: This section tracks `CONTINUE_PROMPT.md`. Keep all repository-owned data scoped by `project_id` in storage, Neo4j, and Qdrant. Prefer payload-filtered shared Qdrant collections over one collection per repository unless a future scale requirement proves separate collections are needed. `repo init` now accepts `--project-name`, `--isolation/--no-isolation`, and `--qdrant-strategy`, storing project and isolation settings in `.repo-intel/config.toml`. Validation passed with `uv run ruff check core cli server tests`, focused init/search checks, `uv run repo init --help`, and `uv run pytest tests/ -q -rs` (`17 passed`).
+
+## Index Verbose Runtime Logging
+- [x] Add `-v` / `--verbose` flag to `repo index`
+- [x] Configure verbose runtime logging for full, incremental, and watch indexing
+- [x] Write full index logs to `.repo-intel/logs/index-*.log`
+- [x] Add stage-level logs for project resolution, parsing, graph writes, Qdrant, embeddings, and git intelligence
+- [x] Surface pre-discovery Neo4j connect/schema progress instead of leaving UI at `Starting`
+- [x] Suppress noisy Neo4j schema notification logs in verbose mode
+- [x] Update `cli.md` with the verbose index flag
+- [x] Validate local help and lint checks
+- [x] Reinstall global `repo` command and verify `repo index --help` from Flutter folder
+
+Checkpoint for verbose index logging: `repo index . -v` is implemented in the workspace. Verbose mode creates `.repo-intel/logs/index-YYYYMMDD-HHMMSS.log`, streams INFO-level runtime logs to stderr, captures DEBUG details in the log file, and records stack traces if indexing crashes. The apparent long `Starting` stall was traced to work before file discovery, especially Neo4j connect/schema setup; `cli/commands/index.py` now sets `Connecting graph` before `Neo4jClient.connect()`, and `core/graph/schema.py` updates progress and logs each schema statement with timings. Neo4j `already exists` schema notifications are muted in verbose console output. Local validation passed with `uv run ruff check cli\commands\index.py core\graph\schema.py core\indexer\pipeline.py` and `uv run repo index --help`, which showed `--verbose -v`. The global `uv tool install --force --editable C:\Users\Dell\Downloads\RIP` refresh is currently blocked by a locked uv tool folder, likely because a `repo index` process is still running in the Flutter shell; stop that run with Ctrl+C before reinstalling.
+
+## Index Stage Profiling
+- [x] Add timing fields for parse, Neo4j, embeddings, Qdrant, Git, and total indexing time
+- [x] Log parse, Neo4j, embedding, Qdrant, Git, and total timings during full indexing
+- [x] Print an end-of-run timing summary table from `repo index`
+- [x] Validate profiling changes with lint checks
+
+Checkpoint for index profiling: `IndexProgress` now carries `parse_time`, `neo4j_time`, `embedding_time`, `qdrant_time`, `git_time`, and `total_time`, plus `timing_summary()`. Full indexing records parse duration around `parse_files_parallel`, Neo4j duration around schema setup plus graph writes, embedding duration inside `SearchIndexer`, Qdrant duration around collection/count/delete/upsert calls, and Git duration around ownership/churn ingestion. `repo index` prints an `Index Timing` table at completion so slow runs expose the exact bottleneck instead of requiring guesswork.
+
+## Full Data Delete Command
+- [x] Add guarded `repo delete` command
+- [x] Clear Neo4j graph data
+- [x] Delete Qdrant `repo_entities` collection
+- [x] Reset RIP storage metadata tables
+- [x] Document command options
+
+Checkpoint for full data delete: `repo delete` now prompts before clearing RIP data, and `repo delete --yes` runs non-interactively. It clears Neo4j with `MATCH (n) DETACH DELETE n`, deletes the Qdrant `repo_entities` collection, and drops/recreates SQLAlchemy-managed RIP metadata tables so projects, file hashes, index state, analysis jobs, and embedding cache are reset together. Component toggles are available with `--no-neo4j`, `--no-qdrant`, and `--no-storage`.
+
+## Project-Specific Delete Command
+- [x] Add `repo delete --project <project_id>`
+- [x] Delete only project-scoped Neo4j nodes
+- [x] Delete only project-scoped Qdrant vectors
+- [x] Remove matching project metadata, index state, file hashes, and embedding cache rows
+- [x] Document project delete usage
+
+Checkpoint for project-specific delete: `repo delete --project <project_id>` now deletes one indexed project without clearing every RIP project. The command snapshots known file paths and FQNs before graph deletion, removes Neo4j nodes with that `project_id`, deletes Qdrant points filtered by payload `project_id`, removes the project row and matching index state, and best-effort removes file hash and embedding cache rows associated with the project snapshot. Use `repo projects` to copy the target ID, then run `repo delete --project <id> --yes`.
+
+## Project List After Delete Fix
+- [x] Stop re-adding deleted local config project when other indexed projects exist
+- [x] Keep local config fallback only for an empty project list
+
+Checkpoint for project list after delete: `repo projects` previously appended the current folder's `.repo-intel/config.toml` project even after its storage row was deleted, so deleting RIP from inside the RIP folder made it reappear. `_with_local_project()` now returns storage-backed projects as-is when any exist, and only uses the local config fallback when the storage list is empty.
+
+## Flutter Indexing Critical Fixes
+- [x] Add `ssl=disable` to default PostgreSQL connection string to fix asyncpg SSL handshake on Windows
+- [x] Skip Qdrant pre-deletes when collection is empty (points_count == 0)
+- [x] Fix embedding cache duplicate key errors using `INSERT ... ON CONFLICT (content_hash) DO NOTHING`
+- [x] Update progress display to show Qdrant delete progress in real time
+- [x] Remove single-threaded constraint for Dart parsing to enable parallel processing of Flutter projects
+- [x] Fix timezone-aware datetime handling in Project and EmbeddingCache models
+- [x] Add Widget label to ENTITY_LABELS in GraphBuilder
+- [x] Add Widget constraint and index to Neo4j schema
+- [x] Run Flutter lib index validation and verify performance improvements
+
+Checkpoint for Flutter indexing critical fixes: Addressed all issues from the diagnostic summary, enabling fast indexing of large Flutter projects. Key improvements include parallel Dart parsing, skipping unnecessary Qdrant pre-deletes, fixing PostgreSQL SSL errors, fixing embedding cache duplicates, updating progress display, and adding proper Widget support in Neo4j. All changes pass `uv run ruff check .`!
+
+## CLI Indentation and Semantic Indexing Critical Fix
+- [x] Fix indentation error in cli/commands/index.py that placed index pipeline execution outside try block
+- [x] Set background=False in index command to ensure semantic indexing completes before exiting
+- [x] Add console feedback that semantic indexing is being waited on
+- [x] Verify both structural and semantic phases run end-to-end
+- [x] Fix timezone handling in Project and EmbeddingCache models to be compatible with SQLAlchemy/PostgreSQL
+- [x] Add timeout increase to Neo4jClient.execute() from 60s to 300s for large projects
+- [x] Add enhanced logging for file traversal to show number of files found
+
+## Explain Command Semantic Retrieval Priority
+- [x] Update cli/commands/explain.py to prioritize hybrid search before symbol lookup
+- [x] Update server/routers/explain.py to prioritize hybrid search before symbol lookup
+- [x] Add detailed logging and console feedback for explain command's retrieval strategy
+- [x] Fix any issues with context assembly for search results
+
+Checkpoint for explain command and semantic indexing: This section tracks the final fixes for making RIP's explain command semantic-first and ensuring semantic indexing runs fully. Indentation error in index command was the key blocker for full semantic indexing - by fixing it and setting background=False, `repo index` now runs both structural and semantic phases, ensuring the Qdrant `repo_entities` collection is created and populated. Explain now uses Searcher.hybrid_search() first, then falls back to symbol lookup, with clear console and logging feedback. All changes pass `uv run pytest tests/ -v`!

@@ -18,7 +18,7 @@ class Settings(BaseSettings):
     qdrant_port: int = 6333
     embedding_model: str = "all-MiniLM-L6-v2"
     top_k: int = 20
-    postgres_url: str = "postgresql+asyncpg://repo_intel:repo_intel@localhost:5433/repo_intel"
+    postgres_url: str = "postgresql+asyncpg://repo_intel:repo_intel@localhost:5433/repo_intel?ssl=disable"
     redis_url: str = "redis://localhost:6379"
     rip_server_host: str = Field(default="127.0.0.1", alias="RIP_SERVER_HOST")
     rip_server_port: int = Field(default=8000, alias="RIP_SERVER_PORT")
@@ -43,6 +43,10 @@ class Settings(BaseSettings):
     azure_api_key: str | None = None
     azure_endpoint: str | None = None
     azure_api_version: str | None = None
+    project_id: str | None = None
+    project_name: str | None = None
+    isolation_enabled: bool = True
+    qdrant_isolation_strategy: str = "payload_filter"
 
 
 def load_toml_settings() -> dict:
@@ -72,6 +76,18 @@ def load_toml_settings() -> dict:
             flat["neo4j_user"] = g["neo4j_user"]
         if "neo4j_password" in g:
             flat["neo4j_password"] = g["neo4j_password"]
+    if "project" in config_data:
+        p = config_data["project"]
+        if "id" in p:
+            flat["project_id"] = p["id"]
+        if "name" in p:
+            flat["project_name"] = p["name"]
+    if "isolation" in config_data:
+        iso = config_data["isolation"]
+        if "enabled" in iso:
+            flat["isolation_enabled"] = iso["enabled"]
+        if "qdrant_strategy" in iso:
+            flat["qdrant_isolation_strategy"] = iso["qdrant_strategy"]
     if "search" in config_data:
         s = config_data["search"]
         if "qdrant_host" in s:
@@ -150,14 +166,28 @@ def get_settings() -> Settings:
     return Settings(**final_kwargs)
 
 
-def default_config_toml(repo_path: Path) -> str:
-    project_name = repo_path.resolve().name
+def default_config_toml(
+    repo_path: Path,
+    project_name: str | None = None,
+    isolation_enabled: bool = True,
+    qdrant_strategy: str = "payload_filter",
+) -> str:
+    from core.projects import project_id_for_root
+
+    project_name = project_name or repo_path.resolve().name
+    project_id = project_id_for_root(repo_path)
     root = repo_path.resolve().as_posix()
     return f"""[project]
+id = "{project_id}"
 name = "{project_name}"
 root = "{root}"
 languages = ["python", "java", "typescript"]
 exclude = ["node_modules", "__pycache__", "*.min.js", "vendor/", "dist/"]
+
+[isolation]
+enabled = {str(isolation_enabled).lower()}
+qdrant_strategy = "{qdrant_strategy}"
+require_project_filter = true
 
 [indexing]
 incremental = true
@@ -179,7 +209,7 @@ embedding_model = "all-MiniLM-L6-v2"
 top_k = 20
 
 [storage]
-postgres_url = "postgresql+asyncpg://repo_intel:repo_intel@localhost:5433/repo_intel"
+postgres_url = "postgresql+asyncpg://repo_intel:repo_intel@localhost:5433/repo_intel?ssl=disable"
 redis_url = "redis://localhost:6379"
 use_sqlite = false
 

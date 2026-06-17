@@ -6,6 +6,7 @@ from core.graph.client import Neo4jClient
 from core.graph.models import FlowHop, FlowTrace
 from core.llm.client import query_llm
 from core.llm.prompts.trace import TRACE_SYSTEM_PROMPT, TRACE_USER_PROMPT
+from core.projects import DEFAULT_PROJECT_ID
 
 TRACE_RELATIONSHIP_TYPES = (
     "CALLS",
@@ -17,12 +18,17 @@ TRACE_RELATIONSHIP_TYPES = (
 )
 
 
+def _project_clause(alias: str) -> str:
+    return f" AND ({alias}.project_id = $project_id OR $project_id IS NULL)"
+
+
 def _trace_queries(relationship_pattern: str) -> list[tuple[str, str]]:
     return [
         (
             "any_label_by_name",
             f"""
             MATCH path = (start {{name: $entry_point}})-[:{relationship_pattern}*1..10]->(end)
+            WHERE start.project_id = $project_id AND end.project_id = $project_id
             RETURN path
             ORDER BY length(path) DESC
             LIMIT 30
@@ -32,6 +38,7 @@ def _trace_queries(relationship_pattern: str) -> list[tuple[str, str]]:
             "any_label_by_fqn",
             f"""
             MATCH path = (start {{fqn: $entry_point}})-[:{relationship_pattern}*1..10]->(end)
+            WHERE start.project_id = $project_id AND end.project_id = $project_id
             RETURN path
             ORDER BY length(path) DESC
             LIMIT 30
@@ -40,7 +47,9 @@ def _trace_queries(relationship_pattern: str) -> list[tuple[str, str]]:
         (
             "function_calls",
             """
-            MATCH path = (start:Function {name: $entry_point})-[:CALLS*1..10]->(end)
+            MATCH path = (start:Function {name: $entry_point, project_id: $project_id})
+                -[:CALLS*1..10]->(end)
+            WHERE end.project_id = $project_id
             RETURN path
             ORDER BY length(path) DESC
             LIMIT 30
@@ -49,8 +58,10 @@ def _trace_queries(relationship_pattern: str) -> list[tuple[str, str]]:
         (
             "class_methods",
             """
-            MATCH (cls:Class {name: $entry_point})-[:CONTAINS]->(method:Function)
+            MATCH (cls:Class {name: $entry_point, project_id: $project_id})
+                -[:CONTAINS]->(method:Function {project_id: $project_id})
             MATCH path = (method)-[:CALLS*1..8]->(end)
+            WHERE end.project_id = $project_id
             RETURN path
             ORDER BY length(path) DESC
             LIMIT 30
@@ -60,8 +71,10 @@ def _trace_queries(relationship_pattern: str) -> list[tuple[str, str]]:
             "fuzzy",
             f"""
             MATCH (n)
-            WHERE toLower(n.name) CONTAINS toLower($entry_point)
+            WHERE n.project_id = $project_id
+              AND toLower(n.name) CONTAINS toLower($entry_point)
             MATCH path = (n)-[:{relationship_pattern}*1..6]->(end)
+            WHERE end.project_id = $project_id
             RETURN path
             ORDER BY length(path) DESC
             LIMIT 20
@@ -84,8 +97,10 @@ async def _available_trace_relationship_pattern(client: Neo4jClient) -> str:
 
 TRACE_FALLBACK_QUERY = """
 MATCH (n)
-WHERE toLower(n.name) CONTAINS toLower($entry_point)
+WHERE n.project_id = $project_id
+  AND toLower(n.name) CONTAINS toLower($entry_point)
 OPTIONAL MATCH (n)-[r]-(connected)
+WHERE connected.project_id = $project_id
 RETURN n.name AS from_symbol,
        connected.name AS to_symbol,
        type(r) AS relationship_type,
@@ -99,11 +114,16 @@ async def trace_symbol(
     client: Neo4jClient,
     entry_point: str,
     explain: bool = False,
+    project_id: str | None = None,
 ) -> FlowTrace:
+    project_id = project_id or DEFAULT_PROJECT_ID
     records = []
     relationship_pattern = await _available_trace_relationship_pattern(client)
     for _strategy, query in _trace_queries(relationship_pattern):
-        records = await client.execute(query, {"entry_point": entry_point})
+        records = await client.execute(
+            query,
+            {"entry_point": entry_point, "project_id": project_id},
+        )
         if records:
             break
 
@@ -139,7 +159,7 @@ async def trace_symbol(
     if not hops:
         fallback_records = await client.execute(
             TRACE_FALLBACK_QUERY,
-            {"entry_point": entry_point},
+            {"entry_point": entry_point, "project_id": project_id},
         )
         for record in fallback_records:
             if not record.get("to_symbol") or not record.get("relationship_type"):

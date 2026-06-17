@@ -10,6 +10,8 @@ This is a comprehensive guide to all RIP (Repository Intelligence Platform) CLI 
 - [repo impact](#repo-impact)
 - [repo explain](#repo-explain)
 - [repo search](#repo-search)
+- [repo projects](#repo-projects)
+- [repo use](#repo-use)
 - [repo dead-code](#repo-dead-code)
 - [repo onboard](#repo-onboard)
 - [repo architecture](#repo-architecture)
@@ -25,16 +27,21 @@ Initialize a repository for indexing.
 
 ### Usage
 ```powershell
-repo init [repo_path]
+repo init [repo_path] [--project-name <name>] [--isolation|--no-isolation] [--qdrant-strategy <strategy>]
 ```
 
-### Arguments
+### Arguments & Options
 - **repo_path**: Path to the repository to initialize (default: `.` - current directory)
+- **--project-name <name>**: Project name stored in `.repo-intel/config.toml`
+- **--isolation / --no-isolation**: Enable or disable repository isolation filters (default: enabled)
+- **--qdrant-strategy <strategy>**: Qdrant isolation strategy (`payload_filter` or `collection_per_project`; default: `payload_filter`)
 
 ### Example
 ```powershell
 repo init
 repo init C:\path\to\project
+repo init --project-name billing-api
+repo init C:\path\to\project --project-name flutter-app --qdrant-strategy payload_filter
 ```
 
 ---
@@ -44,7 +51,7 @@ Index a repository's codebase, building the knowledge graph and semantic search 
 
 ### Usage
 ```powershell
-repo index [repo_path] [--watch] [--incremental] [--languages <lang1,lang2,...>]
+repo index [repo_path] [--watch] [--incremental] [--languages <lang1,lang2,...>] [-v|--verbose]
 ```
 
 ### Arguments & Options
@@ -52,10 +59,12 @@ repo index [repo_path] [--watch] [--incremental] [--languages <lang1,lang2,...>]
 - **--watch**: Watch files and re-index automatically when changes are detected
 - **--incremental**: Index only changed files instead of full index
 - **--languages <lang1,lang2,...>**: Comma-separated list of languages to restrict indexing
+- **-v, --verbose**: Show detailed runtime logs and write a full log file to `.repo-intel/logs/`
 
 ### Example
 ```powershell
 repo index
+repo index . -v
 repo index --incremental
 repo index --watch
 repo index C:\path\to\project --languages python,typescript
@@ -68,13 +77,14 @@ Trace the call graph from an entry point to show dependencies and execution path
 
 ### Usage
 ```powershell
-repo trace <entry_point> [--depth <n>] [--format text|json] [--explain]
+repo trace <entry_point> [--depth <n>] [--format text|json] [--project <project_id>] [--explain]
 ```
 
 ### Arguments & Options
 - **entry_point**: Symbol or function name to trace
 - **--depth <n>**: Depth of the call graph to trace (default: 10)
 - **--format <format>**: Output format (`text` or `json`)
+- **--project <project_id>**: Override the active project and trace only within that project
 - **--explain**: Generate an LLM-powered explanation for the call path
 
 ### Example
@@ -82,6 +92,7 @@ repo trace <entry_point> [--depth <n>] [--format text|json] [--explain]
 repo trace PythonParser
 repo trace main --depth 20 --format json
 repo trace BaseParser --explain
+repo trace AuthService --project 3f2f-project-id
 ```
 
 ---
@@ -91,17 +102,19 @@ Analyze which parts of the codebase will be affected by changes to a symbol or f
 
 ### Usage
 ```powershell
-repo impact <symbol> [--format text|json]
+repo impact <symbol> [--format text|json] [--project <project_id>]
 ```
 
 ### Arguments & Options
 - **symbol**: Symbol or file name to analyze impact for
 - **--format <format>**: Output format (`text` or `json`)
+- **--project <project_id>**: Override the active project and analyze only within that project
 
 ### Example
 ```powershell
 repo impact PythonParser
 repo impact core/parser/base.py --format json
+repo impact AuthService --project 3f2f-project-id
 ```
 
 ---
@@ -111,7 +124,7 @@ Generate LLM-powered explanations of a symbol or file's purpose and context.
 
 ### Usage
 ```powershell
-repo explain <symbol> [--level file|class|function] [--provider <llm_provider>] [--model <model_name>]
+repo explain <symbol> [--level file|class|function] [--provider <llm_provider>] [--model <model_name>] [--project <project_id>]
 ```
 
 ### Arguments & Options
@@ -119,11 +132,13 @@ repo explain <symbol> [--level file|class|function] [--provider <llm_provider>] 
 - **--level <level>**: Context level to include (`file`, `class`, or `function`)
 - **--provider <provider>**: LLM provider to use (e.g., `google`, `openrouter`, `openai`, `anthropic`, `ollama`)
 - **--model <model>**: Specific LLM model to use (e.g., `gemini-2.5-flash`, `deepseek/deepseek-chat`)
+- **--project <project_id>**: Override the active project and explain only with that project's context
 
 ### Example
 ```powershell
 repo explain "indexing pipeline"
 repo explain PythonParser --level class --provider google --model gemini-2.5-flash
+repo explain AuthService --project 3f2f-project-id
 ```
 
 ---
@@ -133,7 +148,7 @@ Perform semantic search over the codebase to find relevant entities.
 
 ### Usage
 ```powershell
-repo search <query> [--limit <n>] [--language <lang>] [--service <service>] [--entity-type <type>]
+repo search <query> [--limit <n>] [--language <lang>] [--service <service>] [--entity-type <type>] [--project <project_id>]
 ```
 
 ### Arguments & Options
@@ -142,11 +157,48 @@ repo search <query> [--limit <n>] [--language <lang>] [--service <service>] [--e
 - **--language <lang>**: Filter results to specific language
 - **--service <service>**: Filter results to specific service
 - **--entity-type <type>**: Filter by entity type (e.g., `function`, `class`)
+- **--project <project_id>**: Override the active project and search only within that project
 
 ### Example
 ```powershell
 repo search "parser"
 repo search "database queries" --language python --limit 50
+repo search "login flow" --project 3f2f-project-id
+```
+
+---
+
+## repo projects
+List indexed projects known to RIP.
+
+### Usage
+```powershell
+repo projects
+```
+
+### Example
+```powershell
+repo projects
+```
+
+---
+
+## repo use
+Set the active project for subsequent project-scoped commands.
+
+### Usage
+```powershell
+repo use <project_id> [--repo-path <path>]
+```
+
+### Arguments & Options
+- **project_id**: Project id to activate
+- **--repo-path <path>**: Repository folder where `.repo-intel/active_project` should be stored (default: `.`)
+
+### Example
+```powershell
+repo use 3f2f-project-id
+repo use 3f2f-project-id --repo-path C:\path\to\project
 ```
 
 ---
@@ -265,6 +317,31 @@ repo status [repo_path]
 ```powershell
 repo status
 repo status C:\path\to\project
+```
+
+---
+
+## repo delete
+Completely clear RIP indexed data from Neo4j, Qdrant, and RIP storage metadata.
+
+### Usage
+```powershell
+repo delete [--project <project_id>] [--yes] [--no-neo4j] [--no-qdrant] [--no-storage]
+```
+
+### Arguments & Options
+- **--project <project_id>**: Delete only one indexed project instead of all RIP data
+- **--yes / -y**: Skip the interactive confirmation prompt
+- **--neo4j / --no-neo4j**: Clear or skip Neo4j graph data
+- **--qdrant / --no-qdrant**: Delete or skip the Qdrant vector collection
+- **--storage / --no-storage**: Reset or skip RIP metadata tables
+
+### Example
+```powershell
+repo delete
+repo delete --yes
+repo delete --project d93fcec0-9811-538a-be5c-fc5be577ec5a --yes
+repo delete --yes --no-storage
 ```
 
 ---

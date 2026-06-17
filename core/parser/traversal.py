@@ -69,12 +69,15 @@ class FileTraversal:
     def iter_source_files(self, root: Path) -> list[Path]:
         root = root.resolve()
         if root.is_file():
+            logger.debug("Treating single file as repo: %s", root)
             return [root] if self._is_allowed(root, root.parent) else []
 
+        logger.info("Scanning repository for source files under %s", root)
         files: list[Path] = []
         for path in root.rglob("*"):
             if path.is_file() and self._is_allowed(path, root):
                 files.append(path)
+        logger.info("Found %s candidate source files", len(files))
         return files
 
     def find_files(self, root: Path) -> list[Path]:

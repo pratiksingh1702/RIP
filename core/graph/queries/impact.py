@@ -4,15 +4,23 @@ from __future__ import annotations
 
 from core.graph.client import Neo4jClient
 from core.graph.models import GraphNode, ImpactResult
+from core.projects import DEFAULT_PROJECT_ID
 
 IMPACT_QUERY = """
-MATCH (target {name: $symbol})<-[:CALLS|IMPORTS|DEPENDS_ON*1..5]-(affected)
+MATCH (target {name: $symbol, project_id: $project_id})
+    <-[:CALLS|IMPORTS|DEPENDS_ON*1..5]-(affected)
+WHERE affected.project_id = $project_id
 RETURN affected.name AS name, affected.file_path AS file_path, labels(affected) AS type
 """
 
 
-async def impact_symbol(client: Neo4jClient, symbol: str) -> ImpactResult:
-    records = await client.execute(IMPACT_QUERY, {"symbol": symbol})
+async def impact_symbol(
+    client: Neo4jClient,
+    symbol: str,
+    project_id: str | None = None,
+) -> ImpactResult:
+    project_id = project_id or DEFAULT_PROJECT_ID
+    records = await client.execute(IMPACT_QUERY, {"symbol": symbol, "project_id": project_id})
     nodes: list[GraphNode] = []
     files: set[str] = set()
     apis: set[str] = set()

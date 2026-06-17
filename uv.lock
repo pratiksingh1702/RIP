@@ -2281,6 +2281,7 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "alembic" },
+    { name = "annotated-doc" },
     { name = "asyncpg" },
     { name = "fastapi" },
     { name = "gitpython" },
@@ -2312,6 +2313,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "alembic", specifier = ">=1.13.2" },
+    { name = "annotated-doc", specifier = ">=0.0.3" },
     { name = "asyncpg", specifier = ">=0.29.0" },
     { name = "fastapi", specifier = ">=0.115.0" },
     { name = "gitpython", specifier = ">=3.1.43" },

@@ -20,6 +20,7 @@ async def search(
     language: str | None = Query(None, description="Filter by language"),
     service: str | None = Query(None, description="Filter by service"),
     entity_type: str | None = Query(None, description="Filter by entity type"),
+    project_id: str = Query(..., description="Project id to search within"),
 ) -> ApiEnvelope:
     start = time.perf_counter()
     runtime = request.app.state.runtime
@@ -33,8 +34,14 @@ async def search(
         "language": language,
         "service": service,
         "entity_type": entity_type,
+        "project_id": project_id,
     }
-    results = await searcher.hybrid_search(query=q, filters=filters, top_k=top)
+    results = await searcher.hybrid_search(
+        query=q,
+        filters=filters,
+        top_k=top,
+        project_id=project_id,
+    )
     response_data = [SearchResultResponse(**r.model_dump()) for r in results]
 
     duration_ms = int((time.perf_counter() - start) * 1000)

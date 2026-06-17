@@ -4,27 +4,35 @@ from __future__ import annotations
 
 from core.graph.client import Neo4jClient
 from core.graph.models import SearchResult
+from core.projects import DEFAULT_PROJECT_ID
 
 
 class ContextAssembler:
     """Assembles codebase context (code, graph relationships, git info, metrics) for LLM prompts."""
 
-    def __init__(self, graph_client: Neo4jClient):
+    def __init__(self, graph_client: Neo4jClient, project_id: str | None = None):
         self.graph_client = graph_client
+        self.project_id = project_id or DEFAULT_PROJECT_ID
 
     async def assemble_context(self, symbol: str, context_level: str = "file") -> dict[str, object]:
         """Assemble context for a given symbol."""
         # 1. Find the target node
         query = """
         MATCH (e)
-        WHERE e.fqn = $symbol OR e.name = $symbol
-           OR toLower(e.name) CONTAINS toLower($symbol)
-           OR toLower(e.fqn) CONTAINS toLower($symbol)
+        WHERE e.project_id = $project_id
+          AND (
+            e.fqn = $symbol OR e.name = $symbol
+            OR toLower(e.name) CONTAINS toLower($symbol)
+            OR toLower(e.fqn) CONTAINS toLower($symbol)
+          )
         RETURN e.name AS name, e.fqn AS fqn, e.file_path AS file_path,
                e.raw_code AS raw_code, labels(e)[0] AS type
         LIMIT 1
         """
-        records = await self.graph_client.execute(query, {"symbol": symbol})
+        records = await self.graph_client.execute(
+            query,
+            {"symbol": symbol, "project_id": self.project_id},
+        )
         if not records:
             return {
                 "symbol": symbol,
@@ -40,14 +48,17 @@ class ContextAssembler:
 
         # 2. Get incoming callers & outgoing callees
         rel_query = """
-        MATCH (e)
+        MATCH (e {project_id: $project_id})
         WHERE e.fqn = $fqn
-        OPTIONAL MATCH (caller)-[:CALLS]->(e)
-        OPTIONAL MATCH (e)-[:CALLS]->(callee)
+        OPTIONAL MATCH (caller {project_id: $project_id})-[:CALLS]->(e)
+        OPTIONAL MATCH (e)-[:CALLS]->(callee {project_id: $project_id})
         RETURN collect(DISTINCT caller.fqn) AS callers,
                collect(DISTINCT callee.fqn) AS callees
         """
-        rel_records = await self.graph_client.execute(rel_query, {"fqn": fqn})
+        rel_records = await self.graph_client.execute(
+            rel_query,
+            {"fqn": fqn, "project_id": self.project_id},
+        )
         callers = []
         callees = []
         if rel_records:
@@ -56,7 +67,7 @@ class ContextAssembler:
 
         # 3. Get Git ownership and churn
         git_query = """
-        MATCH (f:File)
+        MATCH (f:File {project_id: $project_id})
         WHERE f.path = $file_path OR f.path ENDS WITH $suffix
         OPTIONAL MATCH (f)-[r:OWNED_BY]->(d:Developer)
         OPTIONAL MATCH (c:Commit)-[:MODIFIES]->(f)
@@ -68,7 +79,7 @@ class ContextAssembler:
             suffix = "/" + file_path.replace("\\", "/").lstrip("/")
         git_records = await self.graph_client.execute(
             git_query,
-            {"file_path": file_path, "suffix": suffix},
+            {"file_path": file_path, "suffix": suffix, "project_id": self.project_id},
         )
         owners = []
         churn = 0
@@ -78,22 +89,22 @@ class ContextAssembler:
 
         # 4. Get coupling metrics
         coupling_query = (
-            "MATCH (f:File) "
+            "MATCH (f:File {project_id: $project_id}) "
             "WHERE f.path = $file_path OR f.path ENDS WITH $suffix "
             "MATCH (f)-[:CONTAINS]->(target) "
             "OPTIONAL MATCH (target)<-[:CALLS|IMPORTS|EXTENDS|IMPLEMENTS]-(source)"
             "<-[:CONTAINS]-(f_in:File) "
-            "WHERE f_in.path <> f.path "
+            "WHERE f_in.project_id = $project_id AND f_in.path <> f.path "
             "WITH f, count(DISTINCT f_in.path) AS ca "
             "OPTIONAL MATCH (f)-[:CONTAINS]->(source)"
             "-[:CALLS|IMPORTS|EXTENDS|IMPLEMENTS]->(target)"
             "<-[:CONTAINS]-(f_out:File) "
-            "WHERE f_out.path <> f.path "
+            "WHERE f_out.project_id = $project_id AND f_out.path <> f.path "
             "RETURN ca AS afferent, count(DISTINCT f_out.path) AS efferent"
         )
         coupling_records = await self.graph_client.execute(
             coupling_query,
-            {"file_path": file_path, "suffix": suffix},
+            {"file_path": file_path, "suffix": suffix, "project_id": self.project_id},
         )
         ca = 0
         ce = 0
@@ -167,7 +178,14 @@ class ContextAssembler:
                 "context_str": f"No relevant code found for topic: {topic}",
             }
 
-        sections = [f"Topic: {topic}", "", "## Relevant Code Entities"]
+        sections = [
+            f"Topic: {topic}",
+            "",
+            "## Repository Summary",
+            "The following context is project-scoped and compressed from hybrid retrieval.",
+            "",
+            "## Relevant Components",
+        ]
         graph_sections: list[str] = []
 
         for result in search_results[:max_results]:
@@ -175,9 +193,16 @@ class ContextAssembler:
                 [
                     "",
                     f"### {result.name} ({result.file_path})",
-                    "```",
-                    result.raw_code[:1200],
-                    "```",
+                    f"Type: {result.entity_type}",
+                    f"Purpose: {self._summarize_code(result.raw_code)}",
+                    (
+                        "Dependencies: "
+                        + (", ".join(result.callees[:8]) if result.callees else "None observed")
+                    ),
+                    (
+                        "Related Components: "
+                        + (", ".join(result.callers[:8]) if result.callers else "None observed")
+                    ),
                 ]
             )
 
@@ -185,15 +210,20 @@ class ContextAssembler:
             records = await self.graph_client.execute(
                 """
                 MATCH (n)
-                WHERE n.fqn = $entity_id OR n.name = $name
-                OPTIONAL MATCH (n)-[out]->(target)
-                OPTIONAL MATCH (source)-[inc]->(n)
+                WHERE n.project_id = $project_id
+                  AND (n.fqn = $entity_id OR n.name = $name)
+                OPTIONAL MATCH (n)-[out]->(target {project_id: $project_id})
+                OPTIONAL MATCH (source {project_id: $project_id})-[inc]->(n)
                 RETURN n.name AS name,
                        collect(DISTINCT {rel: type(out), target: target.name}) AS outgoing,
                        collect(DISTINCT {rel: type(inc), source: source.name}) AS incoming
                 LIMIT 1
                 """,
-                {"entity_id": result.entity_id, "name": result.name},
+                {
+                    "entity_id": result.entity_id,
+                    "name": result.name,
+                    "project_id": self.project_id,
+                },
             )
             if not records:
                 continue
@@ -215,5 +245,11 @@ class ContextAssembler:
         return {
             "symbol": topic,
             "found": True,
-            "context_str": context_str[:24000],
+            "context_str": context_str[:20000],
         }
+
+    def _summarize_code(self, raw_code: str) -> str:
+        text = " ".join((raw_code or "").strip().split())
+        if not text:
+            return "No snippet available."
+        return text[:700] + ("..." if len(text) > 700 else "")

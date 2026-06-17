@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -29,10 +30,12 @@ class Neo4jClient:
                 self._driver = AsyncGraphDatabase.driver(
                     self.uri,
                     auth=(self.user, self.password),
+                    connection_acquisition_timeout=30.0,
+                    max_connection_lifetime=3600,
                 )
-                await self._driver.verify_connectivity()
+                await asyncio.wait_for(self._driver.verify_connectivity(), timeout=30.0)
                 logger.debug("Successfully connected to Neo4j")
-            except (Neo4jError, ServiceUnavailable, ConnectionError) as e:
+            except (TimeoutError, Neo4jError, ServiceUnavailable, ConnectionError) as e:
                 logger.warning(f"Failed to connect to Neo4j: {e}. Disabling graph operations.")
                 self._is_available = False
                 self._driver = None
@@ -57,9 +60,9 @@ class Neo4jClient:
         assert self._driver is not None
         try:
             async with self._driver.session() as session:
-                result = await session.run(query, parameters or {})
-                return [dict(record) async for record in result]
-        except (Neo4jError, ServiceUnavailable) as e:
+                result = await asyncio.wait_for(session.run(query, parameters or {}), timeout=300.0)
+                return await asyncio.wait_for(result.data(), timeout=300.0)
+        except (TimeoutError, Neo4jError, ServiceUnavailable) as e:
             logger.error(f"Neo4j query failed: {e}")
             self._is_available = False
             return []

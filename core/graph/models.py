@@ -55,6 +55,6 @@ class SearchResult(BaseModel):
     language: str
     score: float
     raw_code: str
+    project_id: str | None = None
     callers: list[str] = Field(default_factory=list)
     callees: list[str] = Field(default_factory=list)
-

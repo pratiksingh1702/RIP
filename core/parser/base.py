@@ -24,6 +24,7 @@ class ParsedEntity:
     decorators: list[str]
     is_exported: bool
     raw_code: str
+    project_id: str | None = None
 
 
 @dataclass
@@ -33,6 +34,7 @@ class ParsedRelationship:
     relationship_type: str
     file_path: str
     line: int
+    project_id: str | None = None
 
 
 @dataclass
@@ -43,6 +45,7 @@ class ParsedFile:
     relationships: list[ParsedRelationship]
     imports: list[str]
     sha256_hash: str
+    project_id: str | None = None
 
 
 class BaseParser(ABC):

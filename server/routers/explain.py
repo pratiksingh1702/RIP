@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import re
 import time
 
@@ -15,6 +16,7 @@ from core.search.searcher import Searcher
 from server.schemas.responses import ApiEnvelope
 
 router = APIRouter(tags=["explain"])
+logger = logging.getLogger(__name__)
 
 
 def parse_suggested_improvements(text: str) -> list[str]:
@@ -53,17 +55,31 @@ def parse_suggested_improvements(text: str) -> list[str]:
 async def explain_endpoint(http_request: Request, request: ExplanationRequest) -> ApiEnvelope:
     start = time.perf_counter()
     runtime = http_request.app.state.runtime
-    assembler = ContextAssembler(runtime.neo4j)
-    context_data = await assembler.assemble_context(request.symbol, request.context_level)
-    if not context_data.get("found"):
-        searcher = Searcher(
-            qdrant_client=runtime.qdrant,
-            embedder=runtime.embedder,
-            reranker=runtime.reranker,
-            graph_client=runtime.neo4j,
-        )
-        results = await searcher.hybrid_search(request.symbol, top_k=10)
+    assembler = ContextAssembler(runtime.neo4j, project_id=request.project_id)
+    
+    # Step 1: First try hybrid search for semantic queries
+    logger.info("Explain endpoint: starting hybrid search for query: '%s'", request.symbol)
+    searcher = Searcher(
+        qdrant_client=runtime.qdrant,
+        embedder=runtime.embedder,
+        reranker=runtime.reranker,
+        graph_client=runtime.neo4j,
+    )
+    results = await searcher.hybrid_search(
+        request.symbol,
+        top_k=10,
+        project_id=request.project_id,
+    )
+    logger.info("Explain endpoint: hybrid search returned %s results", len(results))
+    
+    if results:
         context_data = await assembler.assemble_search_context(request.symbol, results)
+        logger.info("Explain endpoint: assembled context from search results")
+    else:
+        # Fallback to symbol lookup
+        logger.info("Explain endpoint: no search results, falling back to symbol lookup")
+        context_data = await assembler.assemble_context(request.symbol, request.context_level)
+        
     if not context_data.get("found"):
         return ApiEnvelope(
             success=False,
