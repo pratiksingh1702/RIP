@@ -5,8 +5,10 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import logging
 from typing import TYPE_CHECKING
 
+import torch
 from sentence_transformers import SentenceTransformer
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
@@ -14,12 +16,15 @@ from sqlalchemy.exc import SQLAlchemyError
 if TYPE_CHECKING:
     from core.parser.base import ParsedEntity
 
-DEFAULT_MODEL = "all-MiniLM-L6-v2"
+logger = logging.getLogger(__name__)
+
+DEFAULT_MODEL = "BAAI/bge-small-en-v1.5"
 QUALITY_MODEL = "BAAI/bge-m3"
 MODEL_DIMENSIONS = {
-    DEFAULT_MODEL: 384,
-    f"sentence-transformers/{DEFAULT_MODEL}": 384,
-    QUALITY_MODEL: 1024,
+    "all-MiniLM-L6-v2": 384,
+    "sentence-transformers/all-MiniLM-L6-v2": 384,
+    "BAAI/bge-small-en-v1.5": 384,
+    "BAAI/bge-m3": 1024,
 }
 
 
@@ -28,15 +33,46 @@ def embedding_dimension(model_name: str) -> int:
 
 
 class EmbeddingPipeline:
-    _model_cache: dict[tuple[str, str | None], SentenceTransformer] = {}
+    _model_cache: dict[tuple[str, str | None], object] = {}
 
     def __init__(self, model_name: str = DEFAULT_MODEL, device: str | None = None) -> None:
         self.model_name = model_name
         self.device = device
-        self._model: SentenceTransformer | None = None
+        self._model: object | None = None
+        self._tokenizer: object | None = None
+        self._use_onnx: bool = False
+        
+        # Try to use ONNX for faster inference
+        try:
+            from optimum.onnxruntime import ORTModelForFeatureExtraction
+            from transformers import AutoTokenizer
+            
+            cache_key = (self.model_name, self.device)
+            if cache_key in self._model_cache:
+                cached = self._model_cache[cache_key]
+                self._model = cached["model"]
+                self._tokenizer = cached["tokenizer"]
+                self._use_onnx = cached["use_onnx"]
+                logger.info("✅ Reusing cached ONNX model")
+            else:
+                self._model = ORTModelForFeatureExtraction.from_pretrained(
+                    model_name, 
+                    export=True
+                )
+                self._tokenizer = AutoTokenizer.from_pretrained(model_name)
+                self._use_onnx = True
+                self._model_cache[cache_key] = {
+                    "model": self._model,
+                    "tokenizer": self._tokenizer,
+                    "use_onnx": self._use_onnx
+                }
+                logger.info("✅ Using ONNX Runtime for faster embeddings")
+        except ImportError as e:
+            logger.info(f"ONNX not available (error: {str(e)}), using standard sentence-transformers")
+            self._use_onnx = False
 
     @property
-    def model(self) -> SentenceTransformer:
+    def model(self) -> SentenceTransformer | object:
         if self._model is None:
             cache_key = (self.model_name, self.device)
             if cache_key not in self._model_cache:
@@ -48,8 +84,20 @@ class EmbeddingPipeline:
         return self._model
 
     def embed_texts(self, texts: list[str]) -> list[list[float]]:
-        embeddings = self.model.encode(texts, show_progress_bar=False)
-        return [embedding.tolist() for embedding in embeddings]
+        if self._use_onnx and self._tokenizer:
+            # Onnx inference
+            inputs = self._tokenizer(texts, padding=True, truncation=True, return_tensors="pt")
+            outputs = self._model(**inputs)
+            # Mean pooling
+            token_embeddings = outputs.last_hidden_state
+            attention_mask = inputs["attention_mask"]
+            input_mask = attention_mask.unsqueeze(-1).expand(token_embeddings.size()).float()
+            embeddings = torch.sum(token_embeddings * input_mask, 1) / torch.clamp(input_mask.sum(1), min=1e-9)
+            return embeddings.tolist()
+        else:
+            # Sentence-transformers fallback
+            embeddings = self.model.encode(texts, show_progress_bar=False)
+            return [embedding.tolist() for embedding in embeddings]
 
     async def embed_texts_async(self, texts: list[str]) -> list[list[float]]:
         """Run text embedding in an executor to avoid blocking the event loop."""
@@ -81,9 +129,6 @@ class EmbeddingPipeline:
         db_session_factory,
     ) -> list[list[float]]:
         """Embed entities, using cached embeddings where available."""
-        import logging
-
-        logger = logging.getLogger(__name__)
         cache_hits = 0
         to_embed = []
         cached_results = {}

@@ -16,7 +16,7 @@ class Settings(BaseSettings):
     neo4j_password: str = "password"
     qdrant_host: str = "localhost"
     qdrant_port: int = 6333
-    embedding_model: str = "all-MiniLM-L6-v2"
+    embedding_model: str = "BAAI/bge-small-en-v1.5"
     top_k: int = 20
     postgres_url: str = "postgresql+asyncpg://repo_intel:repo_intel@localhost:5433/repo_intel?ssl=disable"
     redis_url: str = "redis://localhost:6379"
@@ -203,7 +203,7 @@ max_trace_depth = 15
 [search]
 qdrant_host = "localhost"
 qdrant_port = 6333
-embedding_model = "all-MiniLM-L6-v2"
+embedding_model = "BAAI/bge-small-en-v1.5"
 # For higher quality at the cost of slower startup and larger downloads:
 # embedding_model = "BAAI/bge-m3"
 top_k = 20
