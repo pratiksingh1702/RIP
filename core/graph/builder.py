@@ -1,7 +1,9 @@
-"""Graph builder."""
+"""Graph builder - optimized for speed with detailed logging."""
 
 from __future__ import annotations
 
+import logging
+import time
 from collections.abc import Iterable
 from pathlib import Path
 from typing import TypeVar
@@ -11,10 +13,11 @@ from core.parser.base import ParsedFile
 from core.projects import DEFAULT_PROJECT_ID
 
 T = TypeVar("T")
+logger = logging.getLogger(__name__)
 
 
 def _chunk_list(lst: Iterable[T], chunk_size: int = 1000) -> Iterable[list[T]]:
-    """Split a list into chunks of specified size."""
+    """Split a list into chunks."""
     chunk = []
     for item in lst:
         chunk.append(item)
@@ -23,6 +26,7 @@ def _chunk_list(lst: Iterable[T], chunk_size: int = 1000) -> Iterable[list[T]]:
             chunk = []
     if chunk:
         yield chunk
+
 
 ENTITY_LABELS = {
     "class": "Class",
@@ -47,51 +51,66 @@ def _symbol_name(fqn: str) -> str:
 
 
 class GraphBuilder:
+    """Optimized graph builder with batched operations and detailed logging."""
+
     def __init__(self, client: Neo4jClient, project_id: str | None = None) -> None:
         self.client = client
         self.project_id = project_id or DEFAULT_PROJECT_ID
-
-    async def build_from_file(self, parsed_file: ParsedFile) -> None:
-        self._stamp_project(parsed_file)
-        await self._upsert_file(parsed_file)
-        for entity in parsed_file.entities:
-            await self._upsert_entity(parsed_file, entity.__dict__)
-        for relationship in parsed_file.relationships:
-            await self._upsert_relationship(relationship.__dict__)
+        self._stats = {"files": 0, "entities": 0, "relationships": 0}
 
     async def build_from_files(
         self,
         parsed_files: list[ParsedFile],
         progress: object | None = None,
     ) -> dict[str, int]:
-        """Batch write parsed files while preserving existing graph semantics."""
+        """Batch write parsed files with maximum speed."""
         if not parsed_files:
             return {"files": 0, "entities": 0, "relationships": 0}
-        for parsed_file in parsed_files:
-            self._stamp_project(parsed_file)
 
-        await self._upsert_files_batch(parsed_files)
-        entity_count = await self._upsert_entities_batch(parsed_files)
-        relationship_count = await self._upsert_relationships_batch(parsed_files)
+        start = time.perf_counter()
+        total_files = len(parsed_files)
+
+        # Stamp all files with project ID
+        for pf in parsed_files:
+            self._stamp_project(pf)
+
+        logger.info("🔗 Graph: Writing %d files to Neo4j...", total_files)
+
+        # Phase 1: Upsert files and modules (fast - one query per batch)
+        file_start = time.perf_counter()
+        await self._upsert_files_batch_fast(parsed_files)
+        file_time = time.perf_counter() - file_start
+        logger.info("   📁 Files/Modules: %.1fs", file_time)
+
+        # Phase 2: Upsert entities (bulk by type)
+        entity_start = time.perf_counter()
+        entity_count = await self._upsert_entities_batch_fast(parsed_files)
+        entity_time = time.perf_counter() - entity_start
+        logger.info("   🔷 Entities (%d): %.1fs (%.0f e/s)",
+                   entity_count, entity_time,
+                   entity_count / entity_time if entity_time > 0 else 0)
+
+        # Phase 3: Upsert relationships (bulk by type)
+        rel_start = time.perf_counter()
+        rel_count = await self._upsert_relationships_batch_fast(parsed_files)
+        rel_time = time.perf_counter() - rel_start
+        logger.info("   🔗 Relations (%d): %.1fs (%.0f r/s)",
+                   rel_count, rel_time,
+                   rel_count / rel_time if rel_time > 0 else 0)
+
+        total_time = time.perf_counter() - start
+        logger.info("✅ Graph: %d files, %d entities, %d rels in %.1fs (%.0f f/s)",
+                   total_files, entity_count, rel_count, total_time,
+                   total_files / total_time if total_time > 0 else 0)
+
         return {
-            "files": len(parsed_files),
+            "files": total_files,
             "entities": entity_count,
-            "relationships": relationship_count,
+            "relationships": rel_count,
         }
 
-    async def delete_file_entities(self, file_path: str, project_id: str | None = None) -> None:
-        project_id = project_id or self.project_id
-        if not project_id:
-            return
-        await self.client.execute(
-            """
-            MATCH (f:File {path: $file_path, project_id: $project_id})-[:CONTAINS]->(entity)
-            DETACH DELETE entity
-            """,
-            {"file_path": file_path, "project_id": project_id},
-        )
-
     def _stamp_project(self, parsed_file: ParsedFile) -> None:
+        """Stamp project ID on all objects."""
         project_id = parsed_file.project_id or self.project_id
         if not project_id:
             raise ValueError("project_id is required for graph indexing")
@@ -101,48 +120,25 @@ class GraphBuilder:
         for relationship in parsed_file.relationships:
             relationship.project_id = project_id
 
-    async def _upsert_file(self, parsed_file: ParsedFile) -> None:
-        await self.client.execute(
-            """
-            MERGE (p:Project {id: $project_id})
-            SET p.name = coalesce(p.name, $project_name),
-                p.root = coalesce(p.root, $project_root),
-                p.language = coalesce(p.language, $language)
-            MERGE (f:File {path: $path, project_id: $project_id})
-            SET f.language = $language,
-                f.sha256_hash = $sha256_hash
-            MERGE (p)-[:CONTAINS]->(f)
-            MERGE (m:Module {module_key: $module_name, project_id: $project_id})
-            SET m.file_path = $path,
-                m.name = $module_name,
-                m.language = $language,
-                m.project_id = $project_id
-            MERGE (p)-[:OWNS]->(m)
-            MERGE (m)-[:REPRESENTS]->(f)
-            """,
-            {
-                "path": parsed_file.file_path,
-                "language": parsed_file.language,
-                "sha256_hash": parsed_file.sha256_hash,
-                "module_name": _module_name(parsed_file.file_path),
-                "project_id": parsed_file.project_id,
-                "project_name": parsed_file.project_id,
-                "project_root": "",
-            },
-        )
+    # ========================================================================
+    # FAST BATCH OPERATIONS
+    # ========================================================================
 
-    async def _upsert_files_batch(self, parsed_files: list[ParsedFile]) -> None:
+    async def _upsert_files_batch_fast(self, parsed_files: list[ParsedFile]) -> None:
+        """Ultra-fast file/module upsert in one query."""
         rows = [
             {
-                "path": parsed_file.file_path,
-                "language": parsed_file.language,
-                "sha256_hash": parsed_file.sha256_hash,
-                "module_name": _module_name(parsed_file.file_path),
-                "project_id": parsed_file.project_id,
+                "path": pf.file_path,
+                "language": pf.language,
+                "sha256_hash": pf.sha256_hash,
+                "module_name": _module_name(pf.file_path),
+                "project_id": pf.project_id,
             }
-            for parsed_file in parsed_files
+            for pf in parsed_files
         ]
-        for chunk in _chunk_list(rows, chunk_size=100):
+        
+        # Use larger chunks (500 files at once)
+        for i, chunk in enumerate(_chunk_list(rows, chunk_size=500)):
             await self.client.execute(
                 """
                 UNWIND $rows AS row
@@ -165,49 +161,35 @@ class GraphBuilder:
                 """,
                 {"rows": chunk},
             )
+            logger.debug("   File batch %d: %d files", i + 1, len(chunk))
 
-    async def _upsert_entity(self, parsed_file: ParsedFile, entity: dict[str, object]) -> None:
-        label = ENTITY_LABELS.get(str(entity["entity_type"]), "Function")
-        await self.client.execute(
-            f"""
-            MATCH (p:Project {{id: $project_id}})
-            MATCH (f:File {{path: $file_path, project_id: $project_id}})
-            MERGE (e:{label} {{fqn: $fqn, project_id: $project_id}})
-            SET e.name = $name,
-                e.file_path = $file_path,
-                e.line_start = $line_start,
-                e.line_end = $line_end,
-                e.language = $language,
-                e.docstring = $docstring,
-                e.decorators = $decorators,
-                e.is_exported = $is_exported,
-                e.raw_code = $raw_code,
-                e.project_id = $project_id
-            MERGE (p)-[:OWNS]->(e)
-            MERGE (f)-[:CONTAINS]->(e)
-            """,
-            {
-                **entity,
-                "file_path": parsed_file.file_path,
-            },
-        )
-
-    async def _upsert_entities_batch(self, parsed_files: list[ParsedFile]) -> int:
+    async def _upsert_entities_batch_fast(self, parsed_files: list[ParsedFile]) -> int:
+        """Fast entity upsert grouped by type."""
         count = 0
-        rows_by_label: dict[str, list[dict[str, object]]] = {}
-        for parsed_file in parsed_files:
-            for entity in parsed_file.entities:
+        rows_by_label: dict[str, list[dict]] = {}
+
+        for pf in parsed_files:
+            for entity in pf.entities:
                 row = {
-                    **entity.__dict__,
-                    "file_path": parsed_file.file_path,
-                    "project_id": parsed_file.project_id,
+                    "fqn": entity.fqn,
+                    "name": entity.name,
+                    "file_path": pf.file_path,
+                    "line_start": entity.line_start,
+                    "line_end": entity.line_end,
+                    "language": pf.language,
+                    "docstring": getattr(entity, 'docstring', ''),
+                    "decorators": getattr(entity, 'decorators', []),
+                    "is_exported": getattr(entity, 'is_exported', False),
+                    "raw_code": getattr(entity, 'raw_code', ''),
+                    "project_id": pf.project_id,
                 }
                 label = ENTITY_LABELS.get(entity.entity_type, "Function")
                 rows_by_label.setdefault(label, []).append(row)
                 count += 1
 
+        # Process each entity type in bulk
         for label, rows in rows_by_label.items():
-            for chunk in _chunk_list(rows, chunk_size=1000):
+            for i, chunk in enumerate(_chunk_list(rows, chunk_size=2000)):
                 await self.client.execute(
                     f"""
                     UNWIND $rows AS row
@@ -229,235 +211,276 @@ class GraphBuilder:
                     """,
                     {"rows": chunk},
                 )
+                logger.debug("   %s batch %d: %d entities", label, i + 1, len(chunk))
+
         return count
 
-    async def _upsert_relationship(self, relationship: dict[str, object]) -> None:
+    async def _upsert_relationships_batch_fast(self, parsed_files: list[ParsedFile]) -> int:
+        """Fast relationship upsert grouped by type."""
+        count = 0
+        rows_by_type: dict[str, list[dict]] = {}
+        ALLOWED = {"CALLS", "IMPORTS", "EXTENDS", "IMPLEMENTS", "CONTAINS"}
+
+        for pf in parsed_files:
+            for rel in pf.relationships:
+                if rel.relationship_type not in ALLOWED:
+                    continue
+                rows_by_type.setdefault(rel.relationship_type, []).append({
+                    "from_fqn": rel.from_fqn,
+                    "to_fqn": rel.to_fqn,
+                    "to_name": _symbol_name(rel.to_fqn),
+                    "file_path": pf.file_path,
+                    "line": rel.line,
+                    "project_id": pf.project_id,
+                })
+                count += 1
+
+        # Process each relationship type
+        queries = {
+            "CALLS": """
+                UNWIND $rows AS row
+                MATCH (source {fqn: row.from_fqn, project_id: row.project_id})
+                MERGE (target:Function {fqn: row.to_fqn, project_id: row.project_id})
+                ON CREATE SET target.name = row.to_name, target.file_path = row.file_path,
+                              target.project_id = row.project_id
+                MERGE (source)-[r:CALLS]->(target)
+                SET r.file_path = row.file_path, r.line = row.line
+            """,
+            "IMPORTS": """
+                UNWIND $rows AS row
+                MATCH (file:File {path: row.file_path, project_id: row.project_id})
+                MERGE (module:Module {module_key: row.to_fqn, project_id: row.project_id})
+                SET module.project_id = row.project_id, module.name = row.to_fqn
+                MERGE (file)-[r:IMPORTS]->(module)
+                SET r.line = row.line
+                WITH row, file, module
+                MATCH (source_module:Module {project_id: row.project_id})-[:REPRESENTS]->(file)
+                MERGE (source_module)-[:DEPENDS_ON]->(module)
+            """,
+            "EXTENDS": """
+                UNWIND $rows AS row
+                MATCH (source:Class {fqn: row.from_fqn, project_id: row.project_id})
+                MERGE (target:Class {name: row.to_name, project_id: row.project_id})
+                ON CREATE SET target.fqn = row.to_fqn, target.file_path = row.file_path,
+                              target.project_id = row.project_id
+                MERGE (source)-[r:EXTENDS]->(target)
+                SET r.file_path = row.file_path, r.line = row.line
+            """,
+            "IMPLEMENTS": """
+                UNWIND $rows AS row
+                MATCH (source:Class {fqn: row.from_fqn, project_id: row.project_id})
+                MERGE (target:Interface {name: row.to_name, project_id: row.project_id})
+                ON CREATE SET target.fqn = row.to_fqn, target.file_path = row.file_path,
+                              target.project_id = row.project_id
+                MERGE (source)-[r:IMPLEMENTS]->(target)
+                SET r.file_path = row.file_path, r.line = row.line
+            """,
+            "CONTAINS": """
+                UNWIND $rows AS row
+                MATCH (source {fqn: row.from_fqn, project_id: row.project_id})
+                MATCH (target {fqn: row.to_fqn, project_id: row.project_id})
+                MERGE (source)-[r:CONTAINS]->(target)
+                SET r.file_path = row.file_path, r.line = row.line
+            """,
+        }
+
+        for rel_type, query in queries.items():
+            if rows := rows_by_type.get(rel_type):
+                for i, chunk in enumerate(_chunk_list(rows, chunk_size=2000)):
+                    await self.client.execute(query, {"rows": chunk})
+                    logger.debug("   %s batch %d: %d rels", rel_type, i + 1, len(chunk))
+
+        return count
+
+    # ========================================================================
+    # SINGLE FILE OPERATIONS (kept for backward compatibility)
+    # ========================================================================
+
+    async def build_from_file(self, parsed_file: ParsedFile) -> None:
+        """Build graph from single file."""
+        self._stamp_project(parsed_file)
+        await self._upsert_file(parsed_file)
+        for entity in parsed_file.entities:
+            await self._upsert_entity(parsed_file, entity.__dict__)
+        for relationship in parsed_file.relationships:
+            await self._upsert_relationship(relationship.__dict__)
+
+    async def _upsert_file(self, parsed_file: ParsedFile) -> None:
+        await self.client.execute(
+            """
+            MERGE (p:Project {id: $project_id})
+            SET p.name = coalesce(p.name, $project_name),
+                p.root = coalesce(p.root, $project_root),
+                p.language = coalesce(p.language, $language)
+            MERGE (f:File {path: $path, project_id: $project_id})
+            SET f.language = $language, f.sha256_hash = $sha256_hash
+            MERGE (p)-[:CONTAINS]->(f)
+            MERGE (m:Module {module_key: $module_name, project_id: $project_id})
+            SET m.file_path = $path, m.name = $module_name,
+                m.language = $language, m.project_id = $project_id
+            MERGE (p)-[:OWNS]->(m)
+            MERGE (m)-[:REPRESENTS]->(f)
+            """,
+            {
+                "path": parsed_file.file_path,
+                "language": parsed_file.language,
+                "sha256_hash": parsed_file.sha256_hash,
+                "module_name": _module_name(parsed_file.file_path),
+                "project_id": parsed_file.project_id,
+                "project_name": parsed_file.project_id,
+                "project_root": "",
+            },
+        )
+
+    async def _upsert_entity(self, parsed_file: ParsedFile, entity: dict) -> None:
+        label = ENTITY_LABELS.get(str(entity["entity_type"]), "Function")
+        await self.client.execute(
+            f"""
+            MATCH (p:Project {{id: $project_id}})
+            MATCH (f:File {{path: $file_path, project_id: $project_id}})
+            MERGE (e:{label} {{fqn: $fqn, project_id: $project_id}})
+            SET e.name = $name, e.file_path = $file_path,
+                e.line_start = $line_start, e.line_end = $line_end,
+                e.language = $language, e.docstring = $docstring,
+                e.decorators = $decorators, e.is_exported = $is_exported,
+                e.raw_code = $raw_code, e.project_id = $project_id
+            MERGE (p)-[:OWNS]->(e)
+            MERGE (f)-[:CONTAINS]->(e)
+            """,
+            {**entity, "file_path": parsed_file.file_path},
+        )
+
+    async def _upsert_relationship(self, relationship: dict) -> None:
         rel_type = str(relationship["relationship_type"])
         row = {**relationship, "to_name": _symbol_name(str(relationship["to_fqn"]))}
-        if rel_type == "CALLS":
-            await self.client.execute(
-                """
+        
+        queries = {
+            "CALLS": """
                 MATCH (source {fqn: $from_fqn, project_id: $project_id})
                 MERGE (target:Function {fqn: $to_fqn, project_id: $project_id})
                 ON CREATE SET target.name = $to_name, target.file_path = $file_path,
                               target.project_id = $project_id
-                MERGE (source)-[r:CALLS]->(target)
-                SET r.file_path = $file_path,
-                    r.line = $line
-                """,
-                row,
-            )
-        elif rel_type == "IMPORTS":
-            await self.client.execute(
-                """
+                MERGE (source)-[r:CALLS]->(target) SET r.file_path = $file_path, r.line = $line
+            """,
+            "IMPORTS": """
                 MATCH (file:File {path: $file_path, project_id: $project_id})
                 MERGE (module:Module {module_key: $to_fqn, project_id: $project_id})
-                SET module.project_id = $project_id,
-                    module.name = $to_fqn
-                MERGE (file)-[r:IMPORTS]->(module)
-                SET r.line = $line
+                SET module.project_id = $project_id, module.name = $to_fqn
+                MERGE (file)-[r:IMPORTS]->(module) SET r.line = $line
                 WITH file, module
                 MATCH (source_module:Module {project_id: $project_id})-[:REPRESENTS]->(file)
                 MERGE (source_module)-[:DEPENDS_ON]->(module)
-                """,
-                row,
-            )
-        elif rel_type == "EXTENDS":
-            await self.client.execute(
-                """
+            """,
+            "EXTENDS": """
                 MATCH (source:Class {fqn: $from_fqn, project_id: $project_id})
                 MERGE (target:Class {name: $to_name, project_id: $project_id})
                 ON CREATE SET target.fqn = $to_fqn, target.file_path = $file_path,
                               target.project_id = $project_id
-                MERGE (source)-[r:EXTENDS]->(target)
-                SET r.file_path = $file_path,
-                    r.line = $line
-                """,
-                row,
-            )
-        elif rel_type == "IMPLEMENTS":
-            await self.client.execute(
-                """
+                MERGE (source)-[r:EXTENDS]->(target) SET r.file_path = $file_path, r.line = $line
+            """,
+            "IMPLEMENTS": """
                 MATCH (source:Class {fqn: $from_fqn, project_id: $project_id})
                 MERGE (target:Interface {name: $to_name, project_id: $project_id})
                 ON CREATE SET target.fqn = $to_fqn, target.file_path = $file_path,
                               target.project_id = $project_id
-                MERGE (source)-[r:IMPLEMENTS]->(target)
-                SET r.file_path = $file_path,
-                    r.line = $line
-                """,
-                row,
-            )
-        elif rel_type == "CONTAINS":
-            await self.client.execute(
-                """
+                MERGE (source)-[r:IMPLEMENTS]->(target) SET r.file_path = $file_path, r.line = $line
+            """,
+            "CONTAINS": """
                 MATCH (source {fqn: $from_fqn, project_id: $project_id})
                 MATCH (target {fqn: $to_fqn, project_id: $project_id})
-                MERGE (source)-[r:CONTAINS]->(target)
-                SET r.file_path = $file_path,
-                    r.line = $line
-                """,
-                row,
-            )
+                MERGE (source)-[r:CONTAINS]->(target) SET r.file_path = $file_path, r.line = $line
+            """,
+        }
+        
+        if query := queries.get(rel_type):
+            await self.client.execute(query, row)
 
-    async def _upsert_relationships_batch(self, parsed_files: list[ParsedFile]) -> int:
-        count = 0
-        rows_by_type: dict[str, list[dict[str, object]]] = {}
-        allowed = {"CALLS", "IMPORTS", "EXTENDS", "IMPLEMENTS", "CONTAINS"}
-        for parsed_file in parsed_files:
-            for relationship in parsed_file.relationships:
-                rel_type = relationship.relationship_type
-                if rel_type not in allowed:
-                    continue
-                rows_by_type.setdefault(rel_type, []).append(
-                    {
-                        **relationship.__dict__,
-                        "to_name": _symbol_name(relationship.to_fqn),
-                        "project_id": relationship.project_id,
-                    }
-                )
-                count += 1
+    async def delete_file_entities(self, file_path: str, project_id: str | None = None) -> None:
+        """Delete all entities for a file."""
+        project_id = project_id or self.project_id
+        if not project_id:
+            return
+        await self.client.execute(
+            """
+            MATCH (f:File {path: $file_path, project_id: $project_id})-[:CONTAINS]->(entity)
+            DETACH DELETE entity
+            """,
+            {"file_path": file_path, "project_id": project_id},
+        )
 
-        if rows := rows_by_type.get("CALLS"):
-            for chunk in _chunk_list(rows, chunk_size=1000):
-                await self.client.execute(
-                    """
-                    UNWIND $rows AS row
-                    MATCH (source {fqn: row.from_fqn, project_id: row.project_id})
-                    MERGE (target:Function {fqn: row.to_fqn, project_id: row.project_id})
-                    ON CREATE SET target.name = row.to_name, target.file_path = row.file_path,
-                                  target.project_id = row.project_id
-                    MERGE (source)-[r:CALLS]->(target)
-                    SET r.file_path = row.file_path,
-                        r.line = row.line
-                    """,
-                    {"rows": chunk},
-                )
-        if rows := rows_by_type.get("IMPORTS"):
-            for chunk in _chunk_list(rows, chunk_size=1000):
-                await self.client.execute(
-                    """
-                    UNWIND $rows AS row
-                    MATCH (file:File {path: row.file_path, project_id: row.project_id})
-                    MERGE (module:Module {module_key: row.to_fqn, project_id: row.project_id})
-                    SET module.project_id = row.project_id,
-                        module.name = row.to_fqn
-                    MERGE (file)-[r:IMPORTS]->(module)
-                    SET r.line = row.line
-                    WITH row, file, module
-                    MATCH (source_module:Module {project_id: row.project_id})-[:REPRESENTS]->(file)
-                    MERGE (source_module)-[:DEPENDS_ON]->(module)
-                    """,
-                    {"rows": chunk},
-                )
-        if rows := rows_by_type.get("EXTENDS"):
-            for chunk in _chunk_list(rows, chunk_size=1000):
-                await self.client.execute(
-                    """
-                    UNWIND $rows AS row
-                    MATCH (source:Class {fqn: row.from_fqn, project_id: row.project_id})
-                    MERGE (target:Class {name: row.to_name, project_id: row.project_id})
-                    ON CREATE SET target.fqn = row.to_fqn, target.file_path = row.file_path,
-                                  target.project_id = row.project_id
-                    MERGE (source)-[r:EXTENDS]->(target)
-                    SET r.file_path = row.file_path,
-                        r.line = row.line
-                    """,
-                    {"rows": chunk},
-                )
-        if rows := rows_by_type.get("IMPLEMENTS"):
-            for chunk in _chunk_list(rows, chunk_size=1000):
-                await self.client.execute(
-                    """
-                    UNWIND $rows AS row
-                    MATCH (source:Class {fqn: row.from_fqn, project_id: row.project_id})
-                    MERGE (target:Interface {name: row.to_name, project_id: row.project_id})
-                    ON CREATE SET target.fqn = row.to_fqn, target.file_path = row.file_path,
-                                  target.project_id = row.project_id
-                    MERGE (source)-[r:IMPLEMENTS]->(target)
-                    SET r.file_path = row.file_path,
-                        r.line = row.line
-                    """,
-                    {"rows": chunk},
-                )
-        if rows := rows_by_type.get("CONTAINS"):
-            for chunk in _chunk_list(rows, chunk_size=1000):
-                await self.client.execute(
-                    """
-                    UNWIND $rows AS row
-                    MATCH (source {fqn: row.from_fqn, project_id: row.project_id})
-                    MATCH (target {fqn: row.to_fqn, project_id: row.project_id})
-                    MERGE (source)-[r:CONTAINS]->(target)
-                    SET r.file_path = row.file_path,
-                        r.line = row.line
-                    """,
-                    {"rows": chunk},
-                )
-        return count
+    # ========================================================================
+    # GIT DATA
+    # ========================================================================
 
     async def build_git_data(self, repo_path: Path) -> None:
-        """Extract and insert Git commits, developers, modifications, and ownership info."""
+        """Extract and insert Git data."""
         import anyio
-
         from core.graph.queries.ownership import (
-            create_developer_and_commit,
-            relate_commit_to_file,
-            set_file_ownership,
+            create_developer_and_commit, relate_commit_to_file, set_file_ownership,
         )
         from core.parser.git_ingestor import GitIngestor
+
+        logger.info("📊 Git: Extracting commit history...")
+        git_start = time.perf_counter()
 
         repo_path = await anyio.to_thread.run_sync(lambda p: p.resolve(), repo_path)
         ingestor = GitIngestor(repo_path)
         if not ingestor.is_git_repo:
+            logger.info("   ⚠ Not a git repository - skipping")
             return
 
         commits = ingestor.get_commits(limit=100)
+        commit_count = 0
         for commit in commits:
             await create_developer_and_commit(
-                self.client,
-                commit_hash=commit.hash,
-                message=commit.message,
+                self.client, commit_hash=commit.hash, message=commit.message,
                 timestamp_str=commit.timestamp.isoformat(),
-                author_name=commit.author_name,
-                author_email=commit.author_email,
+                author_name=commit.author_name, author_email=commit.author_email,
             )
             for file_path in commit.files_modified:
                 abs_path = await anyio.to_thread.run_sync(
                     lambda r, f: str((r / f).resolve()), repo_path, file_path
                 )
                 await relate_commit_to_file(self.client, commit.hash, abs_path)
+            commit_count += 1
 
+        logger.info("   📝 %d commits processed", commit_count)
+
+        # Ownership data
         if not self.project_id:
+            logger.info("   ⚠ No project ID - skipping ownership")
             return
+
         records = await self.client.execute(
             "MATCH (f:File {project_id: $project_id}) RETURN f.path AS path",
             {"project_id": self.project_id},
         )
+        
         repo_str = str(repo_path)
+        ownership_count = 0
         for record in records:
             path = record.get("path")
             if not path:
                 continue
-            path_obj = await anyio.to_thread.run_sync(
-                lambda p: Path(p).resolve(), path
-            )
+            path_obj = await anyio.to_thread.run_sync(lambda p: Path(p).resolve(), path)
             if not str(path_obj).startswith(repo_str):
-                continue  # Not in current repo at all, skip everything
+                continue
             try:
-                await anyio.to_thread.run_sync(
-                    lambda po, rp: po.relative_to(rp),
-                    path_obj, repo_path
-                )
+                await anyio.to_thread.run_sync(lambda po, rp: po.relative_to(rp), path_obj, repo_path)
             except ValueError:
-                continue  # Not in current repo, skip
+                continue
 
             ownership = ingestor.get_file_ownership(path)
             for owner in ownership:
                 await set_file_ownership(
-                    self.client,
-                    file_path=path,
+                    self.client, file_path=path,
                     author_email=owner.developer_email,
                     author_name=owner.developer_name,
                     percentage=owner.percentage,
                     line_count=owner.line_count,
                 )
+                ownership_count += 1
+
+        git_time = time.perf_counter() - git_start
+        logger.info("✅ Git: %d commits, %d ownerships in %.1fs",
+                   commit_count, ownership_count, git_time)

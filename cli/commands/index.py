@@ -1,4 +1,4 @@
-"""Index repository command."""
+"""Index repository command - fixed async, prints all logs, instant skip feedback."""
 
 from __future__ import annotations
 
@@ -6,17 +6,23 @@ import asyncio
 import logging
 import signal
 import sys
+import time
+import threading
 from datetime import datetime
 from pathlib import Path
 
 from rich.console import Console
 from rich.table import Table
+from rich.live import Live
+from rich.panel import Panel
 from watchdog.events import FileSystemEvent, FileSystemEventHandler
 from watchdog.observers import Observer
 
 from core.graph.client import Neo4jClient
 from core.indexer.incremental import incremental_index
-from core.indexer.pipeline import IndexProgress, IndexPipeline
+from core.indexer.pipeline import (
+    IndexProgress, IndexPipeline, request_skip
+)
 from core.parser.registry import build_default_registry
 from core.storage.database import async_session_factory
 from server.config import get_settings
@@ -24,6 +30,90 @@ from server.config import get_settings
 console = Console()
 logger = logging.getLogger(__name__)
 
+# ============================================================================
+# CONSOLE LOG HANDLER - Prints logs directly to console
+# ============================================================================
+
+class ConsoleLogHandler(logging.Handler):
+    """Custom handler that prints ALL parser/pipeline logs to Rich console."""
+    
+    COLORS = {
+        logging.DEBUG: "dim",
+        logging.INFO: "white",
+        logging.WARNING: "yellow",
+        logging.ERROR: "red",
+        logging.CRITICAL: "bold red",
+    }
+    
+    def emit(self, record):
+        try:
+            msg = self.format(record)
+            color = self.COLORS.get(record.levelno, "white")
+            
+            # Show ALL logs from our packages
+            if record.name.startswith(("core.", "cli.")):
+                if record.levelno >= logging.WARNING:
+                    console.print(f"[{color}]⚠ {msg}[/{color}]")
+                else:
+                    console.print(f"[{color}]{msg}[/{color}]")
+        except Exception:
+            pass
+# ============================================================================
+# SKIP LISTENER WITH IMMEDIATE FEEDBACK
+# ============================================================================
+
+_skip_pressed_count = 0
+
+def _listen_for_skip():
+    """Listen for 's' key with immediate console feedback."""
+    global _skip_pressed_count
+    try:
+        import msvcrt
+        while True:
+            if msvcrt.kbhit():
+                key = msvcrt.getch().lower()
+                if key == b's':
+                    _skip_pressed_count += 1
+                    request_skip()
+                    console.print(f"\n[yellow]⏭ SKIP REQUESTED (#{_skip_pressed_count}) - moving to next file...[/yellow]")
+    except (ImportError, OSError):
+        pass
+
+
+def _listen_for_skip_unix():
+    """Unix skip listener."""
+    global _skip_pressed_count
+    try:
+        import termios, tty
+        fd = sys.stdin.fileno()
+        old = termios.tcgetattr(fd)
+        tty.setcbreak(fd)
+        try:
+            while True:
+                if sys.stdin.read(1).lower() == 's':
+                    _skip_pressed_count += 1
+                    request_skip()
+                    console.print(f"\n[yellow]⏭ SKIP (#{_skip_pressed_count})[/yellow]")
+        finally:
+            termios.tcsetattr(fd, termios.TCSADRAIN, old)
+    except (ImportError, OSError):
+        pass
+
+
+def start_skip_listener():
+    """Start skip listener."""
+    try:
+        import msvcrt
+        target = _listen_for_skip
+    except ImportError:
+        target = _listen_for_skip_unix
+    t = threading.Thread(target=target, daemon=True)
+    t.start()
+
+
+# ============================================================================
+# COMMAND ENTRY
+# ============================================================================
 
 def index(
     repo_path: Path = Path("."),
@@ -37,15 +127,15 @@ def index(
     repo_path = repo_path.resolve()
     log_path = _configure_verbose_logging(repo_path) if verbose else None
     if log_path:
-        console.print(f"[dim]Verbose index log: {log_path}[/dim]")
+        console.print(f"[dim]Verbose log: {log_path}[/dim]")
     if watch:
-        console.print(f"[cyan]Starting watch mode on {repo_path}...[/cyan]")
+        console.print(f"[cyan]Watch mode on {repo_path}...[/cyan]")
         _watch_mode(repo_path, verbose=verbose)
     elif incremental:
-        console.print(f"[cyan]Starting incremental index on {repo_path}...[/cyan]")
+        console.print(f"[cyan]Incremental index on {repo_path}...[/cyan]")
         asyncio.run(_incremental_index(repo_path, verbose=verbose))
     else:
-        console.print(f"[cyan]Starting full index on {repo_path}...[/cyan]")
+        console.print(f"[cyan]Full index on {repo_path}...[/cyan]")
         asyncio.run(_index(repo_path, verbose=verbose, log_path=log_path))
 
 
@@ -53,230 +143,254 @@ def _configure_verbose_logging(repo_path: Path) -> Path:
     log_dir = repo_path / ".repo-intel" / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)
     log_path = log_dir / f"index-{datetime.now().strftime('%Y%m%d-%H%M%S')}.log"
-
+    # In _configure_verbose_logging, make sure these are NOT suppressed:
+    logging.getLogger("core.parser").setLevel(logging.WARNING)  # Show WARNING and above
+    logging.getLogger("core.parser.languages").setLevel(logging.WARNING)
     root_logger = logging.getLogger()
     root_logger.setLevel(logging.DEBUG)
-    for handler in list(root_logger.handlers):
-        if getattr(handler, "_rip_verbose_handler", False):
-            root_logger.removeHandler(handler)
+    
+    # Remove old handlers
+    for h in list(root_logger.handlers):
+        if getattr(h, "_rip_verbose_handler", False):
+            root_logger.removeHandler(h)
 
-    formatter = logging.Formatter(
-        "%(asctime)s %(levelname)-8s %(name)s:%(lineno)d - %(message)s"
-    )
-    file_handler = logging.FileHandler(log_path, encoding="utf-8")
-    file_handler.setLevel(logging.DEBUG)
-    file_handler.setFormatter(formatter)
-    file_handler._rip_verbose_handler = True  # type: ignore[attr-defined]
+    fmt = logging.Formatter("%(asctime)s %(levelname)-7s %(name)s - %(message)s", datefmt="%H:%M:%S")
+    
+    # File handler
+    fh = logging.FileHandler(log_path, encoding="utf-8")
+    fh.setLevel(logging.DEBUG)
+    fh.setFormatter(fmt)
+    fh._rip_verbose_handler = True
+    root_logger.addHandler(fh)
+    
+    # Console handler - shows logs directly in terminal
+    ch = ConsoleLogHandler()
+    ch.setLevel(logging.INFO)
+    ch.setFormatter(logging.Formatter("%(message)s"))
+    ch._rip_verbose_handler = True
+    root_logger.addHandler(ch)
 
-    console_handler = logging.StreamHandler(sys.stderr)
-    console_handler.setLevel(logging.INFO)
-    console_handler.setFormatter(formatter)
-    console_handler._rip_verbose_handler = True  # type: ignore[attr-defined]
+    # Reduce noise from libraries
+    for noisy in ['watchdog', 'httpx', 'httpcore', 'urllib3', 'neo4j', 'neo4j.io', 'neo4j.pool']:
+        logging.getLogger(noisy).setLevel(logging.WARNING)
 
-    root_logger.addHandler(file_handler)
-    root_logger.addHandler(console_handler)
-    logging.getLogger("watchdog").setLevel(logging.INFO)
-    logging.getLogger("httpx").setLevel(logging.WARNING)
-    logging.getLogger("httpcore").setLevel(logging.WARNING)
-    logging.getLogger("neo4j.notifications").setLevel(logging.WARNING)
-    logging.getLogger("neo4j.io").setLevel(logging.WARNING)
-    logging.getLogger("neo4j.pool").setLevel(logging.WARNING)
     logger.info("Verbose logging enabled: %s", log_path)
     return log_path
 
+
+# ============================================================================
+# DISPLAY - Shows current file + recent warnings
+# ============================================================================
+
+def _make_display(repo_path: Path, p: IndexProgress) -> Panel:
+    """Detailed status panel showing current file and recent warnings."""
+    stage = p.current_stage or "Starting"
+    elapsed = p.get_stage_elapsed()
+    status = p.status_message or ""
+    fname = ""
+
+    if p.current_parsing_file:
+        try:
+            fname = Path(p.current_parsing_file).name
+        except Exception:
+            fname = str(p.current_parsing_file)
+
+    lines = [
+        f"[bold cyan]📂 {repo_path.name}[/bold cyan]",
+        f"[bold yellow]⚡ {stage}[/bold yellow] [dim]({elapsed:.0f}s)[/dim]",
+        f"[dim]{status[:120]}[/dim]",
+        "",
+    ]
+
+    # Progress bar
+    if p.files_scanned > 0:
+        pct = min(p.files_parsed / max(p.files_scanned, 1) * 100, 100)
+        bar_len = 30
+        filled = int(bar_len * pct / 100)
+        bar = "█" * filled + "░" * (bar_len - filled)
+        lines.append(f"[dim]Progress:[/dim] {bar} {p.files_parsed}/{p.files_scanned} ({pct:.0f}%)")
+
+    if p.entities_extracted > 0 and p.embeddings_generated > 0:
+        epct = min(p.embeddings_generated / max(p.entities_extracted, 1) * 100, 100)
+        ebar_len = 30
+        efilled = int(ebar_len * epct / 100)
+        ebar = "█" * efilled + "░" * (ebar_len - efilled)
+        lines.append(f"[dim]Embeds:[/dim]   {ebar} {p.embeddings_generated}/{p.entities_extracted} ({epct:.0f}%)")
+
+    lines.append("")
+    lines.append(
+        f"📊 Entities: {p.entities_extracted:,} | Relations: {p.relationships_extracted:,} | "
+        f"Neo4j: {p.neo4j_entities_written:,} | Emb: {p.embeddings_generated:,}"
+    )
+    lines.append(
+        f"⚠ Warnings: {p.parse_errors} | ⏭ Skipped: {len(p.skipped_files)} | "
+        f"💾 Mem: {p.memory_mb:.0f}MB | 📦 Batches: {p.batches_completed}"
+    )
+    lines.append("")
+
+    # Current file
+    if fname:
+        lines.append(f"[bold]📝 NOW:[/bold] [cyan]{fname}[/cyan]")
+        if p.current_file_size > 0:
+            sz = p.current_file_size / 1024
+            lines.append(f"   Size: {sz:.1f}KB | Time: {p.current_file_duration:.1f}s | Entities: {p.current_file_entities}")
+        if p.current_file_duration > 5:
+            lines.append(f"   [yellow]⚠ SLOW FILE - taking {p.current_file_duration:.0f}s...[/yellow]")
+        if p.current_file_duration > 15:
+            lines.append(f"   [bold red]🐌 VERY SLOW - Press 's' to skip![/bold red]")
+        lines.append("")
+
+    lines.append("[dim]Press [bold yellow]'s'[/bold yellow] to skip current file | Skipped so far: {}[/dim]".format(len(p.skipped_files)))
+
+    # Recent warnings (last 5)
+    if p.warnings:
+        lines.append("")
+        lines.append("[bold yellow]Recent warnings:[/bold yellow]")
+        for w in p.warnings[-5:]:
+            # Truncate long warnings
+            short_w = w[:100] + "..." if len(w) > 100 else w
+            lines.append(f"  [dim]{short_w}[/dim]")
+
+    # Recent skips
+    if p.skipped_files:
+        lines.append("")
+        lines.append("[yellow]Recently skipped:[/yellow]")
+        for sf in p.skipped_files[-3:]:
+            try:
+                lines.append(f"  ⏭ [dim]{Path(sf).name}[/dim]")
+            except Exception:
+                lines.append(f"  ⏭ [dim]{sf}[/dim]")
+
+    return Panel("\n".join(lines), title="[bold]🔍 Repository Indexing[/bold]",
+                  border_style="cyan", padding=(1, 2))
+
+
+# ============================================================================
+# MAIN INDEX
+# ============================================================================
 
 async def _index(
     repo_path: Path,
     verbose: bool = False,
     log_path: Path | None = None,
 ) -> None:
-    from rich.console import Group
-    from rich.live import Live
-    from rich.panel import Panel
-    from rich.progress import (
-        BarColumn,
-        MofNCompleteColumn,
-        Progress,
-        SpinnerColumn,
-        TextColumn,
-        TimeElapsedColumn,
-        TimeRemainingColumn,
-    )
-    from rich.text import Text
-
-    progress = Progress(
-        SpinnerColumn(),
-        TextColumn("[progress.description]{task.description}"),
-        BarColumn(),
-        MofNCompleteColumn(),
-        TimeElapsedColumn(),
-        TimeRemainingColumn(),
-    )
-    index_progress = IndexProgress()
-    parsing_task = progress.add_task("Starting...", total=None)
     settings = get_settings()
     client = Neo4jClient(settings.neo4j_uri, settings.neo4j_user, settings.neo4j_password)
-    logger.info("Starting full index: repo_path=%s verbose=%s", repo_path, verbose)
 
-    def make_display():
-        header = Text.from_markup(f"[bold cyan]Indexing:[/bold cyan] {repo_path}")
-        status = Text.from_markup(
-            f"[bold]Phase:[/bold] {index_progress.current_stage}  "
-            f"[dim]{index_progress.status_message}[/dim]"
-        )
+    p = IndexProgress()
+    p.current_stage = "Connecting"
+    p.status_message = "Connecting to Neo4j..."
+    p.stage_start_time = time.perf_counter()
 
-        stats = Table.grid(expand=True)
-        stats.add_column(ratio=1)
-        stats.add_column(ratio=1)
-        stats.add_column(ratio=1)
-        stats.add_row(
-            f"Files: {index_progress.files_parsed}/{index_progress.files_scanned}",
-            f"Skipped: {index_progress.files_skipped}",
-            f"Warnings: {index_progress.parse_errors}",
-        )
-        stats.add_row(
-            f"Entities: {index_progress.entities_extracted}",
-            f"Relationships: {index_progress.relationships_extracted}",
-            f"Neo4j rels: {index_progress.neo4j_relationships_written}",
-        )
-        stats.add_row(
-            f"Neo4j files: {index_progress.neo4j_files_written}",
-            f"Qdrant deleted: {index_progress.qdrant_points_deleted}",
-            f"Embeddings: {index_progress.embeddings_generated}",
-        )
+    start_skip_listener()
+    console.print("[yellow]Starting index...[/yellow]")
+    console.print("[dim]Press [bold yellow]'s'[/bold yellow] to skip stuck files[/dim]")
+    console.print()
 
-        notes = []
-        struct_ready = (
-            index_progress.neo4j_entities_written > 0
-            and index_progress.embeddings_generated < index_progress.entities_extracted
-        )
-        if struct_ready:
-            notes.append(
-                Text.from_markup(
-                    "[green]Structural analysis complete![/green] Semantic index running in background."
-                )
-            )
-        if index_progress.current_parsing_file:
-            notes.append(
-                Text.from_markup(
-                    f"[dim]Current file:[/dim] {index_progress.current_parsing_file}"
-                )
-            )
-        if not notes:
-            notes.append(
-                Text.from_markup(
-                    "[dim]I am working; counters will rise as each stage completes.[/dim]"
-                )
-            )
+    try:
+        await client.connect()
+        logger.info("Connected to Neo4j")
 
-        return Panel(
-            Group(header, status, stats, progress, *notes),
-            title="Repository Indexing",
-            border_style="cyan",
-        )
+        pipeline = IndexPipeline()
 
-    with Live(make_display(), refresh_per_second=10):
-        try:
-            index_progress.current_stage = "Connecting graph"
-            index_progress.status_message = f"Connecting to Neo4j at {settings.neo4j_uri}."
-            progress.update(parsing_task, description="Connecting to Neo4j...", total=None)
-            await client.connect()
-            logger.info("Connected to Neo4j: %s", settings.neo4j_uri)
-            pipeline = IndexPipeline()
-            console.print("[yellow]Starting full indexing (waiting for semantic indexing to complete)...[/yellow]")
-            result = await pipeline.run(
-                repo_path,
-                client,
-                background=False,  # Wait for semantic indexing to complete!
-                progress=index_progress,
-                rich_progress=progress,
-                rich_task=parsing_task,
-            )
-            logger.info(
-                "Index complete: phase=%s files=%s entities=%s relationships=%s",
-                result.phase,
-                result.files_indexed,
-                result.progress.entities_extracted,
-                result.progress.relationships_extracted,
-            )
-            progress.update(parsing_task, description="Index complete!", visible=False)
-            console.print()
-            console.print(
-                Panel(
-                    f"[green]Indexed {result.files_indexed} files and "
-                    f"{result.progress.entities_extracted} entities.[/green]"
-                )
-            )
-            _print_index_progress(result.progress)
-            _print_index_timing(result.progress)
-        except Exception:
-            logger.exception("Full index failed for %s", repo_path)
-            if log_path:
-                console.print(f"[red]Index failed. Full verbose log:[/red] {log_path}")
-            raise
-        finally:
-            await client.close()
-            logger.info("Closed Neo4j connection")
+        with Live(_make_display(repo_path, p), refresh_per_second=4,
+                  console=console, transient=False, screen=False) as live:
+
+            async def updater():
+                while True:
+                    live.update(_make_display(repo_path, p))
+                    await asyncio.sleep(0.25)
+
+            task = asyncio.create_task(updater())
+            try:
+                result = await pipeline.run(repo_path, client, background=False, progress=p)
+            finally:
+                task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
+
+            p.current_stage = "Complete"
+            p.status_message = "Done!"
+            live.update(_make_display(repo_path, p))
+            await asyncio.sleep(0.5)
+
+        # Results
+        console.print()
+        console.print(Panel(
+            f"[green]✅ {result.files_indexed} files indexed[/green]\n"
+            f"[green]✅ {result.progress.entities_extracted} entities extracted[/green]\n"
+            f"[green]✅ {result.progress.embeddings_generated} embeddings generated[/green]",
+            title="[bold]Index Complete[/bold]", border_style="green"))
+
+        if p.skipped_files:
+            console.print(f"\n[yellow]⚠ Skipped {len(p.skipped_files)} files:[/yellow]")
+            for sf in p.skipped_files[:10]:
+                console.print(f"  [dim]{sf}[/dim]")
+
+        if p.warnings:
+            console.print(f"\n[yellow]⚠ {len(p.warnings)} warnings (check log for details)[/yellow]")
+
+        # Timing
+        timing = p.timing_summary()
+        console.print("\n[bold]⏱️  Timing:[/bold]")
+        total = timing.get("Total", 1)
+        for label, sec in timing.items():
+            pct = (sec / total * 100) if total > 0 else 0
+            bar = "█" * int(pct / 5) + "░" * (20 - int(pct / 5))
+            console.print(f"  {label:12} {bar} {sec:.1f}s ({pct:.0f}%)")
+
+        # Stats
+        console.print()
+        t = Table(show_header=False, box=None, padding=(0, 2))
+        t.add_column(style="dim")
+        t.add_column(justify="right", style="cyan")
+        for label, val in [
+            ("Files scanned", p.files_scanned),
+            ("Files parsed", p.files_parsed),
+            ("Files skipped", len(p.skipped_files)),
+            ("Parse warnings", p.parse_errors),
+            ("Entities", p.entities_extracted),
+            ("Relationships", p.relationships_extracted),
+            ("Neo4j entities", p.neo4j_entities_written),
+            ("Embeddings", p.embeddings_generated),
+        ]:
+            t.add_row(f"  {label}:", f"{val:,}")
+        console.print(t)
+
+    except Exception:
+        logger.exception("Index failed")
+        if log_path:
+            console.print(f"\n[red]❌ Failed. Full log: {log_path}[/red]")
+        raise
+    finally:
+        await client.close()
 
 
-def _print_index_progress(progress: IndexProgress) -> None:
-    table = Table(title="Index Progress")
-    table.add_column("Metric")
-    table.add_column("Count", justify="right")
-    rows = {
-        "Files scanned": progress.files_scanned,
-        "Files skipped": progress.files_skipped,
-        "Files parsed": progress.files_parsed,
-        "Parse warnings": progress.parse_errors,
-        "Entities extracted": progress.entities_extracted,
-        "Relationships extracted": progress.relationships_extracted,
-        "Neo4j files written": progress.neo4j_files_written,
-        "Neo4j entities written": progress.neo4j_entities_written,
-        "Neo4j relationships written": progress.neo4j_relationships_written,
-        "Embeddings generated": progress.embeddings_generated,
-        "Qdrant points deleted": progress.qdrant_points_deleted,
-        "Qdrant vectors stored": progress.qdrant_vectors_stored,
-    }
-    for label, value in rows.items():
-        table.add_row(label, str(value))
-    console.print(table)
-
-
-def _print_index_timing(progress: IndexProgress) -> None:
-    table = Table(title="Index Timing")
-    table.add_column("Stage")
-    table.add_column("Duration", justify="right")
-    for label, seconds in progress.timing_summary().items():
-        table.add_row(label, f"{seconds:.2f} sec")
-    console.print(table)
-
+# ============================================================================
+# INCREMENTAL
+# ============================================================================
 
 async def _incremental_index(repo_path: Path, verbose: bool = False) -> None:
     settings = get_settings()
-    neo_client = Neo4jClient(settings.neo4j_uri, settings.neo4j_user, settings.neo4j_password)
-    logger.info("Starting incremental index: repo_path=%s verbose=%s", repo_path, verbose)
-    await neo_client.connect()
-    registry = build_default_registry()
+    neo = Neo4jClient(settings.neo4j_uri, settings.neo4j_user, settings.neo4j_password)
+    await neo.connect()
+    reg = build_default_registry()
     try:
-        with console.status(
-            "[bold blue]Running incremental index...[/bold blue]",
-            spinner="dots",
-        ):
-            async with async_session_factory() as db_session:
-                results = await incremental_index(repo_path, neo_client, db_session, registry)
-        logger.info("Incremental index completed: %s", results)
-        console.print(
-            f"[green]Incremental index complete: {results['updated']} updated, "
-            f"{results['deleted']} deleted, {results['skipped']} unchanged.[/green]"
-        )
+        with console.status("[bold blue]Incremental index...[/bold blue]", spinner="dots"):
+            async with async_session_factory() as db:
+                r = await incremental_index(repo_path, neo, db, reg)
+        console.print(f"[green]✅ {r['updated']} updated, {r['deleted']} deleted, {r['skipped']} skipped[/green]")
     finally:
-        await neo_client.close()
-        logger.info("Closed Neo4j connection")
+        await neo.close()
 
+
+# ============================================================================
+# WATCH MODE
+# ============================================================================
 
 class RepoChangeHandler(FileSystemEventHandler):
-    """Watchdog event handler for repo changes."""
-
     def __init__(self, repo_path: Path):
         super().__init__()
         self.repo_path = repo_path
@@ -285,91 +399,59 @@ class RepoChangeHandler(FileSystemEventHandler):
     def on_any_event(self, event: FileSystemEvent) -> None:
         if event.is_directory:
             return
-        path = Path(event.src_path)
-        if (
-            any(p in path.parts for p in (".git", "__pycache__", ".venv"))
-            or path.suffix in (".pyc", ".pyo")
-        ):
+        p = Path(event.src_path)
+        if any(x in p.parts for x in (".git", "__pycache__", ".venv", ".repo-intel")):
             return
-        logger.debug("Change detected: %s", event)
+        if p.suffix in (".pyc", ".pyo"):
+            return
         self._pending = True
 
 
 def _watch_mode(repo_path: Path, verbose: bool = False) -> None:
-    """Watch directory for changes and run incremental indexes."""
-    from rich.live import Live
-    from rich.panel import Panel
-    from rich.text import Text
-
     handler = RepoChangeHandler(repo_path)
-    logger.info("Starting watch mode: repo_path=%s verbose=%s", repo_path, verbose)
     observer = Observer()
     observer.schedule(handler, str(repo_path), recursive=True)
     observer.start()
-    recent_updates = []
+    recent = []
 
-    def make_display():
-        lines = [Text(f"[bold]Watching repository: {repo_path}[/bold]")]
-        if recent_updates:
-            lines.append(Text("\nRecent updates:"))
-            for _, msg in recent_updates[-3:]:
-                lines.append(Text(f"  {msg}"))
-        lines.append(Text("\n[dim]Press Ctrl+C to stop[/dim]"))
-        return Panel("\n".join([str(line) for line in lines]), title="Repo Watch")
+    def display():
+        lines = [f"[bold]👀 Watching: {repo_path}[/bold]"]
+        if recent:
+            lines.append("\nRecent:")
+            for _, msg in recent[-3:]:
+                lines.append(f"  {msg}")
+        lines.append("\n[dim]Ctrl+C to stop[/dim]")
+        return Panel("\n".join(lines), title="Watch")
 
-    async def watch_loop():
-        settings = get_settings()
-        neo_client = Neo4jClient(settings.neo4j_uri, settings.neo4j_user, settings.neo4j_password)
-        registry = build_default_registry()
-        await neo_client.connect()
+    async def loop():
+        s = get_settings()
+        neo = Neo4jClient(s.neo4j_uri, s.neo4j_user, s.neo4j_password)
+        reg = build_default_registry()
+        await neo.connect()
         try:
             while True:
                 await asyncio.sleep(2)
                 if handler._pending:
                     handler._pending = False
-                    recent_updates.append((asyncio.get_event_loop().time(), "Change detected..."))
+                    recent.append((time.time(), "🔄 Change detected..."))
                     try:
-                        async with async_session_factory() as db_session:
-                            results = await incremental_index(
-                                repo_path,
-                                neo_client,
-                                db_session,
-                                registry,
-                            )
-                        recent_updates.append(
-                            (
-                                asyncio.get_event_loop().time(),
-                                (
-                                    f"[green]Index complete: {results['updated']} updated, "
-                                    f"{results['deleted']} deleted[/green]"
-                                ),
-                            )
-                        )
-                    except Exception as exc:
-                        recent_updates.append(
-                            (
-                                asyncio.get_event_loop().time(),
-                                f"[red]Error: {exc}[/red]",
-                            )
-                        )
-                        logger.error("Error during watch index: %s", exc, exc_info=True)
+                        async with async_session_factory() as db:
+                            r = await incremental_index(repo_path, neo, db, reg)
+                        recent.append((time.time(), f"[green]✅ {r['updated']} updated[/green]"))
+                    except Exception as e:
+                        recent.append((time.time(), f"[red]❌ {e}[/red]"))
         finally:
-            await neo_client.close()
+            await neo.close()
 
-    loop = asyncio.get_event_loop()
+    eloop = asyncio.get_event_loop()
     try:
         for sig in (signal.SIGINT, signal.SIGTERM):
-            loop.add_signal_handler(sig, lambda: loop.stop())
-        loop.create_task(watch_loop())
-        with Live(make_display(), refresh_per_second=1):
-            loop.run_forever()
+            eloop.add_signal_handler(sig, lambda: eloop.stop())
+        eloop.create_task(loop())
+        with Live(display(), refresh_per_second=1):
+            eloop.run_forever()
     except KeyboardInterrupt:
-        console.print("\n[yellow]Stopping watch mode...[/yellow]")
+        console.print("\n[yellow]Stopping...[/yellow]")
     finally:
         observer.stop()
         observer.join()
-        pending = asyncio.all_tasks(loop)
-        for task in pending:
-            task.cancel()
-        loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
-        loop.close()
