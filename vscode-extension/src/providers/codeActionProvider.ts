@@ -20,7 +20,7 @@ export class CodeActionProvider implements vscode.CodeActionProvider {
     if (wordRange) {
       const traceAction = new vscode.CodeAction('RIP: Trace Symbol', vscode.CodeActionKind.Refactor);
       traceAction.command = {
-        command: 'repoIntel.trace',
+        command: 'rip.trace',
         title: 'Trace Symbol',
         arguments: [document.getText(wordRange)],
       };
@@ -28,7 +28,7 @@ export class CodeActionProvider implements vscode.CodeActionProvider {
 
       const impactAction = new vscode.CodeAction('RIP: Impact Analysis', vscode.CodeActionKind.Refactor);
       impactAction.command = {
-        command: 'repoIntel.impact',
+        command: 'rip.impact',
         title: 'Impact Analysis',
         arguments: [document.getText(wordRange)],
       };
@@ -36,7 +36,7 @@ export class CodeActionProvider implements vscode.CodeActionProvider {
 
       const explainAction = new vscode.CodeAction('RIP: Explain Symbol', vscode.CodeActionKind.Refactor);
       explainAction.command = {
-        command: 'repoIntel.explain',
+        command: 'rip.explain',
         title: 'Explain Symbol',
         arguments: [document.getText(wordRange)],
       };

@@ -1,22 +1,120 @@
 {
   "name": "repo-intelligence",
   "displayName": "Repository Intelligence",
-  "description": "Repository Intelligence Platform VS Code extension",
-  "version": "0.1.0",
+  "description": "RIP code intelligence chat for VS Code",
+  "version": "0.2.0",
   "engines": {
     "vscode": "^1.90.0"
   },
-  "categories": ["Other"],
-  "activationEvents": ["onStartupFinished"],
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished",
+    "onCommand:rip.openChat"
+  ],
   "main": "./dist/extension.js",
   "contributes": {
     "commands": [
-      {"command": "repoIntel.trace", "title": "RIP: Trace Symbol"},
-      {"command": "repoIntel.impact", "title": "RIP: Impact Analysis"},
-      {"command": "repoIntel.explain", "title": "RIP: Explain Symbol"},
-      {"command": "repoIntel.showArchitecture", "title": "RIP: Show Architecture"},
-      {"command": "repoIntel.showDependencyGraph", "title": "RIP: Show Dependency Graph"}
-    ]
+      {
+        "command": "rip.openChat",
+        "title": "RIP: Open Chat Panel"
+      },
+      {
+        "command": "rip.explain",
+        "title": "RIP: Explain Selected"
+      },
+      {
+        "command": "rip.trace",
+        "title": "RIP: Trace Selected"
+      },
+      {
+        "command": "rip.impact",
+        "title": "RIP: Impact Analysis"
+      },
+      {
+        "command": "rip.search",
+        "title": "RIP: Search Codebase"
+      },
+      {
+        "command": "rip.showArchitecture",
+        "title": "RIP: Architecture"
+      },
+      {
+        "command": "rip.showMetrics",
+        "title": "RIP: Metrics Dashboard"
+      },
+      {
+        "command": "rip.indexRepo",
+        "title": "RIP: Index Repository"
+      },
+      {
+        "command": "rip.checkStatus",
+        "title": "RIP: Check Status"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "rip.openChat",
+        "key": "ctrl+shift+r",
+        "mac": "cmd+shift+r",
+        "when": "workspaceFolderCount > 0"
+      }
+    ],
+    "menus": {
+      "editor/context": [
+        {
+          "command": "rip.explain",
+          "group": "rip@1",
+          "when": "editorTextFocus"
+        },
+        {
+          "command": "rip.trace",
+          "group": "rip@2",
+          "when": "editorTextFocus"
+        },
+        {
+          "command": "rip.impact",
+          "group": "rip@3",
+          "when": "editorTextFocus"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "rip.openChat"
+        },
+        {
+          "command": "rip.search"
+        },
+        {
+          "command": "rip.showArchitecture"
+        },
+        {
+          "command": "rip.showMetrics"
+        },
+        {
+          "command": "rip.indexRepo"
+        },
+        {
+          "command": "rip.checkStatus"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "RIP",
+      "properties": {
+        "rip.autoStartServer": {
+          "type": "boolean",
+          "default": false,
+          "description": "Start `repo serve` on activation. Chat uses the CLI first even when this is disabled."
+        },
+        "rip.serverPath": {
+          "type": "string",
+          "default": "uv",
+          "description": "Executable used to start the optional RIP API server."
+        }
+      }
+    }
   },
   "scripts": {
     "compile": "tsc -p ./",
@@ -28,7 +126,11 @@
     "typescript": "^5.5.0"
   },
   "dependencies": {
+    "@vscode/webview-ui-toolkit": "^1.4.0",
     "d3": "^7.9.0",
-    "@vscode/webview-ui-toolkit": "^1.4.0"
+    "dompurify": "^3.1.0",
+    "highlight.js": "^11.9.0",
+    "marked": "^12.0.0",
+    "mermaid": "^10.9.0"
   }
 }

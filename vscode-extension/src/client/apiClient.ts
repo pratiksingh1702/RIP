@@ -23,6 +23,15 @@ export class ApiClient {
     return response.json();
   }
 
+  async isHealthy(): Promise<boolean> {
+    try {
+      await this.request("/health");
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   async traceSymbol(symbol: string): Promise<any> {
     return this.request(`/trace/${encodeURIComponent(symbol)}`);
   }
@@ -32,24 +41,42 @@ export class ApiClient {
   }
 
   async explainSymbol(symbol: string): Promise<any> {
-    return this.request(`/explain/${encodeURIComponent(symbol)}`);
+    return this.explain(symbol);
+  }
+
+  async explain(symbol: string, projectId: string = ""): Promise<any> {
+    return this.request("/explain", {
+      method: "POST",
+      body: JSON.stringify({ symbol, context_level: "file", project_id: projectId }),
+    });
   }
 
   async getArchitecture(): Promise<any> {
     return this.request("/architecture");
   }
 
+  async getMetrics(): Promise<any> {
+    return this.request("/metrics?top_risk=10");
+  }
+
+  async getIndexStatus(): Promise<any> {
+    return this.request("/index/status");
+  }
+
+  async getRuntimeStatus(): Promise<any> {
+    return this.request("/runtime/status");
+  }
+
   async indexRepo(path: string): Promise<any> {
     return this.request("/index", {
       method: "POST",
-      body: JSON.stringify({ path }),
+      body: JSON.stringify({ repo_path: path }),
     });
   }
 
-  async search(query: string): Promise<any> {
-    return this.request("/search", {
-      method: "POST",
-      body: JSON.stringify({ query }),
-    });
+  async search(query: string, projectId: string = ""): Promise<any> {
+    return this.request(
+      `/search?q=${encodeURIComponent(query)}&top=12&project_id=${encodeURIComponent(projectId)}`
+    );
   }
 }

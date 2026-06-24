@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; img-src ${cspSource} https: data:; style-src ${cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}';"
+    />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="stylesheet" href="${styleUri}" />
+    <title>RIP Chat</title>
+  </head>
+  <body>
+    <main class="app">
+      <section class="rip-shell" aria-label="RIP Chat">
+        <header class="topbar">
+          <div class="brand">
+            <div class="brand-mark" aria-hidden="true">R</div>
+            <strong>RIP Chat</strong>
+          </div>
+          <div class="index-status" aria-label="Index status">
+            <span class="status-dot" aria-hidden="true"></span>
+            <span id="indexValue">CLI fallback</span>
+          </div>
+          <span id="serverValue" class="file-count">optional</span>
+          <div class="topbar-actions">
+            <button id="refreshButton" class="icon-button" title="Refresh status" aria-label="Refresh status" type="button">Sync</button>
+            <button id="resetButton" class="icon-button" title="New chat" aria-label="New chat" type="button">New</button>
+          </div>
+        </header>
+
+        <section class="meta-strip" aria-label="Session context">
+          <span id="modeValue">CLI first</span>
+          <span id="workspaceValue">workspace</span>
+          <span id="focusValue">No active symbol</span>
+          <span id="commandValue">none</span>
+          <span id="queryValue">none</span>
+        </section>
+
+        <section id="chatPanel" class="panel active">
+          <section id="messages" class="messages" aria-live="polite"></section>
+        </section>
+
+        <section class="followup-strip" aria-label="Quick prompts">
+          <div class="followup-title">
+            <span aria-hidden="true">?</span>
+            <strong>Follow-up</strong>
+          </div>
+          <div id="quickPrompts" class="quick-prompts">
+            <button type="button" data-prompt="Show state flow">Show state flow</button>
+            <button type="button" data-prompt="Show impact">Show impact</button>
+            <button type="button" data-prompt="Show consumers">Show consumers</button>
+            <button type="button" data-prompt="Find similar">Find similar</button>
+          </div>
+        </section>
+
+        <form id="composer" class="composer">
+          <div class="composer-controls">
+            <label for="command">Command mode</label>
+            <select id="command" aria-label="Command">
+              <option value="auto">auto</option>
+              <option value="explain">explain</option>
+              <option value="search">search</option>
+              <option value="trace">trace</option>
+              <option value="impact">impact</option>
+              <option value="architecture">architecture</option>
+              <option value="metrics">metrics</option>
+            </select>
+          </div>
+          <div class="composer-row">
+            <textarea id="query" rows="1" placeholder="Ask anything about your codebase..."></textarea>
+            <button type="submit" class="send-button" title="Run" aria-label="Run">Run</button>
+          </div>
+        </form>
+      </section>
+    </main>
+    <script nonce="${nonce}" src="${mermaidUri}"></script>
+    <script nonce="${nonce}" src="${scriptUri}"></script>
+  </body>
+</html>
