@@ -10,13 +10,29 @@ from fastapi import APIRouter, Request
 
 from core.llm.client import query_llm
 from core.llm.context_assembler import ContextAssembler
-from core.llm.models import ExplanationRequest
-from core.llm.prompts.explain import EXPLAIN_SYSTEM_PROMPT, EXPLAIN_USER_PROMPT
+from core.llm.models import ExplanationRequest, ExplainIntent
+from core.llm.prompts.explain import get_explain_prompt
 from core.search.searcher import Searcher
 from server.schemas.responses import ApiEnvelope
 
 router = APIRouter(tags=["explain"])
 logger = logging.getLogger(__name__)
+
+
+def detect_intent(query: str) -> ExplainIntent:
+    """Simple heuristic intent detection."""
+    query_lower = query.lower()
+    
+    if any(keyword in query_lower for keyword in ["how", "work", "flow", "process", "step"]):
+        return ExplainIntent.FLOW
+    if any(keyword in query_lower for keyword in ["architecture", "structure", "design", "module"]):
+        return ExplainIntent.ARCHITECTURE
+    if any(keyword in query_lower for keyword in ["api", "endpoint", "request", "response"]):
+        return ExplainIntent.API
+    if any(keyword in query_lower for keyword in ["state", "provider", "notifier", "bloc", "cubit"]):
+        return ExplainIntent.STATE
+    
+    return ExplainIntent.SEMANTIC
 
 
 def parse_suggested_improvements(text: str) -> list[str]:
@@ -57,7 +73,11 @@ async def explain_endpoint(http_request: Request, request: ExplanationRequest) -
     runtime = http_request.app.state.runtime
     assembler = ContextAssembler(runtime.neo4j, project_id=request.project_id)
     
-    # Step 1: First try hybrid search for semantic queries
+    # Step 1: Detect intent
+    intent = detect_intent(request.symbol)
+    logger.info("Explain endpoint: detected intent '%s' for query '%s'", intent, request.symbol)
+    
+    # Step 2: First try hybrid search for semantic queries
     logger.info("Explain endpoint: starting hybrid search for query: '%s'", request.symbol)
     searcher = Searcher(
         qdrant_client=runtime.qdrant,
@@ -88,10 +108,10 @@ async def explain_endpoint(http_request: Request, request: ExplanationRequest) -
             duration_ms=int((time.perf_counter() - start) * 1000),
         )
 
-    prompt = EXPLAIN_USER_PROMPT.format(context=context_data["context_str"])
+    system_prompt, user_prompt = get_explain_prompt(intent, request.symbol, context_data["context_str"])
     explanation = await query_llm(
-        prompt,
-        system_prompt=EXPLAIN_SYSTEM_PROMPT,
+        user_prompt,
+        system_prompt=system_prompt,
         provider=request.provider,
         model=request.model,
     )
@@ -106,6 +126,7 @@ async def explain_endpoint(http_request: Request, request: ExplanationRequest) -
     result = {
         "explanation": explanation,
         "suggested_improvements": improvements,
+        "intent": intent,
     }
 
     return ApiEnvelope(

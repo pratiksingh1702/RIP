@@ -265,6 +265,19 @@ class DartParser(BaseParser):
                         relationships.append(ParsedRelationship(e.fqn, pfqn, "USES", fp, line))
                         break
 
+        # ── Method/Function CALLS ──────────────────────────────────────────
+        for m in re.finditer(r'(?:(\w+)\s*\.\s*)?(\w+)\s*\([^)]*\)', content):
+            obj = m.group(1)
+            method = m.group(2)
+            if method and method[0].islower() and method not in _NOISE_NAMES:
+                line = content[:m.start()].count('\n') + 1
+                callee = f"{obj}.{method}" if obj else method
+                # Find enclosing entity
+                for e in reversed(entities):
+                    if e.line_start <= line <= e.line_end and e.entity_type != "module":
+                        relationships.append(ParsedRelationship(e.fqn, callee, "CALLS", fp, line))
+                        break
+        
         # ── HTTP API calls ─────────────────────────────────────────────────
         for m in _HTTP_CALL_RE.finditer(content):
             verb = m.group(2).upper()

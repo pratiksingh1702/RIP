@@ -21,3 +21,14 @@ async def runtime_status(request: Request) -> ApiEnvelope:
         error=None,
         duration_ms=int((time.perf_counter() - start) * 1000),
     )
+
+
+@router.get("/health")
+async def health(request: Request) -> dict[str, object]:
+    runtime = request.app.state.runtime
+    status = runtime.status()
+    return {
+        "status": "ready",
+        "neo4j": status["neo4j_available"],
+        "qdrant": status["qdrant_available"],
+    }

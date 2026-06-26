@@ -1,0 +1,929 @@
+3:48,848 WARNING  core.search.client:159 - Qdrant delete skipped: Qdrant is unavailable.
+2026-06-17 17:03:48,929 INFO     core.search.indexer:116 - Requested Qdrant delete for file_path=C:\Users\Dell\Downloads\untitled2\untitled2\lib\features\modules\all_Modules\summary\screens\profit_loss_fusion.dart deleted_batches=0
+2026-06-17 17:03:48,931 WARNING  core.search.client:159 - Qdrant delete skipped: Qdrant is unavailable.
+2026-06-17 17:03:48,931 INFO     core.search.indexer:116 - Requested Qdrant delete for file_path=C:\Users\Dell\Downloads\untitled2\untitled2\lib\features\modules\all_Modules\summary\screens\summaru_screen.dart deleted_batches=0
+2026-06-17 17:03:48,931 WARNING  core.search.client:159 - Qdrant delete skipped: Qdrant is unavailable.
+2026-06-17 17:03:48,931 INFO     core.search.indexer:116 - Requested Qdrant delete for file_path=C:\Users\Dell\Downloads\untitled2\untitled2\lib\features\modules\all_Modules\summary\service\summaryService.dart deleted_batches=0
+2026-06-17 17:03:48,931 WARNING  core.search.client:159 - Qdrant delete skipped: Qdrant is unavailable.
+2026-06-17 17:03:48,931 INFO     core.search.indexer:116 - Requested Qdrant delete for file_path=C:\Users\Dell\Downloads╭──────────────────────────────────────────────── Repository Indexing ─────────────────────────────────────────────────╮
+│ Indexing: C:\Users\Dell\Downloads\untitled2\untitled2\lib                                                            │
+│ Phase: Starting  Warming up the indexer.                                                                             │
+│ Files: 0/0                             Skipped: 0                             Warnings: 0                            │
+│ Entities: 0                            Relationships: 0                       Neo4j rels: 0                          │
+│ Neo4j files: 0                         Qdrant deleted: 0                      Embeddings: 0                          │
+│ ⠏ Connecting to Neo4j... ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 0/? 0:04:09                                        │
+╭──────────────────────────────────────────────── Repository Indexing ─────────────────────────────────────────────────╮
+│ Indexing: C:\Users\Dell\Downloads\untitled2\untitled2\lib                                                            │
+│ Phase: Starting  Warming up the indexer.                                                                             │
+│ Files: 0/0                             Skipped: 0                             Warnings: 0                            │
+│ Entities: 0                            Relationships: 0                       Neo4j rels: 0                          │
+│ Neo4j files: 0                         Qdrant deleted: 0                      Embeddings: 0                          │
+│ ⠹ Connecting to Neo4j... ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 0/? 0:04:09                                        │
+│ I am working; counters will rise as each stage completes.                                                            │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯2026-06-17 17:03:49,378 INFO     core.search.indexer:116 - Requested Qdrant delete for file_path=C:\Users\Dell\Downloads\untitled2\untitled2\lib\features\modules\all_Modules\team\screens\teamsList.dart deleted_batches=0
+2026-06-17 17:03:49,397 WARNING  core.search.client:159 - Qdrant delete skipped: Qdrant is unavailable.
+2026-06-17 17:03:49,397 INFO     core.search.indexer:116 - Requested Qdrant delete for file_path=C:\Users\Dell\Downloads\untitled2\untitled2\lib\features\modules\all_Modules\team\screens\view_add.dart deleted_batches=0
+2026-06-17 17:03:49,409 WARNING  core.search.client:159 - Qdrant delete skipped: Qdrant is unavailable.
+2026-06-17 17:03:49,433 INFO     core.search.indexer:116 - Requested Qdrant delete for file_path=C:\Users\Dell\Downloads╭──────────────────────────────────────────────── Repository Indexing ─────────────────────────────────────────────────╮
+│ Indexing: C:\Users\Dell\Downloads\untitled2\untitled2\lib                                                            │
+│ Phase: Starting  Warming up the indexer.                                                                             │
+│ Files: 0/0                             Skipped: 0                             Warnings: 0                            │
+│ Entities: 0                            Relationships: 0                       Neo4j rels: 0                          │
+│ Neo4j files: 0                         Qdrant deleted: 0                      Embeddings: 0                          │
+│ ⠴ Connecting to Neo4j... ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 0/? 0:04:10                                        │
+│ I am working; counters will rise as each stage completes.                                                            │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯2026-06-17 17:03:49,571 INFO     core.search.indexer:116 - Requested Qdrant delete for file_path=C:\Users\Dell\Downloads\untitled2\untitled2\lib\features\modules\all_Modules\team\offline\state\isar_provider.dart deleted_batches=0
+2026-06-17 17:03:49,573 WARNING  core.search.client:159 - Qdrant delete skipped: Qdrant is unavailable.
+╭──────────────────────────────────────────────── Repository Indexing ─────────────────────────────────────────────────╮
+│ Indexing: C:\Users\Dell\Downloads\untitled2\untitled2\lib                                                            │
+│ Phase: Starting  Warming up the indexer.                                                                             │
+│ Files: 0/0                             Skipped: 0                             Warnings: 0                            │
+│ Entities: 0                            Relationships: 0                       Neo4j rels: 0                          │
+│ Neo4j files: 0                         Qdrant deleted: 0                      Embeddings: 0                          │
+│ ⠧ Connecting to Neo4j... ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 0/? 0:04:10                                        │
+│ I am working; counters will rise as each stage completes.                                                            │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯2026-06-17 17:03:49,745 WARNING  core.search.client:159 - Qdrant delete skipped: Qdrant is unavailable.
+╭──────────────────────────────────────────────── Repository Indexing ─────────────────────────────────────────────────╮
+│ Indexing: C:\Users\Dell\Downloads\untitled2\untitled2\lib                                                            │
+│ Phase: Starting  Warming up the indexer.                                                                             │
+│ Files: 0/0                             Skipped: 0                             Warnings: 0                            │
+│ Entities: 0                            Relationships: 0                       Neo4j rels: 0                          │
+│ Neo4j files: 0                         Qdrant deleted: 0                      Embeddings: 0                          │
+│ ⠋ Connecting to Neo4j... ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 0/? 0:04:10                                        │
+│ I am working; counters will rise as each stage completes.                                                            │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯2026-06-17 17:03:49,999 WARNING  core.search.client:159 - Qdrant delete skipped: Qdrant is unavailable.
+2026-06-17 17:03:50,057 INFO     core.search.indexer:116 - Requested Qdrant delete for file_path=C:\Users\Dell\Downloads╭──────────────────────────────────────────────── Repository Indexing ─────────────────────────────────────────────────╮
+│ Indexing: C:\Users\Dell\Downloads\untitled2\untitled2\lib                                                            │
+│ Phase: Starting  Warming up the indexer.                                                                             │
+│ Files: 0/0                             Skipped: 0                             Warnings: 0                            │
+│ Entities: 0                            Relationships: 0                       Neo4j rels: 0                          │
+│ Neo4j files: 0                         Qdrant deleted: 0                      Embeddings: 0                          │
+│ ⠸ Connecting to Neo4j... ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 0/? 0:04:10                                        │
+│ I am working; counters will rise as each stage completes.                                                            │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯2026-06-17 17:03:50,278 INFO     core.search.indexer:116 - Requested Qdrant delete for file_path=C:\Users\Dell\Downloads\untitled2\untitled2\lib\features\noti_system\noti_providers\noti_provider.dart deleted_batches=0
+2026-06-17 17:03:50,290 WARNING  core.search.client:159 - Qdrant delete skipped: Qdrant is unavailable.
+╭──────────────────────────────────────────────── Repository Indexing ─────────────────────────────────────────────────╮
+│ Indexing: C:\Users\Dell\Downloads\untitled2\untitled2\lib                                                            │
+│ Phase: Starting  Warming up the indexer.                                                                             │
+│ Files: 0/0                             Skipped: 0                             Warnings: 0                            │
+│ Entities: 0                            Relationships: 0                       Neo4j rels: 0                          │
+╭──────────────────────────────────────────────── Repository Indexing ─────────────────────────────────────────────────╮
+│ Indexing: C:\Users\Dell\Downloads\untitled2\untitled2\lib                                                            │
+│ Phase: Starting  Warming up the indexer.                                                                             │
+│ Files: 0/0                             Skipped: 0                             Warnings: 0                            │
+│ Entities: 0                            Relationships: 0                       Neo4j rels: 0                          │
+│ Neo4j files: 0                         Qdrant deleted: 0                      Embeddings: 0                          │
+│ ⠋ Connecting to Neo4j... ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 0/? 0:04:11                                        │
+│ I am working; counters will rise as each stage completes.                                                            │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯2026-06-17 17:03:50,831 INFO     core.search.indexer:116 - Requested Qdrant delete for file_path=C:\Users\Dell\Downloads\untitled2\untitled2\lib\features\noti_system\noti_services\permi_service.dart deleted_batches=0
+2026-06-17 17:03:50,848 WARNING  core.search.client:159 - Qdrant delete skipped: Qdrant is unavailable.
+2026-06-17 17:03:50,848 INFO     core.search.indexer:116 - Requested Qdrant delete for file_path=C:\Users\Dell\Downloads\untitled2\untitled2\lib\features\noti_system\noti_settings\notification_settings_screen.dart deleted_batches=0
+2026-06-17 17:03:50,848 WARNING  core.search.client:159 - Qdrant delete skipped: Qdrant is unavailable.
+2026-06-17 17:03:50,849 INFO     core.search.indexer:116 - Requested Qdrant delete for file_path=C:\Users\Dell\Downloads\untitled2\untitled2\lib\features\noti_system\updates\application\providers\notification_controller.dart deleted_batches=0
+2026-06-17 17:03:50,849 WARNING  core.search.client:159 - Qdrant delete skipped: Qdrant is unavailable.
+╭──────────────────────────────────────────────── Repository Indexing ─────────────────────────────────────────────────╮
+│ Indexing: C:\Users\Dell\Downloads\untitled2\untitled2\lib                                                            │
+│ Phase: Starting  Warming up the indexer.                                                                             │
+│ Files: 0/0                             Skipped: 0                             Warnings: 0                            │
+│ Entities: 0                            Relationships: 0                       Neo4j rels: 0                          │
+│ Neo4j files: 0                         Qdrant deleted: 0                      Embeddings: 0                          │
+│ ⠸ Connecting to Neo4j... ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 0/? 0:04:11                                        │
+│ I am working; counters will rise as each stage completes.                                                            │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯╭──────────────────────────────────────────────── Repository Indexing ─────────────────────────────────────────────────╮
+│ Indexing: C:\Users\Dell\Downloads\untitled2\untitled2\lib                                                            │
+│ Phase: Starting  Warming up the indexer.                                                                             │
+│ Files: 0/0                             Skipped: 0                             Warnings: 0                            │
+│ Entities: 0                            Relationships: 0                       Neo4j rels: 0                          │
+│ Neo4j files: 0                         Qdrant deleted: 0                      Embeddings: 0                          │
+│ ⠧ Connecting to Neo4j... ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 0/? 0:04:11                                        │
+│ I am working; counters will rise as each stage completes.                                                            │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯2026-06-17 17:03:51,344 WARNING  core.search.client:159 - Qdrant delete skipped: Qdrant is unavailable.
+2026-06-17 17:03:51,344 INFO     core.search.indexer:116 - Requested Qdrant delete for file_path=C:\Users\Dell\Downloads\untitled2\untitled2\lib\features\noti_system\updates\data\actions\navigate_action.dart deleted_batches=0
+2026-06-17 17:03:51,345 WARNING  core.search.client:159 - Qdrant delete skipped: Qdrant is unavailable.
+2026-06-17 17:03:51,345 INFO     core.search.indexer:116 - Requested Qdrant delete for file_path=C:\Users\Dell\Downloads╭──────────────────────────────────────────────── Repository Indexing ─────────────────────────────────────────────────╮
+│ Indexing: C:\Users\Dell\Downloads\untitled2\untitled2\lib                                                            │
+│ Phase: Starting  Warming up the indexer.                                                                             │
+│ Files: 0/0                             Skipped: 0                             Warnings: 0                            │
+│ Entities: 0                            Relationships: 0                       Neo4j rels: 0                          │
+│ Neo4j files: 0                         Qdrant deleted: 0                      Embeddings: 0                          │
+│ ⠏ Connecting to Neo4j... ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 0/? 0:04:12                                        │
+│ I am working; counters will rise as each stage completes.                                                            │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯2026-06-17 17:03:51,546 INFO     core.search.indexer:116 - Requested Qdrant delete for file_path=C:\Users\Dell\Downloads╭──────────────────────────────────────────────── Repository Indexing ─────────────────────────────────────────────────╮
+│ Indexing: C:\Users\Dell\Downloads\untitled2\untitled2\lib                                                            │
+│ Phase: Starting  Warming up the indexer.                                                                             │
+│ Files: 0/0                             Skipped: 0                             Warnings: 0                            │
+│ Entities: 0                            Relationships: 0                       Neo4j rels: 0                          │
+│ Neo4j files: 0                         Qdrant deleted: 0                      Embeddings: 0                          │
+│ ⠼ Connecting to Neo4j... ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 0/? 0:04:12                                        │
+╭──────────────────────────────────────────────── Repository Indexing ─────────────────────────────────────────────────╮
+│ Indexing: C:\Users\Dell\Downloads\untitled2\untitled2\lib                                                            │
+│ Phase: Starting  Warming up the indexer.                                                                             │
+│ Files: 0/0                             Skipped: 0                             Warnings: 0                            │
+│ Entities: 0                            Relationships: 0                       Neo4j rels: 0                          │
+│ Neo4j files: 0                         Qdrant deleted: 0                      Embeddings: 0                          │
+│ ⠇ Connecting to Neo4j... ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 0/? 0:04:12                                        │
+╭──────────────────────────────────────────────── Repository Indexing ─────────────────────────────────────────────────╮
+│ Indexing: C:\Users\Dell\Downloads\untitled2\untitled2\lib                                                            │
+│ Phase: Starting  Warming up the indexer.                                                                             │
+│ Files: 0/0                             Skipped: 0                             Warnings: 0                            │
+│ Entities: 0                            Relationships: 0                       Neo4j rels: 0                          │
+│ Neo4j files: 0                         Qdrant deleted: 0                      Embeddings: 0                          │
+│ ⠙ Connecting to Neo4j... ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 0/? 0:04:13                                        │
+│ I am working; counters will rise as each stage completes.                                                            │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯2026-06-17 17:03:52,498 INFO     core.search.indexer:116 - Requested Qdrant delete for file_path=C:\Users\Dell\Downloads\untitled2\untitled2\lib\features\noti_system\updates\data\repositories\local_notification_repository.dart deleted_batches=0
+2026-06-17 17:03:52,507 WARNING  core.search.client:159 - Qdrant delete skipped: Qdrant is unavailable.
+2026-06-17 17:03:52,507 INFO     core.search.indexer:116 - Requested Qdrant delete for file_path=C:\Users\Dell\Downloads╭──────────────────────────────────────────────── Repository Indexing ─────────────────────────────────────────────────╮
+│ Indexing: C:\Users\Dell\Downloads\untitled2\untitled2\lib                                                            │
+│ Phase: Starting  Warming up the indexer.                                                                             │
+│ Files: 0/0                             Skipped: 0                             Warnings: 0                            │
+│ Entities: 0                            Relationships: 0                       Neo4j rels: 0                          │
+│ Neo4j files: 0                         Qdrant deleted: 0                      Embeddings: 0                          │
+│ ⠼ Connecting to Neo4j... ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 0/? 0:04:13                                        │
+│ I am working; counters will rise as each stage completes.                                                            │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯2026-06-17 17:03:52,710 WARNING  core.search.client:159 - Qdrant delete skipped: Qdrant is unavailable.
+2026-06-17 17:03:52,710 INFO     core.search.indexer:116 - Requested Qdrant delete for file_path=C:\Users\Dell\Downloads\untitled2\untitled2\lib\features\noti_system\updates\domain\services\action_handler_registry.dart deleted_batches=0
+2026-06-17 17:03:52,724 WARNING  core.search.client:159 - Qdrant delete skipped: Qdrant is unavailable.
+2026-06-17 17:03:52,744 INFO     core.search.indexer:116 - Requested Qdrant delete for file_path=C:\Users\Dell\Downloads\untitled2\untitled2\lib\features\noti_system\updates\domain\services\notification_ingestion_service.dart deleted_batche╭──────────────────────────────────────────────── Repository Indexing ─────────────────────────────────────────────────╮
+│ Indexing: C:\Users\Dell\Downloads\untitled2\untitled2\lib                                                            │
+│ Phase: Starting  Warming up the indexer.                                                                             │
+│ Files: 0/0                             Skipped: 0                             Warnings: 0                            │
+│ Entities: 0                            Relationships: 0                       Neo4j rels: 0                          │
+│ Neo4j files: 0                         Qdrant deleted: 0                      Embeddings: 0                          │
+│ ⠧ Connecting to Neo4j... ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 0/? 0:04:13                                        │
+│ I am working; counters will rise as each stage completes.                                                            │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯2026-06-17 17:03:52,915 INFO     core.search.indexer:116 - Requested Qdrant delete for file_path=C:\Users\Dell\Downloads\untitled2\untitled2\lib\features\noti_system\updates\presentation\screens\notification_detail_screen.dart deleted_batches=0
+2026-06-17 17:03:52,928 WARNING  core.search.client:159 - Qdrant delete skipped: Qdrant is unavailable.
+2026-06-17 17:03:52,929 INFO     core.search.indexer:116 - Requested Qdrant delete for file_path=C:\Users\Dell\Downloads\untitled2\untitled2\lib\features\noti_system\updates\presentation\screens\notification_list_screen.dart deleted_batches=0
+2026-06-17 17:03:52,953 WARNING  core.search.client:159 - Qdrant delete skipped: Qdrant is unavailable.
+2026-06-17 17:03:52,959 INFO     core.search.indexer:116 - Requested Qdrant delete for file_path=C:\Users\Dell\Downloads\untitled2\untitled2\lib\features\noti_system\updates\presentation\widgets\notification_action_button.dart deleted_batch╭──────────────────────────────────────────────── Repository Indexing ─────────────────────────────────────────────────╮
+│ Indexing: C:\Users\Dell\Downloads\untitled2\untitled2\lib                                                            │
+│ Phase: Starting  Warming up the indexer.                                                                             │
+│ Files: 0/0                             Skipped: 0                             Warnings: 0                            │
+│ Entities: 0                            Relationships: 0                       Neo4j rels: 0                          │
+│ Neo4j files: 0                         Qdrant deleted: 0                      Embeddings: 0                          │
+│ ⠏ Connecting to Neo4j... ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 0/? 0:04:13                                        │
+│ I am working; counters will rise as each stage completes.                                                            │
+╭──────────────────────────────────────────────── Repository Indexing ─────────────────────────────────────────────────╮
+│ Indexing: C:\Users\Dell\Downloads\untitled2\untitled2\lib                                                            │
+│ Phase: Starting  Warming up the indexer.                                                                             │
+│ Files: 0/0                             Skipped: 0                             Warnings: 0                            │
+│ Entities: 0                            Relationships: 0                       Neo4j rels: 0                          │
+│ Neo4j files: 0                         Qdrant deleted: 0                      Embeddings: 0                          │
+│ ⠹ Connecting to Neo4j... ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 0/? 0:04:13                                        │
+│ I am working; counters will rise as each stage completes.                                                            │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯2026-06-17 17:03:53,329 INFO     core.search.indexer:116 - Requested Qdrant delete for file_path=C:\Users\Dell\Downloads\untitled2\untitled2\lib\features\peb_execution\models\peb_execution_models.dart deleted_batches=0
+2026-06-17 17:03:53,364 WARNING  core.search.client:159 - Qdrant delete skipped: Qdrant is unavailable.
+2026-06-17 17:03:53,364 INFO     core.search.indexer:116 - Requested Qdrant delete for file_path=C:\Users\Dell\Downloads\untitled2\untitled2\lib\features\peb_execution\screens\peb_boq_upload_screen.dart deleted_batches=0
+2026-06-17 17:03:53,364 WARNING  core.search.client:159 - Qdrant delete skipped: Qdrant is unavailable.
+2026-06-17 17:03:53,364 INFO     core.search.indexer:116 - Requested Qdrant delete for file_path=C:\Users\Dell\Downloads╭──────────────────────────────────────────────── Repository Indexing ─────────────────────────────────────────────────╮
+│ Indexing: C:\Users\Dell\Downloads\untitled2\untitled2\lib                                                            │
+│ Phase: Starting  Warming up the indexer.                                                                             │
+│ Files: 0/0                             Skipped: 0                             Warnings: 0                            │
+│ Entities: 0                            Relationships: 0                       Neo4j rels: 0                          │
+│ Neo4j files: 0                         Qdrant deleted: 0                      Embeddings: 0                          │
+│ ⠴ Connecting to Neo4j... ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 0/? 0:04:14                                        │
+│ I am working; counters will rise as each stage completes.                                                            │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯2026-06-17 17:03:53,580 INFO     core.search.indexer:116 - Requested Qdrant delete for file_path=C:\Users\Dell\Downloads\untitled2\untitled2\lib\features\peb_execution\services\dpr_bulk_task_manager.dart deleted_batches=0
+2026-06-17 17:03:53,593 WARNING  core.search.client:159 - Qdrant delete skipped: Qdrant is unavailable.
+2026-06-17 17:03:53,593 INFO     core.search.indexer:116 - Requested Qdrant delete for file_path=C:\Users\Dell\Downloads\untitled2\untitled2\lib\features\peb_execution\services\peb_execution_service.dart deleted_batches=0
+2026-06-17 17:03:53,593 WARNING  core.search.client:159 - Qdrant delete skipped: Qdrant is unavailable.
+2026-06-17 17:03:53,630 INFO     core.search.indexer:116 - Requested Qdrant delete for file_path=C:\Users\Dell\Downloads╭──────────────────────────────────────────────── Repository Indexing ─────────────────────────────────────────────────╮
+│ Indexing: C:\Users\Dell\Downloads\untitled2\untitled2\lib                                                            │
+│ Phase: Starting  Warming up the indexer.                                                                             │
+│ Files: 0/0                             Skipped: 0                             Warnings: 0                            │
+│ Entities: 0                            Relationships: 0                       Neo4j rels: 0                          │
+│ Neo4j files: 0                         Qdrant deleted: 0                      Embeddings: 0                          │
+│ ⠧ Connecting to Neo4j... ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 0/? 0:04:14                                        │
+│ I am working; counters will rise as each stage completes.                                                            │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯╭──────────────────────────────────────────────── Repository Indexing ─────────────────────────────────────────────────╮
+│ Indexing: C:\Users\Dell\Downloads\untitled2\untitled2\lib                                                            │
+│ Phase: Starting  Warming up the indexer.                                                                             │
+│ Files: 0/0                             Skipped: 0                             Warnings: 0                            │
+│ Entities: 0                            Relationships: 0                       Neo4j rels: 0                          │
+│ Neo4j files: 0                         Qdrant deleted: 0                      Embeddings: 0                          │
+│ ⠹ Connecting to Neo4j... ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 0/? 0:04:14                                        │
+╭──────────────────────────────────────────────── Repository Indexing ─────────────────────────────────────────────────╮
+│ Indexing: C:\Users\Dell\Downloads\untitled2\untitled2\lib                                                            │
+│ Phase: Starting  Warming up the indexer.                                                                             │
+│ Files: 0/0                             Skipped: 0                             Warnings: 0                            │
+│ Entities: 0                            Relationships: 0                       Neo4j rels: 0                          │
+│ Neo4j files: 0                         Qdrant deleted: 0                      Embeddings: 0                          │
+│ ⠦ Connecting to Neo4j... ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 0/? 0:04:14                                        │
+│ I am working; counters will rise as each stage completes.                                                            │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯2026-06-17 17:03:54,456 WARNING  core.search.client:159 - Qdrant delete skipped: Qdrant is unavailable.
+2026-06-17 17:03:54,542 INFO     core.search.indexer:116 - Requested Qdrant delete for file_path=C:\Users\Dell\Downloads\untitled2\untitled2\lib\features\peb_work\dpr\screens\peb_dpr_fabrication_screen.dart deleted_batches=0
+2026-06-17 17:03:54,561 WARNING  core.search.client:159 - Qdrant delete skipped: Qdrant is unavailable.
+2026-06-17 17:03:54,578 INFO     core.search.indexer:116 - Requested Qdrant delete for file_path=C:\Users\Dell\Downloads╭──────────────────────────────────────────────── Repository Indexing ─────────────────────────────────────────────────╮
+│ Indexing: C:\Users\Dell\Downloads\untitled2\untitled2\lib                                                            │
+│ Phase: Starting  Warming up the indexer.                                                                             │
+│ Files: 0/0                             Skipped: 0                             Warnings: 0                            │
+│ Entities: 0                            Relationships: 0                       Neo4j rels: 0                          │
+│ Neo4j files: 0                         Qdrant deleted: 0                      Embeddings: 0                          │
+│ ⠏ Connecting to Neo4j... ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 0/? 0:04:15                                        │
+│ I am working; counters will rise as each stage completes.                                                            │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯2026-06-17 17:03:54,789 INFO     core.search.indexer:116 - Requested Qdrant delete for file_path=C:\Users\Dell\Downloads\untitled2\untitled2\lib\features\peb_work\dpr\screens\peb_dpr_widgets.dart deleted_batches=0
+2026-06-17 17:03:54,792 WARNING  core.search.client:159 - Qdrant delete skipped: Qdrant is unavailable.
+2026-06-17 17:03:54,798 INFO     core.search.indexer:116 - Requested Qdrant delete for file_path=C:\Users\Dell\Downloads╭──────────────────────────────────────────────── Repository Indexing ─────────────────────────────────────────────────╮
+│ Indexing: C:\Users\Dell\Downloads\untitled2\untitled2\lib                                                            │
+│ Phase: Starting  Warming up the indexer.                                                                             │
+│ Files: 0/0                             Skipped: 0                             Warnings: 0                            │
+│ Entities: 0                            Relationships: 0                       Neo4j rels: 0                          │
+│ Neo4j files: 0                         Qdrant deleted: 0                      Embeddings: 0                          │
+│ ⠹ Connecting to Neo4j... ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 0/? 0:04:15                                        │
+│ I am working; counters will rise as each stage completes.                                                            │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯2026-06-17 17:03:54,994 INFO     core.search.indexer:116 - Requested Qdrant delete for file_path=C:\Users\Dell\Downloads╭──────────────────────────────────────────────── Repository Indexing ─────────────────────────────────────────────────╮
+│ Indexing: C:\Users\Dell\Downloads\untitled2\untitled2\lib                                                            │
+│ Phase: Starting  Warming up the indexer.                                                                             │
+│ Files: 0/0                             Skipped: 0                             Warnings: 0                            │
+│ Entities: 0                            Relationships: 0                       Neo4j rels: 0                          │
+│ Neo4j files: 0                         Qdrant deleted: 0                      Embeddings: 0                          │
+│ ⠴ Connecting to Neo4j... ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 0/? 0:04:15                                        │
+│ I am working; counters will rise as each stage completes.                                                            │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯2026-06-17 17:03:55,243 INFO     core.search.indexer:116 - Requested Qdrant delete for file_path=C:\Users\Dell\Downloads\untitled2\untitled2\lib\features\pricing\Screens\plan_desc.dart deleted_batches=0
+2026-06-17 17:03:55,243 WARNING  core.search.client:159 - Qdrant delete skipped: Qdrant is unavailable.
+2026-06-17 17:03:55,263 INFO     core.search.indexer:116 - Requested Qdrant delete for file_path=C:\Users\Dell\Downloads\untitled2\untitled2\lib\features\pricing\Screens\subsciption_screen.dart deleted_batches=0
+2026-06-17 17:03:55,280 WARNING  core.search.client:159 - Qdrant delete skipped: Qdrant is unavailable.
+╭──────────────────────────────────────────────── Repository Indexing ─────────────────────────────────────────────────╮
+│ Indexing: C:\Users\Dell\Downloads\untitled2\untitled2\lib                                                            │
+│ Phase: Starting  Warming up the indexer.                                                                             │
+│ Files: 0/0                             Skipped: 0                             Warnings: 0                            │
+│ Entities: 0                            Relationships: 0                       Neo4j rels: 0                          │
+│ Neo4j files: 0                         Qdrant deleted: 0                      Embeddings: 0                          │
+│ ⠏ Connecting to Neo4j... ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 0/? 0:04:16                                        │
+│ I am working; counters will rise as each stage completes.                                                            │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯2026-06-17 17:03:55,502 WARNING  core.search.client:159 - Qdrant delete skipped: Qdrant is unavailable.
+2026-06-17 17:03:55,503 INFO     core.search.indexer:116 - Requested Qdrant delete for file_path=C:\Users\Dell\Downloads\untitled2\untitled2\lib\features\procurement\screens\procurement_list_screen.dart deleted_batches=0
+2026-06-17 17:03:55,504 WARNING  core.search.client:159 - Qdrant delete skipped: Qdrant is unavailable.
+2026-06-17 17:03:55,504 INFO     core.search.indexer:116 - Requested Qdrant delete for file_path=C:\Users\Dell\Downloads\untitled2\untitled2\lib\features\procurement\service\procurement_service.dart deleted_batches=0
+2026-06-17 17:03:55,505 WARNING  core.search.client:159 - Qdrant delete skipped: Qdrant is unavailable.
+2026-06-17 17:03:55,505 INFO     core.search.indexer:116 - Requested Qdrant delete for file_path=C:\Users\Dell\Downloads╭──────────────────────────────────────────────── Repository Indexing ─────────────────────────────────────────────────╮
+│ Indexing: C:\Users\Dell\Downloads\untitled2\untitled2\lib                                                            │
+│ Phase: Starting  Warming up the indexer.                                                                             │
+│ Files: 0/0                             Skipped: 0                             Warnings: 0                            │
+│ Entities: 0                            Relationships: 0                       Neo4j rels: 0                          │
+│ Neo4j files: 0                         Qdrant deleted: 0                      Embeddings: 0                          │
+│ ⠙ Connecting to Neo4j... ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 0/? 0:04:16                                        │
+│ I am working; counters will rise as each stage completes.                                                            │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯2026-06-17 17:03:55,742 INFO     core.search.indexer:116 - Requested Qdrant delete for file_path=C:\Users\Dell\Downloads\untitled2\untitled2\lib\features\profile_page\offline\isar\user_isar.dart deleted_batches=0
+2026-06-17 17:03:55,742 WARNING  core.search.client:159 - Qdrant delete skipped: Qdrant is unavailable.
+2026-06-17 17:03:55,742 INFO     core.search.indexer:116 - Requested Qdrant delete for file_path=C:\Users\Dell\Downloads\untitled2\untitled2\lib\features\profile_page\offline\isar\user_isar.g.dart deleted_batches=0
+2026-06-17 17:03:55,744 WARNING  core.search.client:159 - Qdrant delete skipped: Qdrant is unavailable.
+2026-06-17 17:03:55,744 INFO     core.search.indexer:116 - Requested Qdrant delete for file_path=C:\Users\Dell\Downloads\untitled2\untitled2\lib\features\profile_page\offline\repository\user_local_repository.dart deleted_batches=0
+2026-06-17 17:03:55,774 WARNING  core.search.client:159 - Qdrant delete skipped: Qdrant is unavailable.
+2026-06-17 17:03:55,794 INFO     core.search.indexer:116 - Requested Qdrant delete for file_path=C:\Users\Dell\Downloads\untitled2\untitled2\lib\features\profile_page\screens\widgets\address_widget.dart deleted_batches=0
+2026-06-17 17:03:55,814 WARNING  core.search.client:159 - Qdrant delete skipped: Qdrant is unavailable.
+╭──────────────────────────────────────────────── Repository Indexing ─────────────────────────────────────────────────╮
+│ Indexing: C:\Users\Dell\Downloads\untitled2\untitled2\lib                                                            │
+│ Phase: Starting  Warming up the indexer.                                                                             │
+│ Files: 0/0                             Skipped: 0                             Warnings: 0                            │
+│ Entities: 0                            Relationships: 0                       Neo4j rels: 0                          │
+│ Neo4j files: 0                         Qdrant deleted: 0                      Embeddings: 0                          │
+│ ⠼ Connecting to Neo4j... ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 0/? 0:04:16                                        │
+│ I am working; counters will rise as each stage completes.                                                            │
+╭──────────────────────────────────────────────── Repository Indexing ─────────────────────────────────────────────────╮
+│ Indexing: C:\Users\Dell\Downloads\untitled2\untitled2\lib                                                            │
+│ Phase: Starting  Warming up the indexer.                                                                             │
+│ Files: 0/0                             Skipped: 0                             Warnings: 0                            │
+│ Entities: 0                            Relationships: 0                       Neo4j rels: 0                          │
+│ Neo4j files: 0                         Qdrant deleted: 0                      Embeddings: 0                          │
+│ ⠇ Connecting to Neo4j... ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 0/? 0:04:16                                        │
+│ I am working; counters will rise as each stage completes.                                                            │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯2026-06-17 17:03:56,212 INFO     core.search.indexer:116 - Requested Qdrant delete for file_path=C:\Users\Dell\Downloads\untitled2\untitled2\lib\features\profile_page\screens\widgets\loader.dart deleted_batches=0
+2026-06-17 17:03:56,214 WARNING  core.search.client:159 - Qdrant delete skipped: Qdrant is unavailable.
+2026-06-17 17:03:56,224 INFO     core.search.indexer:116 - Requested Qdrant delete for file_path=C:\Users\Dell\Downloads\untitled2\untitled2\lib\features\profile_page\screens\widgets\toggleInput.dart deleted_batches=0
+2026-06-17 17:03:56,229 WARNING  core.search.client:159 - Qdrant delete skipped: Qdrant is unavailable.
+2026-06-17 17:03:56,239 INFO     core.search.indexer:116 - Requested Qdrant delete for file_path=C:\Users\Dell\Downloads\untitled2\untitled2\lib\features\profile_page\screens\widgets\uploadPhoto.dart deleted_batches=0
+2026-06-17 17:03:56,248 WARNING  core.search.client:159 - Qdrant delete skipped: Qdrant is unavailable.
+╭──────────────────────────────────────────────── Repository Indexing ─────────────────────────────────────────────────╮
+│ Indexing: C:\Users\Dell\Downloads\untitled2\untitled2\lib                                                            │
+│ Phase: Starting  Warming up the indexer.                                                                             │
+│ Files: 0/0                             Skipped: 0                             Warnings: 0                            │
+│ Entities: 0                            Relationships: 0                       Neo4j rels: 0                          │
+│ Neo4j files: 0                         Qdrant deleted: 0                      Embeddings: 0                          │
+│ ⠙ Connecting to Neo4j... ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 0/? 0:04:17                                        │
+│ I am working; counters will rise as each stage completes.                                                            │
+╭──────────────────────────────────────────────── Repository Indexing ─────────────────────────────────────────────────╮
+│ Indexing: C:\Users\Dell\Downloads\untitled2\untitled2\lib                                                            │
+│ Phase: Starting  Warming up the indexer.                                                                             │
+│ Files: 0/0                             Skipped: 0                             Warnings: 0                            │
+│ Entities: 0                            Relationships: 0                       Neo4j rels: 0                          │
+│ Neo4j files: 0                         Qdrant deleted: 0                      Embeddings: 0                          │
+│ ⠴ Connecting to Neo4j... ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 0/? 0:04:17                                        │
+│ I am working; counters will rise as each stage completes.                                                            │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯2026-06-17 17:03:56,814 INFO     core.search.indexer:116 - Requested Qdrant delete for file_path=C:\Users\Dell\Downloads\untitled2\untitled2\lib\features\tour\core\screen_owned_tour_mixin.dart deleted_batches=0
+2026-06-17 17:03:56,826 WARNING  core.search.client:159 - Qdrant delete skipped: Qdrant is unavailable.
+2026-06-17 17:03:56,826 INFO     core.search.indexer:116 - Requested Qdrant delete for file_path=C:\Users\Dell\Downloads\untitled2\untitled2\lib\features\tour\core\tour_analytics.dart deleted_batches=0
+2026-06-17 17:03:56,826 WARNING  core.search.client:159 - Qdrant delete skipped: Qdrant is unavailable.
+2026-06-17 17:03:56,837 INFO     core.search.indexer:116 - Requested Qdrant delete for file_path=C:\Users\Dell\Downloads\untitled2\untitled2\lib\features\tour\core\tour_engine.dart deleted_batches=0
+2026-06-17 17:03:56,848 WARNING  core.search.client:159 - Qdrant delete skipped: Qdrant is unavailable.
+2026-06-17 17:03:56,870 INFO     core.search.indexer:116 - Requested Qdrant delete for file_path=C:\Users\Dell\Downloads\untitled2\untitled2\lib\features\tour\core\tour_models.dart deleted_batches=0
+2026-06-17 17:03:56,881 WARNING  core.search.client:159 - Qdrant delete skipped: Qdrant is unavailable.
+╭──────────────────────────────────────────────── Repository Indexing ─────────────────────────────────────────────────╮
+│ Indexing: C:\Users\Dell\Downloads\untitled2\untitled2\lib                                                            │
+│ Phase: Starting  Warming up the indexer.                                                                             │
+│ Files: 0/0                             Skipped: 0                             Warnings: 0                            │
+│ Entities: 0                            Relationships: 0                       Neo4j rels: 0                          │
+│ Neo4j files: 0                         Qdrant deleted: 0                      Embeddings: 0                          │
+│ ⠇ Connecting to Neo4j... ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 0/? 0:04:17                                        │
+│ I am working; counters will rise as each stage completes.                                                            │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯2026-06-17 17:03:57,048 WARNING  core.search.client:159 - Qdrant delete skipped: Qdrant is unavailable.
+╭──────────────────────────────────────────────── Repository Indexing ─────────────────────────────────────────────────╮
+│ Indexing: C:\Users\Dell\Downloads\untitled2\untitled2\lib                                                            │
+│ Phase: Starting  Warming up the indexer.                                                                             │
+│ Files: 0/0                             Skipped: 0                             Warnings: 0                            │
+│ Entities: 0                            Relationships: 0                       Neo4j rels: 0                          │
+│ Neo4j files: 0                         Qdrant deleted: 0                      Embeddings: 0                          │
+│ ⠙ Connecting to Neo4j... ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 0/? 0:04:17                                        │
+│ I am working; counters will rise as each stage completes.                                                            │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯2026-06-17 17:03:57,281 WARNING  core.search.client:159 - Qdrant delete skipped: Qdrant is unavailable.
+2026-06-17 17:03:57,292 INFO     core.search.indexer:116 - Requested Qdrant delete for file_path=C:\Users\Dell\Downloads\untitled2\untitled2\lib\features\tour\definitions\site_rate_module_tours.dart deleted_batches=0
+2026-06-17 17:03:57,293 WARNING  core.search.client:159 - Qdrant delete skipped: Qdrant is unavailable.
+2026-06-17 17:03:57,318 INFO     core.search.indexer:116 - Requested Qdrant delete for file_path=C:\Users\Dell\Downloads\untitled2\untitled2\lib\features\tour\domain\tour_aware_mixin.dart deleted_batches=0
+2026-06-17 17:03:57,363 WARNING  core.search.client:159 - Qdrant delete skipped: Qdrant is unavailable.
+2026-06-17 17:03:57,380 INFO     core.search.indexer:116 - Requested Qdrant delete for file_path=C:\Users\Dell\Downloads\untitled2\untitled2\lib\features\tour\domain\tour_controller.dart deleted_batches=0
+2026-06-17 17:03:57,412 WARNING  core.search.client:159 - Qdrant delete skipped: Qdrant is unavailable.
+2026-06-17 17:03:57,448 INFO     core.search.indexer:116 - Requested Qdrant delete for file_path=C:\Users\Dell\Downloads\untitled2\untitled2\lib\features\tour\domain\tour_debug_config.dart deleted_batches=0
+2026-06-17 17:03:57,527 WARNING  core.search.client:159 - Qdrant delete skipped: Qdrant is unavailable.
+2026-06-17 17:03:57,595 INFO     core.search.indexer:116 - Requested Qdrant delete for file_path=C:\Users\Dell\Downloads\untitled2\untitled2\lib\features\tour\domain\tour_events.dart deleted_batches=0
+2026-06-17 17:03:57,680 WARNING  core.search.client:159 - Qdrant delete skipped: Qdrant is unavailable.
+2026-06-17 17:03:57,746 INFO     core.search.indexer:116 - Requested Qdrant delete for file_path=C:\Users\Dell\Downloads\untitled2\untitled2\lib\features\tour\domain\tour_module.dart deleted_batches=0
+2026-06-17 17:03:57,795 WARNING  core.search.client:159 - Qdrant delete skipped: Qdrant is unavailable.
+╭──────────────────────────────────────────────── Repository Indexing ─────────────────────────────────────────────────╮
+│ Indexing: C:\Users\Dell\Downloads\untitled2\untitled2\lib                                                            │
+│ Phase: Starting  Warming up the indexer.                                                                             │
+│ Files: 0/0                             Skipped: 0                             Warnings: 0                            │
+│ Entities: 0                            Relationships: 0                       Neo4j rels: 0                          │
+│ Neo4j files: 0                         Qdrant deleted: 0                      Embeddings: 0                          │
+│ ⠼ Connecting to Neo4j... ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 0/? 0:04:18                                        │
+│ I am working; counters will rise as each stage completes.                                                            │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯2026-06-17 17:03:58,095 WARNING  core.search.client:159 - Qdrant delete skipped: Qdrant is unavailable.
+╭──────────────────────────────────────────────── Repository Indexing ─────────────────────────────────────────────────╮
+│ Indexing: C:\Users\Dell\Downloads\untitled2\untitled2\lib                                                            │
+│ Phase: Starting  Warming up the indexer.                                                                             │
+│ Files: 0/0                             Skipped: 0                             Warnings: 0                            │
+│ Entities: 0                            Relationships: 0                       Neo4j rels: 0                          │
+│ Neo4j files: 0                         Qdrant deleted: 0                      Embeddings: 0                          │
+│ ⠴ Connecting to Neo4j... ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 0/? 0:04:18                                        │
+│ I am working; counters will rise as each stage completes.                                                            │
+╭──────────────────────────────────────────────── Repository Indexing ─────────────────────────────────────────────────╮
+│ Indexing: C:\Users\Dell\Downloads\untitled2\untitled2\lib                                                            │
+│ Phase: Starting  Warming up the indexer.                                                                             │
+│ Files: 0/0                             Skipped: 0                             Warnings: 0                            │
+│ Entities: 0                            Relationships: 0                       Neo4j rels: 0                          │
+│ Neo4j files: 0                         Qdrant deleted: 0                      Embeddings: 0                          │
+│ ⠏ Connecting to Neo4j... ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 0/? 0:04:19                                        │
+│ I am working; counters will rise as each stage completes.                                                            │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯2026-06-17 17:03:58,794 INFO     core.search.indexer:116 - Requested Qdrant delete for file_path=C:\Users\Dell\Downloads\untitled2\untitled2\lib\features\tour\screen\app_entry_tour.dart deleted_batches=0
+2026-06-17 17:03:58,815 WARNING  core.search.client:159 - Qdrant delete skipped: Qdrant is unavailable.
+2026-06-17 17:03:58,830 INFO     core.search.indexer:116 - Requested Qdrant delete for file_path=C:\Users\Dell\Downloads\untitled2\untitled2\lib\features\tour\screen\buddy_overlay.dart deleted_batches=0
+2026-06-17 17:03:58,877 WARNING  core.search.client:159 - Qdrant delete skipped: Qdrant is unavailable.
+╭──────────────────────────────────────────────── Repository Indexing ─────────────────────────────────────────────────╮
+│ Indexing: C:\Users\Dell\Downloads\untitled2\untitled2\lib                                                            │
+│ Phase: Starting  Warming up the indexer.                                                                             │
+╭──────────────────────────────────────────────── Repository Indexing ─────────────────────────────────────────────────╮
+│ Indexing: C:\Users\Dell\Downloads\untitled2\untitled2\lib                                                            │
+│ Phase: Starting  Warming up the indexer.                                                                             │
+│ Files: 0/0                             Skipped: 0                             Warnings: 0                            │
+│ Entities: 0                            Relationships: 0                       Neo4j rels: 0                          │
+│ Neo4j files: 0                         Qdrant deleted: 0                      Embeddings: 0                          │
+│ ⠼ Connecting to Neo4j... ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 0/? 0:04:21                                        │
+│ I am working; counters will rise as each stage completes.                                                            │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯2026-06-17 17:03:59,249 ERROR    cli.commands.index:209 - Full index failed for C:\Users\Dell\Downloads\untitled2\untitled2\lib
+Traceback (most recent call last):
+  File "C:\Users\Dell\Downloads\RIP\cli\commands\index.py", line 185, in _index
+    summary = await index_repository_with_resources(
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Dell\Downloads\RIP\core\indexer\pipeline.py", line 641, in index_repository_with_resources
+    progress.qdrant_vectors_stored = await indexer.index_entities_batched(
+                                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Dell\Downloads\RIP\core\search\indexer.py", line 93, in index_entities_batched
+    indexed += await self.index_entities(batch)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Dell\Downloads\RIP\core\search\indexer.py", line 43, in index_entities
+    embeddings = await self.embedder.embed_entities_with_cache(
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Dell\Downloads\RIP\core\search\embedder.py", line 101, in embed_entities_with_cache
+    await ensure_storage_schema()
+  File "C:\Users\Dell\Downloads\RIP\core\storage\database.py", line 34, in ensure_storage_schema
+    async with engine.begin() as connection:
+               ^^^^^^^^^^^^^^
+  File "C:\Users\Dell\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\contextlib.py", line 210, in __aenter__
+    return await anext(self.gen)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Dell\AppData\Roaming\uv\tools\repo-intelligence\Lib\site-packages\sqlalchemy\ext\asyncio\engine.py", line 1068, in begin
+    async with conn:
+               ^^^^
+  File "C:\Users\Dell\AppData\Roaming\uv\tools\repo-intelligence\Lib\site-packages\sqlalchemy\ext\asyncio\base.py", line 121, in __aenter__
+    return await self.start(is_ctxmanager=True)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Dell\AppData\Roaming\uv\tools\repo-intelligence\Lib\site-packages\sqlalchemy\ext\asyncio\engine.py", line 275, in start
+    await greenlet_spawn(self.sync_engine.connect)
+  File "C:\Users\Dell\AppData\Roaming\uv\tools\repo-intelligence\Lib\site-packages\sqlalchemy\util\_concurrency_py3k.py", line 201, in greenlet_spawn
+    result = context.throw(*sys.exc_info())
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Dell\AppData\Roaming\uv\tools\repo-intelligence\Lib\site-packages\sqlalchemy\engine\base.py", line 3295, in connect
+    return self._connection_cls(self)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Dell\AppData\Roaming\uv\tools\repo-intelligence\Lib\site-packages\sqlalchemy\engine\base.py", line 144, in __init__
+    self._dbapi_connection = engine.raw_connection()
+                             ^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Dell\AppData\Roaming\uv\tools\repo-intelligence\Lib\site-packages\sqlalchemy\engine\base.py", line 3319, in raw_connection
+    return self.pool.connect()
+           ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Dell\AppData\Roaming\uv\tools\repo-intelligence\Lib\site-packages\sqlalchemy\pool\base.py", line 448, in connect
+    return _ConnectionFairy._checkout(self)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Dell\AppData\Roaming\uv\tools\repo-intelligence\Lib\site-packages\sqlalchemy\pool\base.py", line 1272, in _checkout
+    fairy = _ConnectionRecord.checkout(pool)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Dell\AppData\Roaming\uv\tools\repo-intelligence\Lib\site-packages\sqlalchemy\pool\base.py", line 712, in checkout
+    rec = pool._do_get()
+          ^^^^^^^^^^^^^^
+  File "C:\Users\Dell\AppData\Roaming\uv\tools\repo-intelligence\Lib\site-packages\sqlalchemy\pool\impl.py", line 178, in _do_get
+    with util.safe_reraise():
+         ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Dell\AppData\Roaming\uv\tools\repo-intelligence\Lib\site-packages\sqlalchemy\util\langhelpers.py", line 122, in __exit__
+    raise exc_value.with_traceback(exc_tb)
+  File "C:\Users\Dell\AppData\Roaming\uv\tools\repo-intelligence\Lib\site-packages\sqlalchemy\pool\impl.py", line 176, in _do_get
+    return self._create_connection()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Dell\AppData\Roaming\uv\tools\repo-intelligence\Lib\site-packages\sqlalchemy\pool\base.py", line 389, in _create_connection
+    return _ConnectionRecord(self)
+           ^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Dell\AppData\Roaming\uv\tools\repo-intelligence\Lib\site-packages\sqlalchemy\pool\base.py", line 674, in __init__
+    self.__connect()
+  File "C:\Users\Dell\AppData\Roaming\uv\tools\repo-intelligence\Lib\site-packages\sqlalchemy\pool\base.py", line 900, in __connect
+    with util.safe_reraise():
+         ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Dell\AppData\Roaming\uv\tools\repo-intelligence\Lib\site-packages\sqlalchemy\util\langhelpers.py", line 122, in __exit__
+    raise exc_value.with_traceback(exc_tb)
+  File "C:\Users\Dell\AppData\Roaming\uv\tools\repo-intelligence\Lib\site-packages\sqlalchemy\pool\base.py", line 896, in __connect
+    self.dbapi_connection = connection = pool._invoke_creator(self)
+                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Dell\AppData\Roaming\uv\tools\repo-intelligence\Lib\site-packages\sqlalchemy\engine\create.py", line 667, in connect
+    return dialect.connect(*cargs_tup, **cparams)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Dell\AppData\Roaming\uv\tools\repo-intelligence\Lib\site-packages\sqlalchemy\engine\default.py", line 630, in connect
+    return self.loaded_dbapi.connect(*cargs, **cparams)  # type: ignore[no-any-return]  # NOQA: E501
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Dell\AppData\Roaming\uv\tools\repo-intelligence\Lib\site-packages\sqlalchemy\dialects\postgresql\asyncpg.py", line 955, in connect
+    await_only(creator_fn(*arg, **kw)),
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Dell\AppData\Roaming\uv\tools\repo-intelligence\Lib\site-packages\sqlalchemy\util\_concurrency_py3k.py", line 132, in await_only
+    return current.parent.switch(awaitable)  # type: ignore[no-any-return,attr-defined] # noqa: E501
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Dell\AppData\Roaming\uv\tools\repo-intelligence\Lib\site-packages\sqlalchemy\util\_concurrency_py3k.py", line 196, in greenlet_spawn
+    value = await result
+            ^^^^^^^^^^^^
+  File "C:\Users\Dell\AppData\Roaming\uv\tools\repo-intelligence\Lib\site-packages\asyncpg\connection.py", line 2443, in connect
+    return await connect_utils._connect(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Dell\AppData\Roaming\uv\tools\repo-intelligence\Lib\site-packages\asyncpg\connect_utils.py", line 1249, in _connect
+    raise last_error or exceptions.TargetServerAttributeNotMatched(
+  File "C:\Users\Dell\AppData\Roaming\uv\tools\repo-intelligence\Lib\site-packages\asyncpg\connect_utils.py", line 1218, in _connect
+    conn = await _connect_addr(
+           ^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Dell\AppData\Roaming\uv\tools\repo-intelligence\Lib\site-packages\asyncpg\connect_utils.py", line 1054, in _connect_addr
+    return await __connect_addr(params, True, *args)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Dell\AppData\Roaming\uv\tools\repo-intelligence\Lib\site-packages\asyncpg\connect_utils.py", line 1099, in __connect_addr
+    tr, pr = await connector
+             ^^^^^^^^^^^^^^^
+╭──────────────────────────────────────────────── Repository Indexing ─────────────────────────────────────────────────╮
+│ Indexing: C:\Users\Dell\Downloads\untitled2\untitled2\lib                                                            │
+│ Phase: Starting  Warming up the indexer.                                                                             │
+│ Files: 0/0                             Skipped: 0                             Warnings: 0                            │
+│ Entities: 0                            Relationships: 0                       Neo4j rels: 0                          │
+│ Neo4j files: 0                         Qdrant deleted: 0                      Embeddings: 0                          │
+│ ⠇ Connecting to Neo4j... ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 0/? 0:04:21                                        │
+│ I am working; counters will rise as each stage completes.                                                            │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭───────────────────────────────────────── Traceback (most recent call last) ──────────────────────────────────────────╮
+│ C:\Users\Dell\Downloads\RIP\cli\main.py:69 in index                                                                  │
+│                                                                                                                      │
+│    66 ) -> None:                                                                                                     │
+│    67 │   from cli.commands.index import index as index_command                                                      │
+│    68 │                                                                                                              │
+│ ❱  69 │   index_command(                                                                                             │
+│    70 │   │   repo_path,                                                                                             │
+│    71 │   │   watch=watch,                                                                                           │
+│    72 │   │   incremental=incremental,                                                                               │
+│                                                                                                                      │
+│ C:\Users\Dell\Downloads\RIP\cli\commands\index.py:49 in index                                                        │
+│                                                                                                                      │
+│    46 │   │   asyncio.run(_incremental_index(repo_path, verbose=verbose))                                            │
+│    47 │   else:                                                                                                      │
+│    48 │   │   console.print(f"[cyan]Starting full index on {repo_path}...[/cyan]")                                   │
+│ ❱  49 │   │   asyncio.run(_index(repo_path, verbose=verbose, log_path=log_path))                                     │
+│    50                                                                                                                │
+│    51                                                                                                                │
+│    52 def _configure_verbose_logging(repo_path: Path) -> Path:                                                       │
+│                                                                                                                      │
+│ C:\Users\Dell\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\asyncio\runners.py:195 in run           │
+│                                                                                                                      │
+│   192 │   │   │   "asyncio.run() cannot be called from a running event loop")                                        │
+│   193 │                                                                                                              │
+│   194 │   with Runner(debug=debug, loop_factory=loop_factory) as runner:                                             │
+│ ❱ 195 │   │   return runner.run(main)                                                                                │
+│   196                                                                                                                │
+│   197                                                                                                                │
+│   198 def _cancel_all_tasks(loop):                                                                                   │
+│                                                                                                                      │
+│ C:\Users\Dell\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\asyncio\runners.py:118 in run           │
+│                                                                                                                      │
+│   115 │   │                                                                                                          │
+│   116 │   │   self._interrupt_count = 0                                                                              │
+│   117 │   │   try:                                                                                                   │
+│ ❱ 118 │   │   │   return self._loop.run_until_complete(task)                                                         │
+│   119 │   │   except exceptions.CancelledError:                                                                      │
+│   120 │   │   │   if self._interrupt_count > 0:                                                                      │
+│   121 │   │   │   │   uncancel = getattr(task, "uncancel", None)                                                     │
+│                                                                                                                      │
+│ C:\Users\Dell\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\asyncio\base_events.py:691 in           │
+│ run_until_complete                                                                                                   │
+│                                                                                                                      │
+│    688 │   │   if not future.done():                                                                                 │
+│    689 │   │   │   raise RuntimeError('Event loop stopped before Future completed.')                                 │
+│    690 │   │                                                                                                         │
+│ ❱  691 │   │   return future.result()                                                                                │
+│    692 │                                                                                                             │
+│    693 │   def stop(self):                                                                                           │
+│    694 │   │   """Stop running the event loop.                                                                       │
+│                                                                                                                      │
+│ C:\Users\Dell\Downloads\RIP\cli\commands\index.py:185 in _index                                                      │
+│                                                                                                                      │
+│   182 │   │   │   progress.update(parsing_task, description="Connecting to Neo4j...", total=None)                    │
+│   183 │   │   │   await client.connect()                                                                             │
+│   184 │   │   │   logger.info("Connected to Neo4j: %s", settings.neo4j_uri)                                          │
+│ ❱ 185 │   │   │   summary = await index_repository_with_resources(                                                   │
+│   186 │   │   │   │   repo_path,                                                                                     │
+│   187 │   │   │   │   client,                                                                                        │
+│   188 │   │   │   │   progress=index_progress,                                                                       │
+│                                                                                                                      │
+│ C:\Users\Dell\Downloads\RIP\core\indexer\pipeline.py:641 in index_repository_with_resources                          │
+│                                                                                                                      │
+│   638 │   │   logger.info("Deleting stale Qdrant embeddings for %s files", len(file_paths))                          │
+│   639 │   │   progress.qdrant_points_deleted = await indexer.delete_file_embeddings_many(file_paths)                 │
+│   640 │   │   logger.info("Indexing %s entities into Qdrant", len(all_entities))                                     │
+│ ❱ 641 │   │   progress.qdrant_vectors_stored = await indexer.index_entities_batched(                                 │
+│   642 │   │   │   all_entities,                                                                                      │
+│   643 │   │   │   progress=progress,                                                                                 │
+│   644 │   │   │   rich_progress=rich_progress,                                                                       │
+│                                                                                                                      │
+│ C:\Users\Dell\Downloads\RIP\core\search\indexer.py:93 in index_entities_batched                                      │
+│                                                                                                                      │
+│    90 │   │   indexed = 0                                                                                            │
+│    91 │   │   for start in range(0, len(entities), batch_size):                                                      │
+│    92 │   │   │   batch = entities[start : start + batch_size]                                                       │
+│ ❱  93 │   │   │   indexed += await self.index_entities(batch)                                                        │
+│    94 │   │   │   if rich_progress and rich_task:                                                                    │
+│    95 │   │   │   │   rich_progress.update(rich_task, advance=len(batch))                                            │
+│    96 │   │   │   if progress:                                                                                       │
+│                                                                                                                      │
+│ C:\Users\Dell\Downloads\RIP\core\search\indexer.py:43 in index_entities                                              │
+│                                                                                                                      │
+│    40 │   │   │   raise RuntimeError("Embedding pipeline is required for entity indexing.")                          │
+│    41 │   │                                                                                                          │
+│    42 │   │   if self.db_session_factory:                                                                            │
+│ ❱  43 │   │   │   embeddings = await self.embedder.embed_entities_with_cache(                                        │
+│    44 │   │   │   │   entities, self.db_session_factory                                                              │
+│    45 │   │   │   )                                                                                                  │
+│    46 │   │   else:                                                                                                  │
+│                                                                                                                      │
+│ C:\Users\Dell\Downloads\RIP\core\search\embedder.py:101 in embed_entities_with_cache                                 │
+│                                                                                                                      │
+│    98 │   │   try:                                                                                                   │
+│    99 │   │   │   from core.storage.database import ensure_storage_schema                                            │
+│   100 │   │   │                                                                                                      │
+│ ❱ 101 │   │   │   await ensure_storage_schema()                                                                      │
+│   102 │   │   │   async with db_session_factory() as session:                                                        │
+│   103 │   │   │   │   from core.storage.models.embedding_cache import EmbeddingCache                                 │
+│   104 │   │   │   │   stmt = select(EmbeddingCache).where(                                                           │
+│                                                                                                                      │
+│ C:\Users\Dell\Downloads\RIP\core\storage\database.py:34 in ensure_storage_schema                                     │
+│                                                                                                                      │
+│   31 │   """Create local metadata tables when migrations have not been run yet."""                                   │
+│   32 │   import core.storage.models  # noqa: F401                                                                    │
+│   33 │                                                                                                               │
+│ ❱ 34 │   async with engine.begin() as connection:                                                                    │
+│   35 │   │   await connection.run_sync(Base.metadata.create_all)                                                     │
+│   36                                                                                                                 │
+│                                                                                                                      │
+│ C:\Users\Dell\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\contextlib.py:210 in __aenter__         │
+│                                                                                                                      │
+│   207 │   │   # they are only needed for recreation, which is not possible anymore                                   │
+│   208 │   │   del self.args, self.kwds, self.func                                                                    │
+│   209 │   │   try:                                                                                                   │
+│ ❱ 210 │   │   │   return await anext(self.gen)                                                                       │
+│   211 │   │   except StopAsyncIteration:                                                                             │
+│   212 │   │   │   raise RuntimeError("generator didn't yield") from None                                             │
+│   213                                                                                                                │
+│                                                                                                                      │
+│ C:\Users\Dell\AppData\Roaming\uv\tools\repo-intelligence\Lib\site-packages\sqlalchemy\ext\asyncio\engine.py:1068 in  │
+│ begin                                                                                                                │
+│                                                                                                                      │
+│   1065 │   │   """                                                                                                   │
+│   1066 │   │   conn = self.connect()                                                                                 │
+│   1067 │   │                                                                                                         │
+│ ❱ 1068 │   │   async with conn:                                                                                      │
+│   1069 │   │   │   async with conn.begin():                                                                          │
+│   1070 │   │   │   │   yield conn                                                                                    │
+│   1071                                                                                                               │
+│                                                                                                                      │
+│ C:\Users\Dell\AppData\Roaming\uv\tools\repo-intelligence\Lib\site-packages\sqlalchemy\ext\asyncio\base.py:121 in     │
+│ __aenter__                                                                                                           │
+│                                                                                                                      │
+│   118 │   │   return self.start().__await__()                                                                        │
+│   119 │                                                                                                              │
+│   120 │   async def __aenter__(self) -> _T_co:                                                                       │
+│ ❱ 121 │   │   return await self.start(is_ctxmanager=True)                                                            │
+│   122 │                                                                                                              │
+│   123 │   @abc.abstractmethod                                                                                        │
+│   124 │   async def __aexit__(                                                                                       │
+│                                                                                                                      │
+│ C:\Users\Dell\AppData\Roaming\uv\tools\repo-intelligence\Lib\site-packages\sqlalchemy\ext\asyncio\engine.py:275 in   │
+│ start                                                                                                                │
+│                                                                                                                      │
+│    272 │   │   if self.sync_connection:                                                                              │
+│    273 │   │   │   raise exc.InvalidRequestError("connection is already started")                                    │
+│    274 │   │   self.sync_connection = self._assign_proxied(                                                          │
+│ ❱  275 │   │   │   await greenlet_spawn(self.sync_engine.connect)                                                    │
+│    276 │   │   )                                                                                                     │
+│    277 │   │   return self                                                                                           │
+│    278                                                                                                               │
+│                                                                                                                      │
+│ C:\Users\Dell\AppData\Roaming\uv\tools\repo-intelligence\Lib\site-packages\sqlalchemy\util\_concurrency_py3k.py:201  │
+│ in greenlet_spawn                                                                                                    │
+│                                                                                                                      │
+│   198 │   │   │   # this allows an exception to be raised within                                                     │
+│   199 │   │   │   # the moderated greenlet so that it can continue                                                   │
+│   200 │   │   │   # its expected flow.                                                                               │
+│ ❱ 201 │   │   │   result = context.throw(*sys.exc_info())                                                            │
+│   202 │   │   else:                                                                                                  │
+│   203 │   │   │   result = context.switch(value)                                                                     │
+│   204                                                                                                                │
+│                                                                                                                      │
+│ C:\Users\Dell\AppData\Roaming\uv\tools\repo-intelligence\Lib\site-packages\sqlalchemy\engine\base.py:3295 in connect │
+│                                                                                                                      │
+│   3292 │   │                                                                                                         │
+│   3293 │   │   """                                                                                                   │
+│   3294 │   │                                                                                                         │
+│ ❱ 3295 │   │   return self._connection_cls(self)                                                                     │
+│   3296 │                                                                                                             │
+│   3297 │   def raw_connection(self) -> PoolProxiedConnection:                                                        │
+│   3298 │   │   """Return a "raw" DBAPI connection from the connection pool.                                          │
+│                                                                                                                      │
+│ C:\Users\Dell\AppData\Roaming\uv\tools\repo-intelligence\Lib\site-packages\sqlalchemy\engine\base.py:144 in __init__ │
+│                                                                                                                      │
+│    141 │   │                                                                                                         │
+│    142 │   │   if connection is None:                                                                                │
+│    143 │   │   │   try:                                                                                              │
+│ ❱  144 │   │   │   │   self._dbapi_connection = engine.raw_connection()                                              │
+│    145 │   │   │   except dialect.loaded_dbapi.Error as err:                                                         │
+│    146 │   │   │   │   Connection._handle_dbapi_exception_noconnection(                                              │
+│    147 │   │   │   │   │   err, dialect, engine                                                                      │
+│                                                                                                                      │
+│ C:\Users\Dell\AppData\Roaming\uv\tools\repo-intelligence\Lib\site-packages\sqlalchemy\engine\base.py:3319 in         │
+│ raw_connection                                                                                                       │
+│                                                                                                                      │
+│   3316 │   │   │   :ref:`dbapi_connections`                                                                          │
+│   3317 │   │                                                                                                         │
+│   3318 │   │   """                                                                                                   │
+│ ❱ 3319 │   │   return self.pool.connect()                                                                            │
+│   3320                                                                                                               │
+│   3321                                                                                                               │
+│   3322 class OptionEngineMixin(log.Identified):                                                                      │
+│                                                                                                                      │
+│ C:\Users\Dell\AppData\Roaming\uv\tools\repo-intelligence\Lib\site-packages\sqlalchemy\pool\base.py:448 in connect    │
+│                                                                                                                      │
+│    445 │   │   the pool.                                                                                             │
+│    446 │   │                                                                                                         │
+│    447 │   │   """                                                                                                   │
+│ ❱  448 │   │   return _ConnectionFairy._checkout(self)                                                               │
+│    449 │                                                                                                             │
+│    450 │   def _return_conn(self, record: ConnectionPoolEntry) -> None:                                              │
+│    451 │   │   """Given a _ConnectionRecord, return it to the :class:`_pool.Pool`.                                   │
+│                                                                                                                      │
+│ C:\Users\Dell\AppData\Roaming\uv\tools\repo-intelligence\Lib\site-packages\sqlalchemy\pool\base.py:1272 in _checkout │
+│                                                                                                                      │
+│   1269 │   │   fairy: Optional[_ConnectionFairy] = None,                                                             │
+│   1270 │   ) -> _ConnectionFairy:                                                                                    │
+│   1271 │   │   if not fairy:                                                                                         │
+│ ❱ 1272 │   │   │   fairy = _ConnectionRecord.checkout(pool)                                                          │
+│   1273 │   │   │                                                                                                     │
+│   1274 │   │   │   if threadconns is not None:                                                                       │
+│   1275 │   │   │   │   threadconns.current = weakref.ref(fairy)                                                      │
+│                                                                                                                      │
+│ C:\Users\Dell\AppData\Roaming\uv\tools\repo-intelligence\Lib\site-packages\sqlalchemy\pool\base.py:712 in checkout   │
+│                                                                                                                      │
+│    709 │   │   if TYPE_CHECKING:                                                                                     │
+│    710 │   │   │   rec = cast(_ConnectionRecord, pool._do_get())                                                     │
+│    711 │   │   else:                                                                                                 │
+│ ❱  712 │   │   │   rec = pool._do_get()                                                                              │
+│    713 │   │                                                                                                         │
+│    714 │   │   try:                                                                                                  │
+│    715 │   │   │   dbapi_connection = rec.get_connection()                                                           │
+│                                                                                                                      │
+│ C:\Users\Dell\AppData\Roaming\uv\tools\repo-intelligence\Lib\site-packages\sqlalchemy\pool\impl.py:178 in _do_get    │
+│                                                                                                                      │
+│   175 │   │   │   try:                                                                                               │
+│   176 │   │   │   │   return self._create_connection()                                                               │
+│   177 │   │   │   except:                                                                                            │
+│ ❱ 178 │   │   │   │   with util.safe_reraise():                                                                      │
+│   179 │   │   │   │   │   self._dec_overflow()                                                                       │
+│   180 │   │   │   │   raise                                                                                          │
+│   181 │   │   else:                                                                                                  │
+│                                                                                                                      │
+│ C:\Users\Dell\AppData\Roaming\uv\tools\repo-intelligence\Lib\site-packages\sqlalchemy\util\langhelpers.py:122 in     │
+│ __exit__                                                                                                             │
+│                                                                                                                      │
+│    119 │   │   │   exc_type, exc_value, exc_tb = self._exc_info                                                      │
+│    120 │   │   │   assert exc_value is not None                                                                      │
+│    121 │   │   │   self._exc_info = None  # remove potential circular references                                     │
+│ ❱  122 │   │   │   raise exc_value.with_traceback(exc_tb)                                                            │
+│    123 │   │   else:                                                                                                 │
+│    124 │   │   │   self._exc_info = None  # remove potential circular references                                     │
+│    125 │   │   │   assert value is not None                                                                          │
+│                                                                                                                      │
+│ C:\Users\Dell\AppData\Roaming\uv\tools\repo-intelligence\Lib\site-packages\sqlalchemy\pool\impl.py:176 in _do_get    │
+│                                                                                                                      │
+│   173 │   │                                                                                                          │
+│   174 │   │   if self._inc_overflow():                                                                               │
+│   175 │   │   │   try:                                                                                               │
+│ ❱ 176 │   │   │   │   return self._create_connection()                                                               │
+│   177 │   │   │   except:                                                                                            │
+│   178 │   │   │   │   with util.safe_reraise():                                                                      │
+│   179 │   │   │   │   │   self._dec_overflow()                                                                       │
+│                                                                                                                      │
+│ C:\Users\Dell\AppData\Roaming\uv\tools\repo-intelligence\Lib\site-packages\sqlalchemy\pool\base.py:389 in            │
+│ _create_connection                                                                                                   │
+│                                                                                                                      │
+│    386 │   def _create_connection(self) -> ConnectionPoolEntry:                                                      │
+│    387 │   │   """Called by subclasses to create a new ConnectionRecord."""                                          │
+│    388 │   │                                                                                                         │
+│ ❱  389 │   │   return _ConnectionRecord(self)                                                                        │
+│    390 │                                                                                                             │
+│    391 │   def _invalidate(                                                                                          │
+│    392 │   │   self,                                                                                                 │
+│                                                                                                                      │
+│ C:\Users\Dell\AppData\Roaming\uv\tools\repo-intelligence\Lib\site-packages\sqlalchemy\pool\base.py:674 in __init__   │
+│                                                                                                                      │
+│    671 │   │                                                                                                         │
+│    672 │   │   self.__pool = pool                                                                                    │
+│    673 │   │   if connect:                                                                                           │
+│ ❱  674 │   │   │   self.__connect()                                                                                  │
+│    675 │   │   self.finalize_callback = deque()                                                                      │
+│    676 │                                                                                                             │
+│    677 │   dbapi_connection: Optional[DBAPIConnection]                                                               │
+│                                                                                                                      │
+│ C:\Users\Dell\AppData\Roaming\uv\tools\repo-intelligence\Lib\site-packages\sqlalchemy\pool\base.py:900 in __connect  │
+│                                                                                                                      │
+│    897 │   │   │   pool.logger.debug("Created new connection %r", connection)                                        │
+│    898 │   │   │   self.fresh = True                                                                                 │
+│    899 │   │   except BaseException as e:                                                                            │
+│ ❱  900 │   │   │   with util.safe_reraise():                                                                         │
+│    901 │   │   │   │   pool.logger.debug("Error on connect(): %s", e)                                                │
+│    902 │   │   else:                                                                                                 │
+│    903 │   │   │   # in SQLAlchemy 1.4 the first_connect event is not used by                                        │
+│                                                                                                                      │
+│ C:\Users\Dell\AppData\Roaming\uv\tools\repo-intelligence\Lib\site-packages\sqlalchemy\util\langhelpers.py:122 in     │
+│ __exit__                                                                                                             │
+│                                                                                                                      │
+│    119 │   │   │   exc_type, exc_value, exc_tb = self._exc_info                                                      │
+│    120 │   │   │   assert exc_value is not None                                                                      │
+│    121 │   │   │   self._exc_info = None  # remove potential circular references                                     │
+│ ❱  122 │   │   │   raise exc_value.with_traceback(exc_tb)                                                            │
+│    123 │   │   else:                                                                                                 │
+│    124 │   │   │   self._exc_info = None  # remove potential circular references                                     │
+│    125 │   │   │   assert value is not None                                                                          │
+│                                                                                                                      │
+│ C:\Users\Dell\AppData\Roaming\uv\tools\repo-intelligence\Lib\site-packages\sqlalchemy\pool\base.py:896 in __connect  │
+│                                                                                                                      │
+│    893 │   │   self.dbapi_connection = None                                                                          │
+│    894 │   │   try:                                                                                                  │
+│    895 │   │   │   self.starttime = time.time()                                                                      │
+│ ❱  896 │   │   │   self.dbapi_connection = connection = pool._invoke_creator(self)                                   │
+│    897 │   │   │   pool.logger.debug("Created new connection %r", connection)                                        │
+│    898 │   │   │   self.fresh = True                                                                                 │
+│    899 │   │   except BaseException as e:                                                                            │
+│                                                                                                                      │
+│ C:\Users\Dell\AppData\Roaming\uv\tools\repo-intelligence\Lib\site-packages\sqlalchemy\engine\create.py:667 in        │
+│ connect                                                                                                              │
+│                                                                                                                      │
+│   664 │   │   │   │   │   │   return connection                                                                      │
+│   665 │   │   │   │   return dialect.connect(*mutable_cargs, **mutable_cparams)                                      │
+│   666 │   │   │   else:                                                                                              │
+│ ❱ 667 │   │   │   │   return dialect.connect(*cargs_tup, **cparams)                                                  │
+│   668 │   │                                                                                                          │
+│   669 │   │   creator = pop_kwarg("creator", connect)                                                                │
+│   670                                                                                                                │
+│                                                                                                                      │
+│ C:\Users\Dell\AppData\Roaming\uv\tools\repo-intelligence\Lib\site-packages\sqlalchemy\engine\default.py:630 in       │
+│ connect                                                                                                              │
+│                                                                                                                      │
+│    627 │                                                                                                             │
+│    628 │   def connect(self, *cargs: Any, **cparams: Any) -> DBAPIConnection:                                        │
+│    629 │   │   # inherits the docstring from interfaces.Dialect.connect                                              │
+│ ❱  630 │   │   return self.loaded_dbapi.connect(*cargs, **cparams)  # type: ignore[no-any-return]  # NOQA: E501      │
+│    631 │                                                                                                             │
+│    632 │   def create_connect_args(self, url: URL) -> ConnectArgsType:                                               │
+│    633 │   │   # inherits the docstring from interfaces.Dialect.create_connect_args                                  │
+│                                                                                                                      │
+│ C:\Users\Dell\AppData\Roaming\uv\tools\repo-intelligence\Lib\site-packages\sqlalchemy\dialects\postgresql\asyncpg.py │
+│ :955 in connect                                                                                                      │
+│                                                                                                                      │
+│    952 │   │   else:                                                                                                 │
+│    953 │   │   │   return AsyncAdapt_asyncpg_connection(                                                             │
+│    954 │   │   │   │   self,                                                                                         │
+│ ❱  955 │   │   │   │   await_only(creator_fn(*arg, **kw)),                                                           │
+│    956 │   │   │   │   prepared_statement_cache_size=prepared_statement_cache_size,                                  │
+│    957 │   │   │   │   prepared_statement_name_func=prepared_statement_name_func,                                    │
+│    958 │   │   │   )                                                                                                 │
+│                                                                                                                      │
+│ C:\Users\Dell\AppData\Roaming\uv\tools\repo-intelligence\Lib\site-packages\sqlalchemy\util\_concurrency_py3k.py:132  │
+│ in await_only                                                                                                        │
+│                                                                                                                      │
+│   129 │   # a coroutine to run. Once the awaitable is done, the driver greenlet                                      │
+│   130 │   # switches back to this greenlet with the result of awaitable that is                                      │
+│   131 │   # then returned to the caller (or raised as error)                                                         │
+│ ❱ 132 │   return current.parent.switch(awaitable)  # type: ignore[no-any-return,attr-defined] # noqa: E501           │
+│   133                                                                                                                │
+│   134                                                                                                                │
+│   135 def await_fallback(awaitable: Awaitable[_T]) -> _T:                                                            │
+│                                                                                                                      │
+│ C:\Users\Dell\AppData\Roaming\uv\tools\repo-intelligence\Lib\site-packages\sqlalchemy\util\_concurrency_py3k.py:196  │
+│ in greenlet_spawn                                                                                                    │
+│                                                                                                                      │
+│   193 │   │   try:                                                                                                   │
+│   194 │   │   │   # wait for a coroutine from await_only and then return its                                         │
+│   195 │   │   │   # result back to it.                                                                               │
+│ ❱ 196 │   │   │   value = await result                                                                               │
+│   197 │   │   except BaseException:                                                                                  │
+│   198 │   │   │   # this allows an exception to be raised within                                                     │
+│   199 │   │   │   # the moderated greenlet so that it can continue                                                   │
+│                                                                                                                      │
+│ C:\Users\Dell\AppData\Roaming\uv\tools\repo-intelligence\Lib\site-packages\asyncpg\connection.py:2443 in connect     │
+│                                                                                                                      │
+│   2440 │   │   loop = asyncio.get_event_loop()                                                                       │
+│   2441 │                                                                                                             │
+│   2442 │   async with compat.timeout(timeout):                                                                       │
+│ ❱ 2443 │   │   return await connect_utils._connect(                                                                  │
+│   2444 │   │   │   loop=loop,                                                                                        │
+│   2445 │   │   │   connection_class=connection_class,                                                                │
+│   2446 │   │   │   record_class=record_class,                                                                        │
+│                                                                                                                      │
+│ C:\Users\Dell\AppData\Roaming\uv\tools\repo-intelligence\Lib\site-packages\asyncpg\connect_utils.py:1249 in _connect │
+│                                                                                                                      │
+│   1246 │   if chosen_connection:                                                                                     │
+│   1247 │   │   return chosen_connection                                                                              │
+│   1248 │                                                                                                             │
+│ ❱ 1249 │   raise last_error or exceptions.TargetServerAttributeNotMatched(                                           │
+│   1250 │   │   'None of the hosts match the target attribute requirement '                                           │
+│   1251 │   │   '{!r}'.format(target_attr)                                                                            │
+│   1252 │   )                                                                                                         │
+│                                                                                                                      │
+│ C:\Users\Dell\AppData\Roaming\uv\tools\repo-intelligence\Lib\site-packages\asyncpg\connect_utils.py:1218 in _connect │
+│                                                                                                                      │
+│   1215 │   try:                                                                                                      │
+│   1216 │   │   for addr in addrs:                                                                                    │
+│   1217 │   │   │   try:                                                                                              │
+│ ❱ 1218 │   │   │   │   conn = await _connect_addr(                                                                   │
+│   1219 │   │   │   │   │   addr=addr,                                                                                │
+│   1220 │   │   │   │   │   loop=loop,                                                                                │
+│   1221 │   │   │   │   │   params=params,                                                                            │
+│                                                                                                                      │
+│ C:\Users\Dell\AppData\Roaming\uv\tools\repo-intelligence\Lib\site-packages\asyncpg\connect_utils.py:1054 in          │
+│ _connect_addr                                                                                                        │
+│                                                                                                                      │
+│   1051 │                                                                                                             │
+│   1052 │   # first attempt                                                                                           │
+│   1053 │   try:                                                                                                      │
+│ ❱ 1054 │   │   return await __connect_addr(params, True, *args)                                                      │
+│   1055 │   except _RetryConnectSignal:                                                                               │
+│   1056 │   │   pass                                                                                                  │
+│   1057                                                                                                               │
+│                                                                                                                      │
+│ C:\Users\Dell\AppData\Roaming\uv\tools\repo-intelligence\Lib\site-packages\asyncpg\connect_utils.py:1099 in          │
+│ __connect_addr                                                                                                       │
+│                                                                                                                      │
+│   1096 │   else:                                                                                                     │
+│   1097 │   │   connector = loop.create_connection(proto_factory, *addr)                                              │
+│   1098 │                                                                                                             │
+│ ❱ 1099 │   tr, pr = await connector                                                                                  │
+│   1100 │                                                                                                             │
+│   1101 │   try:                                                                                                      │
+│   1102 │   │   await connected                                                                                       │
+│                                                                                                                      │
+│ C:\Users\Dell\AppData\Roaming\uv\tools\repo-intelligence\Lib\site-packages\asyncpg\connect_utils.py:977 in           │
+│ _create_ssl_connection                                                                                               │
+│                                                                                                                      │
+│    974 │   tr.write(struct.pack('!ll', 8, 80877103))  # SSLRequest message.                                          │
+│    975 │                                                                                                             │
+│    976 │   try:                                                                                                      │
+│ ❱  977 │   │   do_ssl_upgrade = await pr.on_data                                                                     │
+│    978 │   except (Exception, asyncio.CancelledError):                                                               │
+│    979 │   │   tr.close()                                                                                            │
+│    980 │   │   raise                                                                                                 │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+ConnectionError: unexpected connection_lost() call
+PS C:\Users\Dell\Downloads\untitled2\un

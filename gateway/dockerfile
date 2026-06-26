@@ -1,0 +1,19 @@
+FROM python:3.13-slim
+
+WORKDIR /app
+
+# Install uv
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+
+# Copy project files
+COPY pyproject.toml uv.lock* ./
+COPY gateway/ ./gateway/
+
+# Install dependencies
+RUN uv pip install --system -e .
+
+# Expose port
+EXPOSE 8001
+
+# Run gateway
+CMD ["uv", "run", "gateway", "start"]

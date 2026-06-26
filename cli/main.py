@@ -55,6 +55,10 @@ def index(
         bool,
         typer.Option("--incremental", help="Index only changed files"),
     ] = False,
+    smart: Annotated[
+        bool,
+        typer.Option("--smart", help="Index only git-changed and untracked files"),
+    ] = False,
     languages: Annotated[
         str | None,
         typer.Option("--languages", help="Comma-separated languages"),
@@ -70,6 +74,7 @@ def index(
         repo_path,
         watch=watch,
         incremental=incremental,
+        smart=smart,
         languages=languages,
         verbose=verbose,
     )
@@ -108,12 +113,24 @@ def impact(
     impact_command(symbol, output_format=output_format, project=project)
 
 
+@app.command("dependencies")
+def dependencies(
+    target: Annotated[str, typer.Argument(help="File path or file name to inspect")],
+    output_format: Annotated[str, typer.Option("--format", help="text or json")] = "text",
+    project: Annotated[str | None, typer.Option("--project", help="Project id override")] = None,
+    limit: Annotated[int, typer.Option("--limit", help="Maximum rows per section")] = 25,
+) -> None:
+    from cli.commands.dependencies import dependencies as dependencies_command
+
+    dependencies_command(target, output_format=output_format, project=project, limit=limit)
+
+
 @app.command("explain")
 def explain(
-    symbol: Annotated[str, typer.Argument(help="Symbol or file to explain")],
+    symbol: Annotated[str, typer.Argument(help="What to explain (symbol or natural language query)")],
     context_level: Annotated[
         str,
-        typer.Option("--level", help="Context level: file, class, function"),
+        typer.Option("--level", help="Context scope"),
     ] = "file",
     provider: Annotated[
         str | None,
@@ -130,6 +147,26 @@ def explain(
         ),
     ] = None,
     project: Annotated[str | None, typer.Option("--project", help="Project id override")] = None,
+    diagram: Annotated[
+        bool,
+        typer.Option("--diagram", "-d", help="Show Mermaid diagram"),
+    ] = False,
+    tree: Annotated[
+        bool,
+        typer.Option("--tree", "-t", help="Show Rich tree view"),
+    ] = False,
+    dependencies: Annotated[
+        bool,
+        typer.Option("--deps", help="Show dependency table"),
+    ] = False,
+    no_llm: Annotated[
+        bool,
+        typer.Option("--no-llm", help="Skip LLM, show graph analysis only"),
+    ] = False,
+    max_hops: Annotated[
+        int,
+        typer.Option("--max-hops", help="Maximum workflow trace hops"),
+    ] = 8,
 ) -> None:
     from cli.commands.explain import explain as explain_command
 
@@ -139,6 +176,11 @@ def explain(
         provider=provider,
         model=model,
         project=project,
+        diagram=diagram,
+        tree_view=tree,
+        dependencies=dependencies,
+        no_llm=no_llm,
+        max_hops=max_hops,
     )
 
 
@@ -280,3 +322,46 @@ def delete(
 @app.command("config")
 def config() -> None:
     print_not_implemented("repo config")
+
+
+mcp_app = typer.Typer(help="MCP installation and configuration for AI agents")
+app.add_typer(mcp_app, name="mcp")
+
+
+@mcp_app.command("install")
+def mcp_install_command(
+    repo_path: Annotated[Path, typer.Option(help="Repository path to index")] = Path("."),
+    agent: Annotated[str | None, typer.Option("--agent", "-a", help="Specific agent to configure (codex, claude, cursor, windsurf, aider)")] = None,
+    all_agents: Annotated[bool, typer.Option("--all", help="Configure all detected agents")] = False,
+    instructions_only: Annotated[bool, typer.Option("--instructions-only", help="Only update instructions files, skip MCP config")] = False,
+    dry_run: Annotated[bool, typer.Option("--dry-run", help="Show what would be done without making changes")] = False,
+) -> None:
+    """Install RIP MCP for AI agents (Codex, Claude, Cursor, Windsurf, Aider)."""
+    from cli.commands.mcp import mcp_install
+
+    mcp_install(
+        repo_path=repo_path,
+        agent=agent,
+        all_agents=all_agents,
+        instructions_only=instructions_only,
+        dry_run=dry_run,
+    )
+
+
+@mcp_app.command("status")
+def mcp_status_command() -> None:
+    """Show MCP installation status."""
+    from cli.commands.mcp import mcp_status
+
+    mcp_status()
+
+
+@mcp_app.command("remove")
+def mcp_remove_command(
+    agent: Annotated[str | None, typer.Option("--agent", "-a", help="Specific agent to remove MCP config from")] = None,
+    all_agents: Annotated[bool, typer.Option("--all", help="Remove from all configured agents")] = False,
+) -> None:
+    """Remove RIP MCP from AI agents."""
+    from cli.commands.mcp import mcp_remove
+
+    mcp_remove(agent=agent, all_agents=all_agents)

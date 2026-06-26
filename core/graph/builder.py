@@ -8,7 +8,14 @@ from collections.abc import Iterable
 from pathlib import Path
 from typing import TypeVar
 
+import anyio
+
 from core.graph.client import Neo4jClient
+from core.graph.queries.ownership import (
+    create_developers_and_commits_batch,
+    relate_commits_to_files_batch,
+    set_file_ownership_batch,
+)
 from core.parser.base import ParsedFile
 from core.projects import DEFAULT_PROJECT_ID
 
@@ -219,9 +226,8 @@ class GraphBuilder:
         """Fast relationship upsert grouped by type."""
         count = 0
         rows_by_type: dict[str, list[dict]] = {}
-        ALLOWED = {"CALLS", "IMPORTS", "EXTENDS", "IMPLEMENTS", "CONTAINS", 
-           "MIXES_IN", "USES", "CALLS_ENDPOINT", "BELONGS_TO", "IS_ENTRY_POINT",
-           "RENDERS", "NAVIGATES_TO", "DEPENDS_ON"}
+        ALLOWED = {"CALLS", "IMPORTS", "EXTENDS", "IMPLEMENTS", "CONTAINS",
+            "DEPENDS_ON", "REPRESENTS", "OWNS"}
 
         for pf in parsed_files:
             for rel in pf.relationships:
@@ -398,13 +404,23 @@ class GraphBuilder:
             await self.client.execute(query, row)
 
     async def delete_file_entities(self, file_path: str, project_id: str | None = None) -> None:
-        """Delete all entities for a file."""
+        """Delete stale entities and outgoing dependency edges for a file."""
         project_id = project_id or self.project_id
         if not project_id:
             return
         await self.client.execute(
             """
-            MATCH (f:File {path: $file_path, project_id: $project_id})-[:CONTAINS]->(entity)
+            MATCH (f:File {project_id: $project_id})
+            WHERE f.path = $file_path
+               OR replace(f.path, "\\\\", "/") ENDS WITH "/" + $file_path
+            OPTIONAL MATCH (f)-[import_rel:IMPORTS]->()
+            DELETE import_rel
+            WITH f
+            OPTIONAL MATCH (module:Module {project_id: $project_id})-[:REPRESENTS]->(f)
+            OPTIONAL MATCH (module)-[dep_rel:DEPENDS_ON]->()
+            DELETE dep_rel
+            WITH f
+            OPTIONAL MATCH (f)-[:CONTAINS]->(entity)
             DETACH DELETE entity
             """,
             {"file_path": file_path, "project_id": project_id},
@@ -416,7 +432,6 @@ class GraphBuilder:
 
     async def build_git_data(self, repo_path: Path) -> None:
         """Extract and insert Git data (optimized batch version)."""
-        import anyio
         from core.parser.git_ingestor import GitIngestor
 
         logger.info("📊 Git: Extracting commit history...")
@@ -429,7 +444,7 @@ class GraphBuilder:
             return
 
         # Collect all commits and file relations first
-        commits = ingestor.get_commits(limit=50)
+        commits = ingestor.get_commits(limit=100)
         commit_rows = []
         file_rel_rows = []
 
@@ -449,28 +464,18 @@ class GraphBuilder:
 
         # Batch insert commits and developers
         t1 = time.perf_counter()
-        if commit_rows:
-            await self.client.execute("""
-                UNWIND $rows AS row
-                MERGE (d:Developer {email: row.author_email})
-                ON CREATE SET d.name = row.author_name
-                MERGE (c:Commit {hash: row.hash})
-                SET c.message = row.message, c.timestamp = row.timestamp
-                MERGE (d)-[:AUTHORED]->(c)
-            """, {"rows": commit_rows})
+        await create_developers_and_commits_batch(self.client, commit_rows)
         logger.info("   📝 %d commits in %.1fs", len(commit_rows), time.perf_counter() - t1)
 
         # Batch insert file-commit relations
         t2 = time.perf_counter()
-        if file_rel_rows:
-            for chunk in _chunk_list(file_rel_rows, chunk_size=500):
-                await self.client.execute("""
-                    UNWIND $rows AS row
-                    MATCH (c:Commit {hash: row.hash})
-                    MERGE (f:File {path: row.file_path, project_id: $project_id})
-                    MERGE (c)-[:MODIFIED]->(f)
-                """, {"rows": chunk, "project_id": self.project_id})
-        logger.info("   📁 %d file relations in %.1fs", len(file_rel_rows), time.perf_counter() - t2)
+        for chunk in _chunk_list(file_rel_rows, chunk_size=500):
+            await relate_commits_to_files_batch(self.client, chunk, self.project_id)
+        logger.info(
+            "   📁 %d file relations in %.1fs",
+            len(file_rel_rows),
+            time.perf_counter() - t2,
+        )
 
         # Ownership data
         if not self.project_id:
@@ -493,7 +498,11 @@ class GraphBuilder:
             if not str(path_obj).startswith(repo_str):
                 continue
             try:
-                await anyio.to_thread.run_sync(lambda po, rp: po.relative_to(rp), path_obj, repo_path)
+                await anyio.to_thread.run_sync(
+                    lambda po, rp: po.relative_to(rp),
+                    path_obj,
+                    repo_path,
+                )
             except ValueError:
                 continue
 
@@ -509,16 +518,8 @@ class GraphBuilder:
 
         # Batch insert ownership
         t3 = time.perf_counter()
-        if ownership_rows:
-            for chunk in _chunk_list(ownership_rows, chunk_size=500):
-                await self.client.execute("""
-                    UNWIND $rows AS row
-                    MATCH (f:File {path: row.file_path, project_id: $project_id})
-                    MERGE (d:Developer {email: row.author_email})
-                    ON CREATE SET d.name = row.author_name
-                    MERGE (d)-[r:OWNS]->(f)
-                    SET r.percentage = row.percentage, r.line_count = row.line_count
-                """, {"rows": chunk, "project_id": self.project_id})
+        for chunk in _chunk_list(ownership_rows, chunk_size=500):
+            await set_file_ownership_batch(self.client, chunk, self.project_id)
         logger.info("   👤 %d ownerships in %.1fs", len(ownership_rows), time.perf_counter() - t3)
 
         git_time = time.perf_counter() - git_start

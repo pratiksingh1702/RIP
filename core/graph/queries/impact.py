@@ -14,6 +14,51 @@ RETURN affected.name AS name, affected.file_path AS file_path, labels(affected) 
 """
 
 
+async def dependency_graph(
+    client: Neo4jClient,
+    symbol: str,
+    project_id: str | None = None,
+    direction: str = "both",  # "outgoing", "incoming", "both"
+) -> dict[str, list[tuple[str, str]]]:
+    """Get dependency graph for a symbol.
+    
+    Returns:
+        {entity_name: [(dependency_name, relationship_type), ...]}
+    """
+    if direction in ("outgoing", "both"):
+        out_query = """
+        MATCH (e {name: $symbol, project_id: $project_id})-[r]->(dep)
+        WHERE dep.project_id = $project_id
+          AND type(r) IN ['CALLS', 'USES', 'DEPENDS_ON', 'EXTENDS', 'IMPLEMENTS', 'NAVIGATES_TO', 'IMPORTS']
+        RETURN e.name AS source, dep.name AS target, type(r) AS rel_type
+        LIMIT 30
+        """
+        out_records = await client.execute(out_query, {"symbol": symbol, "project_id": project_id})
+    else:
+        out_records = []
+    
+    if direction in ("incoming", "both"):
+        in_query = """
+        MATCH (dep {project_id: $project_id})-[r]->(e {name: $symbol, project_id: $project_id})
+        WHERE type(r) IN ['CALLS', 'USES', 'DEPENDS_ON', 'EXTENDS', 'IMPLEMENTS', 'NAVIGATES_TO', 'IMPORTS']
+        RETURN dep.name AS source, e.name AS target, type(r) AS rel_type
+        LIMIT 30
+        """
+        in_records = await client.execute(in_query, {"symbol": symbol, "project_id": project_id})
+    else:
+        in_records = []
+    
+    graph = {}
+    for r in out_records + in_records:
+        source = r.get("source", "")
+        target = r.get("target", "")
+        rel = r.get("rel_type", "")
+        if source and target:
+            graph.setdefault(source, []).append((target, rel))
+    
+    return graph
+
+
 async def impact_symbol(
     client: Neo4jClient,
     symbol: str,

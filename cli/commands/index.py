@@ -119,6 +119,7 @@ def index(
     repo_path: Path = Path("."),
     watch: bool = False,
     incremental: bool = False,
+    smart: bool = False,
     languages: str | None = None,
     verbose: bool = False,
 ) -> None:
@@ -131,6 +132,9 @@ def index(
     if watch:
         console.print(f"[cyan]Watch mode on {repo_path}...[/cyan]")
         _watch_mode(repo_path, verbose=verbose)
+    elif smart:
+        console.print(f"[cyan]Smart index on {repo_path}...[/cyan]")
+        asyncio.run(_smart_index(repo_path, verbose=verbose))
     elif incremental:
         console.print(f"[cyan]Incremental index on {repo_path}...[/cyan]")
         asyncio.run(_incremental_index(repo_path, verbose=verbose))
@@ -382,6 +386,28 @@ async def _incremental_index(repo_path: Path, verbose: bool = False) -> None:
             async with async_session_factory() as db:
                 r = await incremental_index(repo_path, neo, db, reg)
         console.print(f"[green]✅ {r['updated']} updated, {r['deleted']} deleted, {r['skipped']} skipped[/green]")
+    finally:
+        await neo.close()
+
+
+async def _smart_index(repo_path: Path, verbose: bool = False) -> None:
+    from core.indexer.incremental import smart_index
+
+    settings = get_settings()
+    neo = Neo4jClient(settings.neo4j_uri, settings.neo4j_user, settings.neo4j_password)
+    await neo.connect()
+    reg = build_default_registry()
+    try:
+        with console.status("[bold blue]Smart index...[/bold blue]", spinner="dots"):
+            async with async_session_factory() as db:
+                r = await smart_index(repo_path, neo, db, reg)
+        if r["updated"] == 0 and r["deleted"] == 0:
+            console.print("[green]Nothing to index - git reports no source changes[/green]")
+            return
+        console.print(
+            "[green]Indexed {updated} files, deleted {deleted}, "
+            "{entities} entities in {duration:.1f}s[/green]".format(**r)
+        )
     finally:
         await neo.close()
 

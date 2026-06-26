@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 from core.graph.client import Neo4jClient
 
 
@@ -37,6 +39,29 @@ async def create_developer_and_commit(
     )
 
 
+async def create_developers_and_commits_batch(
+    client: Neo4jClient,
+    rows: Sequence[dict[str, object]],
+) -> None:
+    """Create Developer/Commit nodes and AUTHORED relationships in one query."""
+    if not rows:
+        return
+
+    query = """
+    UNWIND $rows AS row
+    MERGE (d:Developer {email: row.author_email})
+    ON CREATE SET d.name = row.author_name
+    ON MATCH SET d.name = row.author_name
+
+    MERGE (c:Commit {hash: row.hash})
+    SET c.message = row.message,
+        c.timestamp = row.timestamp
+
+    MERGE (d)-[:AUTHORED]->(c)
+    """
+    await client.execute(query, {"rows": list(rows)})
+
+
 async def relate_commit_to_file(
     client: Neo4jClient,
     commit_hash: str,
@@ -49,6 +74,24 @@ async def relate_commit_to_file(
     MERGE (c)-[:MODIFIES]->(f)
     """
     await client.execute(query, {"commit_hash": commit_hash, "file_path": file_path})
+
+
+async def relate_commits_to_files_batch(
+    client: Neo4jClient,
+    rows: Sequence[dict[str, object]],
+    project_id: str,
+) -> None:
+    """Create MODIFIES relationships between commits and files in one query."""
+    if not rows:
+        return
+
+    query = """
+    UNWIND $rows AS row
+    MATCH (c:Commit {hash: row.hash})
+    MERGE (f:File {path: row.file_path, project_id: $project_id})
+    MERGE (c)-[:MODIFIES]->(f)
+    """
+    await client.execute(query, {"rows": list(rows), "project_id": project_id})
 
 
 async def set_file_ownership(
@@ -79,3 +122,25 @@ async def set_file_ownership(
             "line_count": line_count,
         },
     )
+
+
+async def set_file_ownership_batch(
+    client: Neo4jClient,
+    rows: Sequence[dict[str, object]],
+    project_id: str,
+) -> None:
+    """Create OWNED_BY relationships between files and developers in one query."""
+    if not rows:
+        return
+
+    query = """
+    UNWIND $rows AS row
+    MATCH (f:File {path: row.file_path, project_id: $project_id})
+    MERGE (d:Developer {email: row.author_email})
+    ON CREATE SET d.name = row.author_name
+    ON MATCH SET d.name = row.author_name
+    MERGE (f)-[r:OWNED_BY]->(d)
+    SET r.percentage = row.percentage,
+        r.line_count = row.line_count
+    """
+    await client.execute(query, {"rows": list(rows), "project_id": project_id})

@@ -8,6 +8,7 @@ This is a comprehensive guide to all RIP (Repository Intelligence Platform) CLI 
 - [repo index](#repo-index)
 - [repo trace](#repo-trace)
 - [repo impact](#repo-impact)
+- [repo dependencies](#repo-dependencies)
 - [repo explain](#repo-explain)
 - [repo search](#repo-search)
 - [repo projects](#repo-projects)
@@ -51,13 +52,14 @@ Index a repository's codebase, building the knowledge graph and semantic search 
 
 ### Usage
 ```powershell
-repo index [repo_path] [--watch] [--incremental] [--languages <lang1,lang2,...>] [-v|--verbose]
+repo index [repo_path] [--watch] [--incremental] [--smart] [--languages <lang1,lang2,...>] [-v|--verbose]
 ```
 
 ### Arguments & Options
 - **repo_path**: Path to the repository to index (default: `.` - current directory)
 - **--watch**: Watch files and re-index automatically when changes are detected
 - **--incremental**: Index only changed files instead of full index
+- **--smart**: Index only git-changed, staged, untracked, and deleted source files
 - **--languages <lang1,lang2,...>**: Comma-separated list of languages to restrict indexing
 - **-v, --verbose**: Show detailed runtime logs and write a full log file to `.repo-intel/logs/`
 
@@ -66,6 +68,7 @@ repo index [repo_path] [--watch] [--incremental] [--languages <lang1,lang2,...>]
 repo index
 repo index . -v
 repo index --incremental
+repo index --smart
 repo index --watch
 repo index C:\path\to\project --languages python,typescript
 ```
@@ -119,26 +122,75 @@ repo impact AuthService --project 3f2f-project-id
 
 ---
 
-## repo explain
-Generate LLM-powered explanations of a symbol or file's purpose and context.
+## repo dependencies
+Show file-level dependency information for one indexed file.
 
 ### Usage
 ```powershell
-repo explain <symbol> [--level file|class|function] [--provider <llm_provider>] [--model <model_name>] [--project <project_id>]
+repo dependencies <file> [--format text|json] [--project <project_id>] [--limit <n>]
 ```
 
 ### Arguments & Options
-- **symbol**: Symbol or file to explain
+- **file**: File path or file name to inspect
+- **--format <format>**: Output format (`text` or `json`)
+- **--project <project_id>**: Override the active project and inspect only within that project
+- **--limit <n>**: Maximum rows per section (default: 25)
+
+### Example
+```powershell
+repo dependencies type_provider.dart
+repo dependencies core/parser/base.py --format json
+repo dependencies auth_service.dart --project 3f2f-project-id --limit 50
+```
+
+The text view shows files that import the target, files/packages the target imports,
+contained symbols, and a compact Mermaid graph.
+
+---
+
+## repo explain
+Generate architecture-aware explanations with visual dependency graphs, workflow diagrams, and LLM-powered context.
+
+### Usage
+```powershell
+repo explain <symbol> [--level file|class|function] [--provider <llm_provider>] [--model <model_name>] [--project <project_id>] [--diagram|-d] [--tree|-t] [--deps] [--no-llm] [--max-hops <n>]
+```
+
+### Arguments & Options
+- **symbol**: What to explain (can be natural language query or symbol name)
 - **--level <level>**: Context level to include (`file`, `class`, or `function`)
 - **--provider <provider>**: LLM provider to use (e.g., `google`, `openrouter`, `openai`, `anthropic`, `ollama`)
 - **--model <model>**: Specific LLM model to use (e.g., `gemini-2.5-flash`, `deepseek/deepseek-chat`)
 - **--project <project_id>**: Override the active project and explain only with that project's context
+- **--diagram, -d**: Show Mermaid flowchart diagram of workflow
+- **--tree, -t**: Show Rich tree view of workflow
+- **--deps**: Show Rich table of dependencies
+- **--no-llm**: Skip LLM generation, show only graph analysis
+- **--max-hops <n>**: Maximum hops for workflow trace (default: 8)
 
 ### Example
 ```powershell
-repo explain "indexing pipeline"
-repo explain PythonParser --level class --provider google --model gemini-2.5-flash
-repo explain AuthService --project 3f2f-project-id
+# Full explanation with LLM
+repo explain "how login works"
+
+# Show Mermaid diagram + LLM explanation
+repo explain "how login works" --diagram
+
+# Show Rich tree view
+repo explain "how login works" --tree
+
+# Show dependency table
+repo explain "how login works" --deps
+
+# Graph analysis only (no LLM) - instant!
+repo explain "how login works" --no-llm --tree --deps
+
+# All visualizations + LLM
+repo explain "how login works" --diagram --tree --deps
+
+# With specific provider/model
+repo explain PythonParser --provider google --model gemini-2.5-flash
+repo explain AuthService --project 3f2f-project-id --no-llm --deps
 ```
 
 ---

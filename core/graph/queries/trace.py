@@ -8,6 +8,70 @@ from core.llm.client import query_llm
 from core.llm.prompts.trace import TRACE_SYSTEM_PROMPT, TRACE_USER_PROMPT
 from core.projects import DEFAULT_PROJECT_ID
 
+
+async def trace_workflow_chain(
+    client: Neo4jClient,
+    entry_point: str,
+    project_id: str | None = None,
+    max_hops: int = 8,
+) -> tuple[list[dict], str]:
+    """Trace a workflow chain from entry point through CALLS+USES+NAVIGATES_TO.
+    
+    Returns:
+        Tuple of (workflow_hops, mermaid_diagram_string)
+    """
+    query = f"""
+    MATCH path = (start {{name: $entry_point, project_id: $project_id}})
+        -[:CALLS|USES|NAVIGATES_TO|DEPENDS_ON*1..{max_hops}]->(end)
+    WHERE end.project_id = $project_id
+    RETURN path
+    ORDER BY length(path) DESC
+    LIMIT 10
+    """
+    records = await client.execute(query, {"entry_point": entry_point, "project_id": project_id})
+    
+    hops = []
+    seen_edges = set()
+    
+    for record in records:
+        path = record.get("path")
+        if not path:
+            continue
+        for rel in path.relationships:
+            from_name = rel.start_node.get("name") or rel.start_node.get("fqn", "?")
+            to_name = rel.end_node.get("name") or rel.end_node.get("fqn", "?")
+            rel_type = rel.type
+            edge = (from_name, to_name, rel_type)
+            if edge not in seen_edges:
+                seen_edges.add(edge)
+                hops.append({
+                    "from": from_name,
+                    "to": to_name,
+                    "relationship": rel_type,
+                    "file_path": rel.get("file_path", ""),
+                })
+    
+    # Generate Mermaid diagram
+    mermaid = _workflow_to_mermaid(hops)
+    
+    return hops, mermaid
+
+
+def _workflow_to_mermaid(hops: list[dict]) -> str:
+    """Convert workflow hops to Mermaid flowchart."""
+    lines = ["```mermaid", "graph TD"]
+    seen = set()
+    for hop in hops[:20]:
+        from_n = hop["from"].replace('"', "'")
+        to_n = hop["to"].replace('"', "'")
+        rel = hop["relationship"]
+        edge = f'    {from_n} -->|{rel}| {to_n}'
+        if edge not in seen:
+            seen.add(edge)
+            lines.append(edge)
+    lines.append("```")
+    return "\n".join(lines)
+
 TRACE_RELATIONSHIP_TYPES = (
     "CALLS",
     "IMPORTS",
