@@ -16,8 +16,8 @@ class GatewaySettings(BaseSettings):
     debug: bool = False
     
     # Database (reuse RIP's PostgreSQL)
-    postgres_url: str = "postgresql+asyncpg://rip_user:rip_pass@localhost:5432/rip_db"
-    redis_url: str = "redis://localhost:6379/1"  # Different DB from RIP
+    postgres_url: str = ""
+    redis_url: str = ""
     
     # RIP MCP server
     rip_mcp_command: str = "uv"

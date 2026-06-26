@@ -7,6 +7,7 @@ from typing import List
 from .models import UserRole, AccessPolicy, AuditLogEntry
 from .roles import DEFAULT_POLICIES, SENSITIVE_DOMAINS
 from gateway.core.ranker.models import ScoredItem
+from gateway.storage.audit_store import get_audit_store
 
 logger = structlog.get_logger(__name__)
 
@@ -16,13 +17,13 @@ class PermissionEngine:
 
     def __init__(self):
         self.policies = DEFAULT_POLICIES
-        self.audit_log: List[AuditLogEntry] = []
+        self.audit_store = get_audit_store()
 
     def get_policy(self, role: UserRole) -> AccessPolicy:
         """Get access policy for a role."""
         return self.policies.get(role, self.policies[UserRole.DEVELOPER])
 
-    def filter_context(
+    async def filter_context(
         self,
         items: List[ScoredItem],
         role: UserRole,
@@ -50,7 +51,7 @@ class PermissionEngine:
             elif not domain_allowed:
                 reason = f"Domain {domain} is sensitive and role {role} cannot access it"
 
-            self._log_audit(
+            await self._log_audit(
                 session_id=session_id,
                 user_id=user_id,
                 role=role,
@@ -71,7 +72,7 @@ class PermissionEngine:
         )
         return filtered
 
-    def _log_audit(
+    async def _log_audit(
         self,
         session_id: str,
         user_id: str | None,
@@ -81,9 +82,8 @@ class PermissionEngine:
         allowed: bool,
         reason: str | None
     ):
-        """Log an audit entry."""
-        entry = AuditLogEntry(
-            timestamp=datetime.utcnow().isoformat(),
+        """Log an audit entry to persistent storage."""
+        await self.audit_store.log_access(
             session_id=session_id,
             user_id=user_id,
             role=role,
@@ -92,5 +92,3 @@ class PermissionEngine:
             allowed=allowed,
             reason=reason
         )
-        self.audit_log.append(entry)
-        logger.debug("Audit log entry", entry=entry.model_dump())

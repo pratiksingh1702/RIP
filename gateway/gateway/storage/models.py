@@ -96,3 +96,19 @@ class SourceHealth(Base):
     avg_latency_ms: Mapped[int | None] = mapped_column(Integer)
     error_rate: Mapped[float] = mapped_column(Float, default=0.0)
     last_checked_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+
+
+class AuditLog(Base):
+    """Access decision audit logs."""
+
+    __tablename__ = "audit_logs"
+
+    id: Mapped[UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+    session_id: Mapped[str] = mapped_column(String(100), nullable=False)
+    user_id: Mapped[str | None] = mapped_column(String(255))
+    role: Mapped[str] = mapped_column(String(50), nullable=False)
+    action: Mapped[str] = mapped_column(String(100), nullable=False)
+    source: Mapped[str | None] = mapped_column(String(100))
+    allowed: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    reason: Mapped[str | None] = mapped_column(Text)

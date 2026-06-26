@@ -86,7 +86,7 @@ class GatewayPipeline:
 
         # Step 7: Apply permissions
         user_role = self._coerce_role(role)
-        filtered = self.permissions.filter_context(
+        filtered = await self.permissions.filter_context(
             ranked.included,
             user_role,
             classification.domain,

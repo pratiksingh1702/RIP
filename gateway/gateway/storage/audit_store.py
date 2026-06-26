@@ -1,0 +1,74 @@
+"""Audit log storage."""
+
+from datetime import datetime, UTC
+from typing import List, Optional
+from uuid import uuid4
+
+import structlog
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from gateway.storage.database import async_session_factory
+from gateway.storage.models import AuditLog
+from gateway.core.permissions.models import UserRole
+
+logger = structlog.get_logger(__name__)
+
+
+class AuditStore:
+    """Store for managing audit logs."""
+
+    def __init__(self, db_session: AsyncSession | None = None):
+        self._db_session = db_session
+
+    async def _get_db(self) -> AsyncSession:
+        if self._db_session:
+            return self._db_session
+        return async_session_factory()
+
+    async def _close_if_owned(self, db: AsyncSession) -> None:
+        if self._db_session is None:
+            await db.close()
+
+    async def log_access(
+        self,
+        session_id: str,
+        role: UserRole,
+        action: str,
+        allowed: bool,
+        user_id: Optional[str] = None,
+        source: Optional[str] = None,
+        reason: Optional[str] = None
+    ) -> None:
+        """Create a new audit log entry."""
+        db = await self._get_db()
+        try:
+            log_entry = AuditLog(
+                id=uuid4(),
+                timestamp=datetime.now(UTC),
+                session_id=session_id,
+                user_id=user_id,
+                role=role.value,
+                action=action,
+                source=source,
+                allowed=allowed,
+                reason=reason
+            )
+            db.add(log_entry)
+            await db.commit()
+        except Exception as e:
+            logger.error("Failed to save audit log", error=str(e))
+            await db.rollback()
+        finally:
+            await self._close_if_owned(db)
+
+
+# Global store instance
+_audit_store: AuditStore | None = None
+
+
+def get_audit_store() -> AuditStore:
+    """Get the global audit store instance."""
+    global _audit_store
+    if _audit_store is None:
+        _audit_store = AuditStore()
+    return _audit_store
