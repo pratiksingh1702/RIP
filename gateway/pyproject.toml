@@ -36,5 +36,8 @@ dependencies = [
     "orjson>=3.10.0",
 ]
 
+[tool.uv]
+package = true
+
 [project.scripts]
 gateway = "gateway.cli.main:app"
