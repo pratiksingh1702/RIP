@@ -13,6 +13,7 @@ class GatewaySettings(BaseSettings):
     host: str = "127.0.0.1"
     port: int = 8001
     version: str = "0.1.0"
+    debug: bool = False
     
     # Database (reuse RIP's PostgreSQL)
     postgres_url: str = "postgresql+asyncpg://rip_user:rip_pass@localhost:5432/rip_db"
@@ -26,15 +27,20 @@ class GatewaySettings(BaseSettings):
     # GitHub MCP (optional)
     github_mcp_enabled: bool = False
     github_token: str = ""
+    github_repo: str = ""
+    github_api_url: str = "https://api.github.com"
     
     # Jira MCP (optional)
     jira_mcp_enabled: bool = False
     jira_url: str = ""
     jira_token: str = ""
+    jira_email: str = ""
+    jira_project_key: str = ""
     
     # Slack MCP (optional)
     slack_mcp_enabled: bool = False
     slack_token: str = ""
+    slack_channel_id: str = ""
     
     # LLM for classifier fallback
     llm_provider: str = "ollama"

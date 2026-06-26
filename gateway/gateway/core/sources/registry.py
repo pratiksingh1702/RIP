@@ -29,21 +29,13 @@ class SourceRegistry:
         self._sources["rip"] = rip
         self._health["rip"] = True
 
-        # Initialize optional external sources if enabled
-        if settings.github_mcp_enabled:
-            github = GitHubSource(enabled=True)
-            self._sources["github"] = github
-            self._health["github"] = True
-
-        if settings.jira_mcp_enabled:
-            jira = JiraSource(enabled=True)
-            self._sources["jira"] = jira
-            self._health["jira"] = True
-
-        if settings.slack_mcp_enabled:
-            slack = SlackSource(enabled=True)
-            self._sources["slack"] = slack
-            self._health["slack"] = True
+        # Optional sources are always visible, but disabled until configured.
+        self._sources["github"] = GitHubSource(enabled=settings.github_mcp_enabled)
+        self._health["github"] = settings.github_mcp_enabled
+        self._sources["jira"] = JiraSource(enabled=settings.jira_mcp_enabled)
+        self._health["jira"] = settings.jira_mcp_enabled
+        self._sources["slack"] = SlackSource(enabled=settings.slack_mcp_enabled)
+        self._health["slack"] = settings.slack_mcp_enabled
 
     @property
     def sources(self) -> Dict[str, BaseSource]:
@@ -78,6 +70,24 @@ class SourceRegistry:
     def is_healthy(self, name: str) -> bool:
         """Check if a source is healthy (alias for get_health)."""
         return self.get_health(name)
+
+    def enabled_source_names(self) -> list[str]:
+        """Return sources currently enabled for planner/executor use."""
+        return [
+            name
+            for name, source in self._sources.items()
+            if name == "rip" or getattr(source, "enabled", source.is_available())
+        ]
+
+    def set_enabled(self, name: str, enabled: bool) -> bool:
+        """Enable or disable a registered optional source for this process."""
+        source = self._sources.get(name)
+        if source is None or name == "rip":
+            return False
+        setattr(source, "enabled", enabled)
+        source.available = enabled
+        self._health[name] = enabled
+        return True
 
 
 # Global registry instance

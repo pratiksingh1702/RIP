@@ -15,6 +15,7 @@ from .handlers import (
     handle_explain_architecture,
     handle_validate_change
 )
+from .middleware import with_logging
 
 logger = structlog.get_logger(__name__)
 
@@ -35,13 +36,13 @@ async def main():
         logger.info("Calling tool", tool_name=name, arguments=arguments)
 
         if name == "get_context":
-            return await handle_get_context(arguments)
+            return await with_logging(name, arguments, handle_get_context)
         elif name == "search_codebase":
-            return await handle_search_codebase(arguments)
+            return await with_logging(name, arguments, handle_search_codebase)
         elif name == "explain_architecture":
-            return await handle_explain_architecture(arguments)
+            return await with_logging(name, arguments, handle_explain_architecture)
         elif name == "validate_change":
-            return await handle_validate_change(arguments)
+            return await with_logging(name, arguments, handle_validate_change)
         else:
             raise ValueError(f"Unknown tool: {name}")
 

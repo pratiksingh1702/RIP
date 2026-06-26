@@ -1,7 +1,6 @@
 """RIP source client (MCP)."""
 
 import asyncio
-import json
 import time
 from typing import Any
 
@@ -24,6 +23,7 @@ class RIPSource(BaseSource):
         self._reader: asyncio.StreamReader | None = None
         self._writer: asyncio.StreamWriter | None = None
         self._request_id = 0
+        self.available = True
 
     async def connect(self) -> None:
         """Connect to RIP MCP server."""
@@ -44,7 +44,7 @@ class RIPSource(BaseSource):
             logger.info("RIP MCP client connected")
         except Exception as e:
             logger.error("Failed to connect to RIP MCP", error=str(e))
-            self.is_available = False
+            self.available = False
 
     async def disconnect(self) -> None:
         """Disconnect from RIP MCP server."""
@@ -72,7 +72,10 @@ class RIPSource(BaseSource):
                 source="rip",
                 query_type=query_type,
                 content=result,
-                metadata={"query_params": query_params},
+                metadata={
+                    "query_params": query_params,
+                    "files": self._extract_file_paths(result),
+                },
                 token_count=len(result.split()),  # rough estimate
                 latency_ms=latency_ms,
                 success=True
@@ -94,17 +97,18 @@ class RIPSource(BaseSource):
     async def _cli_query(self, query_type: str, query_params: dict[str, Any]) -> str:
         """Execute a RIP CLI command."""
         args = ["run", "repo"]
+        target = self._query_target(query_params)
 
         if query_type == "search":
-            args.extend(["search", query_params.get("query", "")])
+            args.extend(["search", target])
             if "limit" in query_params:
                 args.extend(["--limit", str(query_params["limit"])])
         elif query_type == "trace":
-            args.extend(["trace", query_params.get("query", "")])
+            args.extend(["trace", target])
         elif query_type == "impact":
-            args.extend(["impact", query_params.get("query", "")])
+            args.extend(["impact", target])
         elif query_type == "explain":
-            args.extend(["explain", query_params.get("query", "")])
+            args.extend(["explain", target])
         elif query_type == "architecture":
             args.append("architecture")
         elif query_type == "metrics":
@@ -113,7 +117,7 @@ class RIPSource(BaseSource):
             args.append("onboard")
         else:
             # Default to search
-            args.extend(["search", query_params.get("query", "")])
+            args.extend(["search", target])
 
         proc = await asyncio.create_subprocess_exec(
             "uv",
@@ -129,6 +133,17 @@ class RIPSource(BaseSource):
 
         return stdout.decode('utf-8', errors='replace')
 
+    def _query_target(self, query_params: dict[str, Any]) -> str:
+        """Choose the best CLI target from gateway query parameters."""
+        for key in ("query", "task", "symbol", "topic", "diff"):
+            value = query_params.get(key)
+            if value:
+                return str(value)
+        files = query_params.get("files")
+        if isinstance(files, list) and files:
+            return " ".join(str(file) for file in files)
+        return ""
+
     async def health_check(self) -> bool:
         """Check if RIP is available."""
         try:
@@ -139,9 +154,23 @@ class RIPSource(BaseSource):
                 stderr=asyncio.subprocess.PIPE
             )
             await proc.wait()
-            self.is_available = (proc.returncode == 0)
-            return self.is_available
+            self.available = proc.returncode == 0
+            return self.available
         except Exception as e:
             logger.warning("RIP health check failed", error=str(e))
-            self.is_available = False
+            self.available = False
             return False
+
+    def _extract_file_paths(self, text: str) -> list[str]:
+        """Extract likely repository file paths from RIP CLI text."""
+        import re
+
+        patterns = [
+            r"[\w./\\-]+\.(?:py|ts|tsx|js|jsx|dart|java|go|rs|md|toml|yaml|yml|json)",
+            r"[A-Za-z]:\\[^\s:]+?\.(?:py|ts|tsx|js|jsx|dart|java|go|rs|md|toml|yaml|yml|json)",
+        ]
+        files: set[str] = set()
+        for pattern in patterns:
+            for match in re.findall(pattern, text):
+                files.add(match.strip("`'\".,;)"))
+        return sorted(files)

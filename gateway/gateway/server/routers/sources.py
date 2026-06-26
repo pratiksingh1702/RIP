@@ -30,8 +30,11 @@ async def list_sources():
 async def enable_source(source_name: str):
     """Enable a source."""
     try:
-        # Placeholder for enable logic
+        if not registry.set_enabled(source_name, True):
+            raise HTTPException(status_code=404, detail=f"Unknown or fixed source: {source_name}")
         return {"status": "ok", "source": source_name}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -40,7 +43,10 @@ async def enable_source(source_name: str):
 async def disable_source(source_name: str):
     """Disable a source."""
     try:
-        # Placeholder for disable logic
+        if not registry.set_enabled(source_name, False):
+            raise HTTPException(status_code=404, detail=f"Unknown or fixed source: {source_name}")
         return {"status": "ok", "source": source_name}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

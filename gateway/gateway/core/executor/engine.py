@@ -132,9 +132,9 @@ class ExecutorEngine:
 
     def _should_execute_step(self, step) -> bool:
         """Check if a retrieval step should be executed."""
-        if step.condition == "always":
+        if step.condition in {"always", "", None}:
             return True
-        # TODO: Implement other conditions later
+        logger.debug("Skipping retrieval step with unmet condition", condition=step.condition)
         return False
 
 

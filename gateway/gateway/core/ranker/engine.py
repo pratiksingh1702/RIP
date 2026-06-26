@@ -1,6 +1,7 @@
 """Main ranker engine."""
 
 from datetime import datetime
+import re
 from typing import List
 
 from gateway.core.classifier.models import ClassificationResult, IntentType
@@ -127,9 +128,8 @@ class RankerEngine:
         # Authority score
         authority_score = self.authority_scorer.score(response.source, response.query_type)
 
-        # Semantic and centrality (placeholder for now, 0.5 each)
-        semantic_score = 0.5
-        centrality_score = 0.5
+        semantic_score = self._lexical_similarity(task, response.content)
+        centrality_score = self._centrality_score(response)
 
         total_score = (
             weights["semantic"] * semantic_score +
@@ -140,3 +140,40 @@ class RankerEngine:
         )
 
         return total_score
+
+    def _lexical_similarity(self, task: str, content: str) -> float:
+        """Cheap semantic proxy based on weighted token overlap."""
+        task_terms = self._important_terms(task)
+        if not task_terms:
+            return 0.0
+        content_terms = self._important_terms(content[:8000])
+        if not content_terms:
+            return 0.0
+        overlap = task_terms & content_terms
+        return min(1.0, len(overlap) / max(1, len(task_terms)))
+
+    def _important_terms(self, text: str) -> set[str]:
+        stop_words = {
+            "the", "and", "for", "with", "that", "this", "from", "into",
+            "what", "where", "when", "does", "how", "add", "fix", "use",
+            "need", "code", "file", "class", "function",
+        }
+        terms = {
+            term.lower()
+            for term in re.findall(r"[A-Za-z_][A-Za-z0-9_]{2,}", text)
+        }
+        return {term for term in terms if term not in stop_words}
+
+    def _centrality_score(self, response: SourceResponse) -> float:
+        """Prefer source responses that describe graph structure or impact."""
+        metadata_score = float(response.metadata.get("centrality", 0) or 0)
+        if metadata_score:
+            return max(0.0, min(1.0, metadata_score))
+        query_scores = {
+            "architecture": 0.9,
+            "impact": 0.85,
+            "trace": 0.8,
+            "metrics": 0.7,
+            "search": 0.55,
+        }
+        return query_scores.get(response.query_type, 0.45)
