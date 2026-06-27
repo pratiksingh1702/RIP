@@ -17,6 +17,8 @@ class RIPSource(BaseSource):
     """RIP as a source using its MCP server."""
 
     name = "rip"
+    # Enable dummy mode for testing
+    DUMMY_MODE = False
 
     def __init__(self):
         self._process: asyncio.subprocess.Process | None = None
@@ -64,8 +66,13 @@ class RIPSource(BaseSource):
         start_time = time.time()
 
         try:
-            # For now, use the CLI directly (simpler for initial implementation)
-            result = await self._cli_query(query_type, query_params)
+            # Use dummy data for testing
+            if self.DUMMY_MODE:
+                result = self._get_dummy_response(query_type, query_params)
+            else:
+                # For now, use the CLI directly (simpler for initial implementation)
+                result = await self._cli_query(query_type, query_params)
+                
             latency_ms = int((time.time() - start_time) * 1000)
 
             return SourceResponse(
@@ -93,6 +100,59 @@ class RIPSource(BaseSource):
                 success=False,
                 error=str(e)
             )
+            
+    def _get_dummy_response(self, query_type: str, query_params: dict[str, Any]) -> str:
+        """Return dummy test data instead of real RIP CLI output."""
+        dummy_responses = {
+            "search": """
+# Search results for "{}"
+
+Found 5 relevant files:
+- server/main.py: Contains the main application server logic
+- gateway/gateway/server/main.py: Gateway server implementation
+- cli/commands/serve.py: RIP serve command
+- mcp/server.py: MCP server code
+- tests/test_server.py: Server tests
+""".format(query_params.get("query", "test")),
+            
+            "architecture": """
+# Project Architecture
+
+Core modules:
+- server/: HTTP server
+- gateway/: Context gateway
+- cli/: Command-line interface
+- mcp/: Model Context Protocol server
+- tests/: Test suite
+- rip/: RIP core functionality
+
+Dependency graph:
+server → cli → rip
+gateway → rip
+mcp → rip
+""",
+            
+            "trace": """
+# Call Trace
+
+server.main:app → cli.commands.serve:serve → rip.server:run
+→ gateway.core.pipeline:GatewayPipeline
+→ gateway.core.classifier.engine:ClassifierEngine
+→ gateway.core.planner.engine:PlannerEngine
+→ gateway.core.executor.engine:ExecutorEngine
+""",
+            
+            "impact": """
+# Impact Analysis
+
+Changes would affect:
+- server/main.py (high impact)
+- gateway/gateway/server/main.py (medium impact)
+- tests/test_server.py (low impact)
+""",
+        }
+        
+        return dummy_responses.get(query_type, dummy_responses["search"])
 
     async def _cli_query(self, query_type: str, query_params: dict[str, Any]) -> str:
         """Execute a RIP CLI command."""
@@ -146,6 +206,10 @@ class RIPSource(BaseSource):
 
     async def health_check(self) -> bool:
         """Check if RIP is available."""
+        if self.DUMMY_MODE:
+            self.available = True
+            return True
+            
         try:
             proc = await asyncio.create_subprocess_exec(
                 "uv", "run", "repo", "--help",

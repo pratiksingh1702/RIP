@@ -8,32 +8,10 @@ services:
     environment:
       - GATEWAY_HOST=0.0.0.0
       - GATEWAY_PORT=8001
-      - GATEWAY_POSTGRES_URL=postgresql+asyncpg://gateway:gateway@postgres:5432/gateway
-      - GATEWAY_REDIS_URL=redis://redis:6379/1
-    depends_on:
-      - postgres
-      - redis
+      - GATEWAY_POSTGRES_URL=postgresql+asyncpg://repo_intel:repo_intel@host.docker.internal:5433/repo_intel?ssl=disable
+      - GATEWAY_REDIS_URL=redis://host.docker.internal:6379
     volumes:
       - ./gateway:/app/gateway
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
-  postgres:
-    image: postgres:16-alpine
-    ports:
-      - "5432:5432"
-    environment:
-      - POSTGRES_USER=gateway
-      - POSTGRES_PASSWORD=gateway
-      - POSTGRES_DB=gateway
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-
-  redis:
-    image: redis:7-alpine
-    ports:
-      - "6380:6379"
-    volumes:
-      - redis_data:/data
-
-volumes:
-  postgres_data:
-  redis_data:

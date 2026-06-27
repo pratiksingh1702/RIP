@@ -30,7 +30,7 @@ class ClassifierEngine:
     async def classify_async(self, task: str) -> ClassificationResult:
         """Classify a task with async-safe LLM fallback."""
         result = self._rule_result(task, strategy="rules")
-        if result.confidence >= self.fallback_threshold:
+        if result.confidence >= self.fallback_threshold or not settings.llm_fallback_enabled:
             return result
 
         logger.info("Confidence below threshold, using LLM fallback", task=task[:50])

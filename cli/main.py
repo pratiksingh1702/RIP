@@ -6,6 +6,7 @@ from typing import Annotated
 import typer
 
 from cli.output.formatters import print_not_implemented
+from cli.runtime_logging import run_with_verbose_logging
 
 app = typer.Typer(help="Repository Intelligence Platform")
 
@@ -13,6 +14,23 @@ app = typer.Typer(help="Repository Intelligence Platform")
 @app.callback()
 def main() -> None:
     """Repository Intelligence Platform command line."""
+
+
+def _run_command(
+    command_name: str,
+    *,
+    verbose: bool,
+    log_root: Path | None = None,
+    params: dict[str, object] | None = None,
+    action,
+) -> None:
+    run_with_verbose_logging(
+        command_name,
+        verbose=verbose,
+        log_root=log_root,
+        params=params or {},
+        action=action,
+    )
 
 
 @app.command("init")
@@ -33,14 +51,29 @@ def init(
             help="Qdrant isolation strategy: payload_filter or collection_per_project",
         ),
     ] = "payload_filter",
+    verbose: Annotated[
+        bool,
+        typer.Option("-v", "--verbose", help="Show detailed runtime logs and save a full log file"),
+    ] = False,
 ) -> None:
     from cli.commands.init import init as init_command
 
-    init_command(
-        repo_path,
-        project_name=project_name,
-        isolation=isolation,
-        qdrant_strategy=qdrant_strategy,
+    _run_command(
+        "init",
+        verbose=verbose,
+        log_root=repo_path,
+        params={
+            "repo_path": repo_path,
+            "project_name": project_name,
+            "isolation": isolation,
+            "qdrant_strategy": qdrant_strategy,
+        },
+        action=lambda: init_command(
+            repo_path,
+            project_name=project_name,
+            isolation=isolation,
+            qdrant_strategy=qdrant_strategy,
+        ),
     )
 
 
@@ -90,15 +123,30 @@ def trace(
         bool,
         typer.Option("--explain", help="Generate an explanation for the call path"),
     ] = False,
+    verbose: Annotated[
+        bool,
+        typer.Option("-v", "--verbose", help="Show detailed runtime logs and save a full log file"),
+    ] = False,
 ) -> None:
     from cli.commands.trace import trace as trace_command
 
-    trace_command(
-        entry_point,
-        depth=depth,
-        output_format=output_format,
-        explain=explain,
-        project=project,
+    _run_command(
+        "trace",
+        verbose=verbose,
+        params={
+            "entry_point": entry_point,
+            "depth": depth,
+            "output_format": output_format,
+            "project": project,
+            "explain": explain,
+        },
+        action=lambda: trace_command(
+            entry_point,
+            depth=depth,
+            output_format=output_format,
+            explain=explain,
+            project=project,
+        ),
     )
 
 
@@ -107,10 +155,19 @@ def impact(
     symbol: Annotated[str, typer.Argument(help="Symbol or file to analyse")],
     output_format: Annotated[str, typer.Option("--format", help="text or json")] = "text",
     project: Annotated[str | None, typer.Option("--project", help="Project id override")] = None,
+    verbose: Annotated[
+        bool,
+        typer.Option("-v", "--verbose", help="Show detailed runtime logs and save a full log file"),
+    ] = False,
 ) -> None:
     from cli.commands.impact import impact as impact_command
 
-    impact_command(symbol, output_format=output_format, project=project)
+    _run_command(
+        "impact",
+        verbose=verbose,
+        params={"symbol": symbol, "output_format": output_format, "project": project},
+        action=lambda: impact_command(symbol, output_format=output_format, project=project),
+    )
 
 
 @app.command("dependencies")
@@ -119,10 +176,26 @@ def dependencies(
     output_format: Annotated[str, typer.Option("--format", help="text or json")] = "text",
     project: Annotated[str | None, typer.Option("--project", help="Project id override")] = None,
     limit: Annotated[int, typer.Option("--limit", help="Maximum rows per section")] = 25,
+    verbose: Annotated[
+        bool,
+        typer.Option("-v", "--verbose", help="Show detailed runtime logs and save a full log file"),
+    ] = False,
 ) -> None:
     from cli.commands.dependencies import dependencies as dependencies_command
 
-    dependencies_command(target, output_format=output_format, project=project, limit=limit)
+    _run_command(
+        "dependencies",
+        verbose=verbose,
+        params={
+            "target": target,
+            "output_format": output_format,
+            "project": project,
+            "limit": limit,
+        },
+        action=lambda: dependencies_command(
+            target, output_format=output_format, project=project, limit=limit
+        ),
+    )
 
 
 @app.command("explain")
@@ -167,20 +240,40 @@ def explain(
         int,
         typer.Option("--max-hops", help="Maximum workflow trace hops"),
     ] = 8,
+    verbose: Annotated[
+        bool,
+        typer.Option("-v", "--verbose", help="Show detailed runtime logs and save a full log file"),
+    ] = False,
 ) -> None:
     from cli.commands.explain import explain as explain_command
 
-    explain_command(
-        symbol=symbol,
-        context_level=context_level,
-        provider=provider,
-        model=model,
-        project=project,
-        diagram=diagram,
-        tree_view=tree,
-        dependencies=dependencies,
-        no_llm=no_llm,
-        max_hops=max_hops,
+    _run_command(
+        "explain",
+        verbose=verbose,
+        params={
+            "symbol": symbol,
+            "context_level": context_level,
+            "provider": provider,
+            "model": model,
+            "project": project,
+            "diagram": diagram,
+            "tree": tree,
+            "dependencies": dependencies,
+            "no_llm": no_llm,
+            "max_hops": max_hops,
+        },
+        action=lambda: explain_command(
+            symbol=symbol,
+            context_level=context_level,
+            provider=provider,
+            model=model,
+            project=project,
+            diagram=diagram,
+            tree_view=tree,
+            dependencies=dependencies,
+            no_llm=no_llm,
+            max_hops=max_hops,
+        ),
     )
 
 
@@ -194,24 +287,45 @@ def search(
         str | None, typer.Option("--entity-type", help="Filter by entity type")
     ] = None,
     project: Annotated[str | None, typer.Option("--project", help="Project id override")] = None,
+    verbose: Annotated[
+        bool,
+        typer.Option("-v", "--verbose", help="Show detailed runtime logs and save a full log file"),
+    ] = False,
 ) -> None:
     from cli.commands.search import search as search_command
 
-    search_command(
-        query,
-        limit=limit,
-        language=language,
-        service=service,
-        entity_type=entity_type,
-        project=project,
+    _run_command(
+        "search",
+        verbose=verbose,
+        params={
+            "query": query,
+            "limit": limit,
+            "language": language,
+            "service": service,
+            "entity_type": entity_type,
+            "project": project,
+        },
+        action=lambda: search_command(
+            query,
+            limit=limit,
+            language=language,
+            service=service,
+            entity_type=entity_type,
+            project=project,
+        ),
     )
 
 
 @app.command("projects")
-def projects() -> None:
+def projects(
+    verbose: Annotated[
+        bool,
+        typer.Option("-v", "--verbose", help="Show detailed runtime logs and save a full log file"),
+    ] = False,
+) -> None:
     from cli.commands.projects import projects as projects_command
 
-    projects_command()
+    _run_command("projects", verbose=verbose, params={}, action=projects_command)
 
 
 @app.command("use")
@@ -221,38 +335,75 @@ def use(
         Path,
         typer.Option("--repo-path", help="Repository folder to store active project in"),
     ] = Path("."),
+    verbose: Annotated[
+        bool,
+        typer.Option("-v", "--verbose", help="Show detailed runtime logs and save a full log file"),
+    ] = False,
 ) -> None:
     from cli.commands.projects import use as use_command
 
-    use_command(project_id, repo_path=repo_path)
+    _run_command(
+        "use",
+        verbose=verbose,
+        log_root=repo_path,
+        params={"project_id": project_id, "repo_path": repo_path},
+        action=lambda: use_command(project_id, repo_path=repo_path),
+    )
 
 
 @app.command("dead-code")
 def dead_code(
     entity_type: Annotated[str, typer.Option("--type", help="functions or classes or all")] = "all",
     output_format: Annotated[str, typer.Option("--format", help="text or json")] = "text",
+    verbose: Annotated[
+        bool,
+        typer.Option("-v", "--verbose", help="Show detailed runtime logs and save a full log file"),
+    ] = False,
 ) -> None:
     from cli.commands.dead_code import dead_code as dead_code_command
 
-    dead_code_command(entity_type=entity_type, output_format=output_format)
+    _run_command(
+        "dead-code",
+        verbose=verbose,
+        params={"entity_type": entity_type, "output_format": output_format},
+        action=lambda: dead_code_command(entity_type=entity_type, output_format=output_format),
+    )
 
 
 @app.command("onboard")
 def onboard(
     output: Annotated[Path | None, typer.Option("--output", help="Save to file")] = None,
+    verbose: Annotated[
+        bool,
+        typer.Option("-v", "--verbose", help="Show detailed runtime logs and save a full log file"),
+    ] = False,
 ) -> None:
     from cli.commands.onboard import onboard as onboard_command
 
-    onboard_command(output=output)
+    _run_command(
+        "onboard",
+        verbose=verbose,
+        params={"output": output},
+        action=lambda: onboard_command(output=output),
+    )
 
 
 @app.command("architecture")
 def architecture(
     output_format: Annotated[str, typer.Option("--format", help="mermaid or json")] = "mermaid",
+    verbose: Annotated[
+        bool,
+        typer.Option("-v", "--verbose", help="Show detailed runtime logs and save a full log file"),
+    ] = False,
 ) -> None:
     from cli.commands.architecture import architecture as architecture_command
 
-    architecture_command(output_format=output_format)
+    _run_command(
+        "architecture",
+        verbose=verbose,
+        params={"output_format": output_format},
+        action=lambda: architecture_command(output_format=output_format),
+    )
 
 
 @app.command("metrics")
@@ -262,10 +413,19 @@ def metrics(
         typer.Option("--module", help="Metrics for a specific module"),
     ] = None,
     top_risk: Annotated[int | None, typer.Option("--top-risk", help="Top risk modules")] = None,
+    verbose: Annotated[
+        bool,
+        typer.Option("-v", "--verbose", help="Show detailed runtime logs and save a full log file"),
+    ] = False,
 ) -> None:
     from cli.commands.metrics import metrics as metrics_command
 
-    metrics_command(module=module, top_risk=top_risk)
+    _run_command(
+        "metrics",
+        verbose=verbose,
+        params={"module": module, "top_risk": top_risk},
+        action=lambda: metrics_command(module=module, top_risk=top_risk),
+    )
 
 
 @app.command("serve")
@@ -273,10 +433,19 @@ def serve(
     host: Annotated[str | None, typer.Option("--host", help="Host to bind")] = None,
     port: Annotated[int | None, typer.Option("--port", help="Port to bind")] = None,
     reload: Annotated[bool, typer.Option("--reload", help="Reload on code changes")] = False,
+    verbose: Annotated[
+        bool,
+        typer.Option("-v", "--verbose", help="Show detailed runtime logs and save a full log file"),
+    ] = False,
 ) -> None:
     from cli.commands.serve import serve as serve_command
 
-    serve_command(host=host, port=port, reload=reload)
+    _run_command(
+        "serve",
+        verbose=verbose,
+        params={"host": host, "port": port, "reload": reload},
+        action=lambda: serve_command(host=host, port=port, reload=reload),
+    )
 
 
 @app.command("status")
@@ -285,10 +454,20 @@ def status(
         Path,
         typer.Argument(help="Repository path to check status for"),
     ] = Path("."),
+    verbose: Annotated[
+        bool,
+        typer.Option("-v", "--verbose", help="Show detailed runtime logs and save a full log file"),
+    ] = False,
 ) -> None:
     from cli.commands.status import status as status_command
 
-    status_command(repo_path=repo_path)
+    _run_command(
+        "status",
+        verbose=verbose,
+        log_root=repo_path,
+        params={"repo_path": repo_path},
+        action=lambda: status_command(repo_path=repo_path),
+    )
 
 
 @app.command("delete")
@@ -313,15 +492,42 @@ def delete(
         bool,
         typer.Option("--storage/--no-storage", help="Reset RIP storage metadata tables"),
     ] = True,
+    verbose: Annotated[
+        bool,
+        typer.Option("-v", "--verbose", help="Show detailed runtime logs and save a full log file"),
+    ] = False,
 ) -> None:
     from cli.commands.delete import delete as delete_command
 
-    delete_command(project=project, yes=yes, neo4j=neo4j, qdrant=qdrant, storage=storage)
+    _run_command(
+        "delete",
+        verbose=verbose,
+        params={
+            "project": project,
+            "yes": yes,
+            "neo4j": neo4j,
+            "qdrant": qdrant,
+            "storage": storage,
+        },
+        action=lambda: delete_command(
+            project=project, yes=yes, neo4j=neo4j, qdrant=qdrant, storage=storage
+        ),
+    )
 
 
 @app.command("config")
-def config() -> None:
-    print_not_implemented("repo config")
+def config(
+    verbose: Annotated[
+        bool,
+        typer.Option("-v", "--verbose", help="Show detailed runtime logs and save a full log file"),
+    ] = False,
+) -> None:
+    _run_command(
+        "config",
+        verbose=verbose,
+        params={},
+        action=lambda: print_not_implemented("repo config"),
+    )
 
 
 mcp_app = typer.Typer(help="MCP installation and configuration for AI agents")
@@ -335,33 +541,63 @@ def mcp_install_command(
     all_agents: Annotated[bool, typer.Option("--all", help="Configure all detected agents")] = False,
     instructions_only: Annotated[bool, typer.Option("--instructions-only", help="Only update instructions files, skip MCP config")] = False,
     dry_run: Annotated[bool, typer.Option("--dry-run", help="Show what would be done without making changes")] = False,
+    verbose: Annotated[
+        bool,
+        typer.Option("-v", "--verbose", help="Show detailed runtime logs and save a full log file"),
+    ] = False,
 ) -> None:
     """Install RIP MCP for AI agents (Codex, Claude, Cursor, Windsurf, Aider)."""
     from cli.commands.mcp import mcp_install
 
-    mcp_install(
-        repo_path=repo_path,
-        agent=agent,
-        all_agents=all_agents,
-        instructions_only=instructions_only,
-        dry_run=dry_run,
+    _run_command(
+        "mcp-install",
+        verbose=verbose,
+        log_root=repo_path,
+        params={
+            "repo_path": repo_path,
+            "agent": agent,
+            "all_agents": all_agents,
+            "instructions_only": instructions_only,
+            "dry_run": dry_run,
+        },
+        action=lambda: mcp_install(
+            repo_path=repo_path,
+            agent=agent,
+            all_agents=all_agents,
+            instructions_only=instructions_only,
+            dry_run=dry_run,
+        ),
     )
 
 
 @mcp_app.command("status")
-def mcp_status_command() -> None:
+def mcp_status_command(
+    verbose: Annotated[
+        bool,
+        typer.Option("-v", "--verbose", help="Show detailed runtime logs and save a full log file"),
+    ] = False,
+) -> None:
     """Show MCP installation status."""
     from cli.commands.mcp import mcp_status
 
-    mcp_status()
+    _run_command("mcp-status", verbose=verbose, params={}, action=mcp_status)
 
 
 @mcp_app.command("remove")
 def mcp_remove_command(
     agent: Annotated[str | None, typer.Option("--agent", "-a", help="Specific agent to remove MCP config from")] = None,
     all_agents: Annotated[bool, typer.Option("--all", help="Remove from all configured agents")] = False,
+    verbose: Annotated[
+        bool,
+        typer.Option("-v", "--verbose", help="Show detailed runtime logs and save a full log file"),
+    ] = False,
 ) -> None:
     """Remove RIP MCP from AI agents."""
     from cli.commands.mcp import mcp_remove
 
-    mcp_remove(agent=agent, all_agents=all_agents)
+    _run_command(
+        "mcp-remove",
+        verbose=verbose,
+        params={"agent": agent, "all_agents": all_agents},
+        action=lambda: mcp_remove(agent=agent, all_agents=all_agents),
+    )

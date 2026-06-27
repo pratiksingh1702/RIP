@@ -3,6 +3,9 @@
 
 This is a comprehensive guide to all RIP (Repository Intelligence Platform) CLI commands.
 
+## Verbose Logs
+Every CLI command accepts `-v` / `--verbose`. When enabled, RIP prints detailed runtime logs and writes the full command log to `.repo-intel/logs/<command>-YYYYMMDD-HHMMSS.log` under the command's target repository when one is provided, otherwise under the current working directory.
+
 ## Table of Contents
 - [repo init](#repo-init)
 - [repo index](#repo-index)
@@ -28,7 +31,7 @@ Initialize a repository for indexing.
 
 ### Usage
 ```powershell
-repo init [repo_path] [--project-name <name>] [--isolation|--no-isolation] [--qdrant-strategy <strategy>]
+repo init [repo_path] [--project-name <name>] [--isolation|--no-isolation] [--qdrant-strategy <strategy>] [-v|--verbose]
 ```
 
 ### Arguments & Options
@@ -36,6 +39,7 @@ repo init [repo_path] [--project-name <name>] [--isolation|--no-isolation] [--qd
 - **--project-name <name>**: Project name stored in `.repo-intel/config.toml`
 - **--isolation / --no-isolation**: Enable or disable repository isolation filters (default: enabled)
 - **--qdrant-strategy <strategy>**: Qdrant isolation strategy (`payload_filter` or `collection_per_project`; default: `payload_filter`)
+- **-v, --verbose**: Show detailed runtime logs and write a full log file to `.repo-intel/logs/`
 
 ### Example
 ```powershell
@@ -80,7 +84,7 @@ Trace the call graph from an entry point to show dependencies and execution path
 
 ### Usage
 ```powershell
-repo trace <entry_point> [--depth <n>] [--format text|json] [--project <project_id>] [--explain]
+repo trace <entry_point> [--depth <n>] [--format text|json] [--project <project_id>] [--explain] [-v|--verbose]
 ```
 
 ### Arguments & Options
@@ -89,6 +93,7 @@ repo trace <entry_point> [--depth <n>] [--format text|json] [--project <project_
 - **--format <format>**: Output format (`text` or `json`)
 - **--project <project_id>**: Override the active project and trace only within that project
 - **--explain**: Generate an LLM-powered explanation for the call path
+- **-v, --verbose**: Show detailed runtime logs and write a full log file to `.repo-intel/logs/`
 
 ### Example
 ```powershell
@@ -105,13 +110,14 @@ Analyze which parts of the codebase will be affected by changes to a symbol or f
 
 ### Usage
 ```powershell
-repo impact <symbol> [--format text|json] [--project <project_id>]
+repo impact <symbol> [--format text|json] [--project <project_id>] [-v|--verbose]
 ```
 
 ### Arguments & Options
 - **symbol**: Symbol or file name to analyze impact for
 - **--format <format>**: Output format (`text` or `json`)
 - **--project <project_id>**: Override the active project and analyze only within that project
+- **-v, --verbose**: Show detailed runtime logs and write a full log file to `.repo-intel/logs/`
 
 ### Example
 ```powershell
@@ -127,7 +133,7 @@ Show file-level dependency information for one indexed file.
 
 ### Usage
 ```powershell
-repo dependencies <file> [--format text|json] [--project <project_id>] [--limit <n>]
+repo dependencies <file> [--format text|json] [--project <project_id>] [--limit <n>] [-v|--verbose]
 ```
 
 ### Arguments & Options
@@ -135,6 +141,7 @@ repo dependencies <file> [--format text|json] [--project <project_id>] [--limit 
 - **--format <format>**: Output format (`text` or `json`)
 - **--project <project_id>**: Override the active project and inspect only within that project
 - **--limit <n>**: Maximum rows per section (default: 25)
+- **-v, --verbose**: Show detailed runtime logs and write a full log file to `.repo-intel/logs/`
 
 ### Example
 ```powershell
@@ -153,7 +160,7 @@ Generate architecture-aware explanations with visual dependency graphs, workflow
 
 ### Usage
 ```powershell
-repo explain <symbol> [--level file|class|function] [--provider <llm_provider>] [--model <model_name>] [--project <project_id>] [--diagram|-d] [--tree|-t] [--deps] [--no-llm] [--max-hops <n>]
+repo explain <symbol> [--level file|class|function] [--provider <llm_provider>] [--model <model_name>] [--project <project_id>] [--diagram|-d] [--tree|-t] [--deps] [--no-llm] [--max-hops <n>] [-v|--verbose]
 ```
 
 ### Arguments & Options
@@ -167,6 +174,7 @@ repo explain <symbol> [--level file|class|function] [--provider <llm_provider>] 
 - **--deps**: Show Rich table of dependencies
 - **--no-llm**: Skip LLM generation, show only graph analysis
 - **--max-hops <n>**: Maximum hops for workflow trace (default: 8)
+- **-v, --verbose**: Show detailed runtime logs and write a full log file to `.repo-intel/logs/`
 
 ### Example
 ```powershell
@@ -200,7 +208,7 @@ Perform semantic search over the codebase to find relevant entities.
 
 ### Usage
 ```powershell
-repo search <query> [--limit <n>] [--language <lang>] [--service <service>] [--entity-type <type>] [--project <project_id>]
+repo search <query> [--limit <n>] [--language <lang>] [--service <service>] [--entity-type <type>] [--project <project_id>] [-v|--verbose]
 ```
 
 ### Arguments & Options
@@ -210,6 +218,7 @@ repo search <query> [--limit <n>] [--language <lang>] [--service <service>] [--e
 - **--service <service>**: Filter results to specific service
 - **--entity-type <type>**: Filter by entity type (e.g., `function`, `class`)
 - **--project <project_id>**: Override the active project and search only within that project
+- **-v, --verbose**: Show detailed runtime logs and write a full log file to `.repo-intel/logs/`
 
 ### Example
 ```powershell
@@ -225,8 +234,11 @@ List indexed projects known to RIP.
 
 ### Usage
 ```powershell
-repo projects
+repo projects [-v|--verbose]
 ```
+
+### Arguments & Options
+- **-v, --verbose**: Show detailed runtime logs and write a full log file to `.repo-intel/logs/`
 
 ### Example
 ```powershell
@@ -240,12 +252,13 @@ Set the active project for subsequent project-scoped commands.
 
 ### Usage
 ```powershell
-repo use <project_id> [--repo-path <path>]
+repo use <project_id> [--repo-path <path>] [-v|--verbose]
 ```
 
 ### Arguments & Options
 - **project_id**: Project id to activate
 - **--repo-path <path>**: Repository folder where `.repo-intel/active_project` should be stored (default: `.`)
+- **-v, --verbose**: Show detailed runtime logs and write a full log file to `.repo-intel/logs/`
 
 ### Example
 ```powershell
@@ -260,12 +273,13 @@ Identify unused functions and classes in the codebase.
 
 ### Usage
 ```powershell
-repo dead-code [--type functions|classes|all] [--format text|json]
+repo dead-code [--type functions|classes|all] [--format text|json] [-v|--verbose]
 ```
 
 ### Arguments & Options
 - **--type <type>**: Entity type to check (`functions`, `classes`, or `all` - default: `all`)
 - **--format <format>**: Output format (`text` or `json`)
+- **-v, --verbose**: Show detailed runtime logs and write a full log file to `.repo-intel/logs/`
 
 ### Example
 ```powershell
@@ -280,11 +294,12 @@ Generate a comprehensive onboarding guide for the repository.
 
 ### Usage
 ```powershell
-repo onboard [--output <file>]
+repo onboard [--output <file>] [-v|--verbose]
 ```
 
 ### Arguments & Options
 - **--output <file>**: Save the onboarding guide to a specific file
+- **-v, --verbose**: Show detailed runtime logs and write a full log file to `.repo-intel/logs/`
 
 ### Example
 ```powershell
@@ -299,11 +314,12 @@ Visualize the repository's architecture as a diagram or JSON structure.
 
 ### Usage
 ```powershell
-repo architecture [--format mermaid|json]
+repo architecture [--format mermaid|json] [-v|--verbose]
 ```
 
 ### Arguments & Options
 - **--format <format>**: Output format (`mermaid` for diagram or `json` - default: `mermaid`)
+- **-v, --verbose**: Show detailed runtime logs and write a full log file to `.repo-intel/logs/`
 
 ### Example
 ```powershell
@@ -318,12 +334,13 @@ Show repository metrics like complexity, coupling, risk scores, and git activity
 
 ### Usage
 ```powershell
-repo metrics [--module <module>] [--top-risk <n>]
+repo metrics [--module <module>] [--top-risk <n>] [-v|--verbose]
 ```
 
 ### Arguments & Options
 - **--module <module>**: Show metrics for a specific module only
 - **--top-risk <n>**: Show top N high-risk modules
+- **-v, --verbose**: Show detailed runtime logs and write a full log file to `.repo-intel/logs/`
 
 ### Example
 ```powershell
@@ -338,13 +355,14 @@ Start the RIP API server as a persistent process.
 
 ### Usage
 ```powershell
-repo serve [--host <host>] [--port <port>] [--reload]
+repo serve [--host <host>] [--port <port>] [--reload] [-v|--verbose]
 ```
 
 ### Arguments & Options
 - **--host <host>**: Host to bind the server to (default: `localhost`)
 - **--port <port>**: Port to bind the server to (default: `8000`)
 - **--reload**: Enable auto-reload when code changes (development mode)
+- **-v, --verbose**: Show detailed runtime logs and write a full log file to `.repo-intel/logs/`
 
 ### Example
 ```powershell
@@ -359,11 +377,12 @@ Check the indexing status of a repository.
 
 ### Usage
 ```powershell
-repo status [repo_path]
+repo status [repo_path] [-v|--verbose]
 ```
 
 ### Arguments
 - **repo_path**: Repository path to check (default: `.` - current directory)
+- **-v, --verbose**: Show detailed runtime logs and write a full log file to `.repo-intel/logs/`
 
 ### Example
 ```powershell
@@ -378,7 +397,7 @@ Completely clear RIP indexed data from Neo4j, Qdrant, and RIP storage metadata.
 
 ### Usage
 ```powershell
-repo delete [--project <project_id>] [--yes] [--no-neo4j] [--no-qdrant] [--no-storage]
+repo delete [--project <project_id>] [--yes] [--no-neo4j] [--no-qdrant] [--no-storage] [-v|--verbose]
 ```
 
 ### Arguments & Options
@@ -387,6 +406,7 @@ repo delete [--project <project_id>] [--yes] [--no-neo4j] [--no-qdrant] [--no-st
 - **--neo4j / --no-neo4j**: Clear or skip Neo4j graph data
 - **--qdrant / --no-qdrant**: Delete or skip the Qdrant vector collection
 - **--storage / --no-storage**: Reset or skip RIP metadata tables
+- **-v, --verbose**: Show detailed runtime logs and write a full log file to `.repo-intel/logs/`
 
 ### Example
 ```powershell
@@ -400,5 +420,13 @@ repo delete --yes --no-storage
 
 ## repo config
 Show or modify configuration settings.
+
+### Usage
+```powershell
+repo config [-v|--verbose]
+```
+
+### Arguments & Options
+- **-v, --verbose**: Show detailed runtime logs and write a full log file to `.repo-intel/logs/`
 
 *Note: This command is not yet implemented.*

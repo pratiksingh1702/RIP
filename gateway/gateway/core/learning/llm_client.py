@@ -19,6 +19,10 @@ class LLMClient:
     def __init__(self):
         self.provider = settings.llm_provider
         self.model = settings.llm_model
+        # Set GOOGLE_API_KEY env var if available in settings
+        import os
+        if settings.google_api_key:
+            os.environ["GOOGLE_API_KEY"] = settings.google_api_key
 
     async def classify(self, task: str) -> dict:
         """Classify a task using an LLM, with a deterministic fallback."""
@@ -51,7 +55,19 @@ class LLMClient:
             return self._local_fallback(task)
 
     def _model_name(self) -> str:
-        if self.provider and "/" not in self.model:
+        if self.provider == "ollama":
+            return f"ollama/{self.model}"
+        elif self.provider == "openrouter":
+            return f"openrouter/{self.model}"
+        elif self.provider == "anthropic":
+            return f"anthropic/{self.model}"
+        elif self.provider == "google":
+            return f"gemini/{self.model}"
+        elif self.provider == "groq":
+            return f"groq/{self.model}"
+        elif self.provider == "azure":
+            return f"azure/{self.model}"
+        elif self.provider and "/" not in self.model:
             return f"{self.provider}/{self.model}"
         return self.model
 

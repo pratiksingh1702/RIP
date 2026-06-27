@@ -8,7 +8,6 @@ import signal
 import sys
 import time
 import threading
-from datetime import datetime
 from pathlib import Path
 
 from rich.console import Console
@@ -18,6 +17,7 @@ from rich.panel import Panel
 from watchdog.events import FileSystemEvent, FileSystemEventHandler
 from watchdog.observers import Observer
 
+from cli.runtime_logging import configure_verbose_logging
 from core.graph.client import Neo4jClient
 from core.indexer.incremental import incremental_index
 from core.indexer.pipeline import (
@@ -129,56 +129,43 @@ def index(
     log_path = _configure_verbose_logging(repo_path) if verbose else None
     if log_path:
         console.print(f"[dim]Verbose log: {log_path}[/dim]")
-    if watch:
-        console.print(f"[cyan]Watch mode on {repo_path}...[/cyan]")
-        _watch_mode(repo_path, verbose=verbose)
-    elif smart:
-        console.print(f"[cyan]Smart index on {repo_path}...[/cyan]")
-        asyncio.run(_smart_index(repo_path, verbose=verbose))
-    elif incremental:
-        console.print(f"[cyan]Incremental index on {repo_path}...[/cyan]")
-        asyncio.run(_incremental_index(repo_path, verbose=verbose))
-    else:
-        console.print(f"[cyan]Full index on {repo_path}...[/cyan]")
-        asyncio.run(_index(repo_path, verbose=verbose, log_path=log_path))
+        logger.info("Command started: repo index")
+        logger.info(
+            "Command parameters: repo_path=%r, watch=%r, incremental=%r, smart=%r, languages=%r",
+            repo_path,
+            watch,
+            incremental,
+            smart,
+            languages,
+        )
+    started = time.perf_counter()
+    try:
+        if watch:
+            console.print(f"[cyan]Watch mode on {repo_path}...[/cyan]")
+            _watch_mode(repo_path, verbose=verbose)
+        elif smart:
+            console.print(f"[cyan]Smart index on {repo_path}...[/cyan]")
+            asyncio.run(_smart_index(repo_path, verbose=verbose))
+        elif incremental:
+            console.print(f"[cyan]Incremental index on {repo_path}...[/cyan]")
+            asyncio.run(_incremental_index(repo_path, verbose=verbose))
+        else:
+            console.print(f"[cyan]Full index on {repo_path}...[/cyan]")
+            asyncio.run(_index(repo_path, verbose=verbose, log_path=log_path))
+        if log_path:
+            logger.info("Command completed: repo index in %.3fs", time.perf_counter() - started)
+            console.print(f"[dim]Full log saved: {log_path}[/dim]")
+    except Exception:
+        if log_path:
+            logger.exception("Command failed: repo index after %.3fs", time.perf_counter() - started)
+            console.print(f"[red]Command failed. Full log: {log_path}[/red]")
+        raise
 
 
 def _configure_verbose_logging(repo_path: Path) -> Path:
-    log_dir = repo_path / ".repo-intel" / "logs"
-    log_dir.mkdir(parents=True, exist_ok=True)
-    log_path = log_dir / f"index-{datetime.now().strftime('%Y%m%d-%H%M%S')}.log"
-    # In _configure_verbose_logging, make sure these are NOT suppressed:
+    log_path = configure_verbose_logging("index", repo_path)
     logging.getLogger("core.parser").setLevel(logging.WARNING)  # Show WARNING and above
     logging.getLogger("core.parser.languages").setLevel(logging.WARNING)
-    root_logger = logging.getLogger()
-    root_logger.setLevel(logging.DEBUG)
-    
-    # Remove old handlers
-    for h in list(root_logger.handlers):
-        if getattr(h, "_rip_verbose_handler", False):
-            root_logger.removeHandler(h)
-
-    fmt = logging.Formatter("%(asctime)s %(levelname)-7s %(name)s - %(message)s", datefmt="%H:%M:%S")
-    
-    # File handler
-    fh = logging.FileHandler(log_path, encoding="utf-8")
-    fh.setLevel(logging.DEBUG)
-    fh.setFormatter(fmt)
-    fh._rip_verbose_handler = True
-    root_logger.addHandler(fh)
-    
-    # Console handler - shows logs directly in terminal
-    ch = ConsoleLogHandler()
-    ch.setLevel(logging.INFO)
-    ch.setFormatter(logging.Formatter("%(message)s"))
-    ch._rip_verbose_handler = True
-    root_logger.addHandler(ch)
-
-    # Reduce noise from libraries
-    for noisy in ['watchdog', 'httpx', 'httpcore', 'urllib3', 'neo4j', 'neo4j.io', 'neo4j.pool']:
-        logging.getLogger(noisy).setLevel(logging.WARNING)
-
-    logger.info("Verbose logging enabled: %s", log_path)
     return log_path
 
 

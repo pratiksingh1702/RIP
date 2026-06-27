@@ -32,13 +32,13 @@ flowchart TD
     parser --> ast["Language ASTs"]
     ast --> entities["Entity extraction"]
     ast --> rels["Relationship extraction"]
-    entities --> graph["Neo4j knowledge graph"]
-    rels --> graph
+    entities --> kg["Neo4j knowledge graph"]
+    rels --> kg
     entities --> payloads["Compact semantic payloads"]
     payloads --> embeddings["Sentence Transformers / ONNX embeddings"]
     embeddings --> qdrant["Qdrant vector index"]
     repo --> metadata["PostgreSQL metadata and file hashes"]
-    graph --> retrieval["Hybrid retrieval"]
+    kg --> retrieval["Hybrid retrieval"]
     qdrant --> retrieval
     metadata --> retrieval
     retrieval --> rerank["Cross-encoder reranking"]
@@ -108,6 +108,30 @@ flowchart LR
 6. Read commands combine exact graph traversal, semantic retrieval, lexical fallback, project-scoped expansion, and reranking.
 7. `repo explain` and Context Gateway responses assemble bounded context packages for AI agents and optional LLM narration.
 
+## Feature Map
+
+| Feature | What it answers | Primary command or surface |
+|---|---|---|
+| Multi-language parsing | What files, symbols, widgets, imports, calls, and inheritance relationships exist? | `repo index` |
+| Knowledge graph generation | How are files, modules, classes, functions, widgets, and projects connected? | Neo4j, `repo trace`, `repo impact`, `repo dependencies` |
+| Semantic indexing | Where is code related to a natural-language concept? | `repo search "retry logic"` |
+| Hybrid retrieval | Which results are both semantically relevant and structurally connected? | `repo search`, `repo explain`, Context Gateway |
+| Cross-encoder reranking | Which candidate snippets are most relevant after broad retrieval? | Search and explain pipeline |
+| Dependency graph generation | What imports this file and what does it import? | `repo dependencies <file>` |
+| Workflow extraction | What is the execution path from this symbol or feature? | `repo trace <symbol>`, `repo explain --tree` |
+| Architecture understanding | What are the major modules and service boundaries? | `repo architecture --format mermaid` |
+| Repository explain | How does this feature, module, or flow work? | `repo explain "<topic>" --diagram --tree --deps` |
+| Impact analysis | What breaks if I change this symbol or file? | `repo impact <symbol-or-file>` |
+| Dead-code detection | Which functions/classes look unused from graph evidence? | `repo dead-code` |
+| Onboarding generation | What should a new engineer read first? | `repo onboard --output ONBOARDING.md` |
+| Metrics and risk | Which modules are coupled, central, or risky? | `repo metrics --top-risk 10` |
+| Smart indexing | What changed since the last commit and needs refresh? | `repo index --smart` |
+| Persistent runtime | How can clients reuse graph/vector/model objects? | `repo serve` |
+| MCP integration | How can an AI agent request structured repo context? | `mcp/server.py`, gateway MCP tools |
+| Context Gateway | How can an agent plan, retrieve, compress, and validate context? | `gateway start`, `gateway mcp config` |
+| VS Code integration | How can developers use RIP inside the editor? | `RIP: Open Chat Panel`, context actions |
+| Verbose command logs | What happened during a slow or failed command? | Any command with `-v` |
+
 ## Core Components
 
 | Component | Directory | Responsibility |
@@ -146,6 +170,211 @@ RIP's retrieval path starts with project-scoped vector and lexical candidates, e
 | Dart / Flutter | Implemented | Classes, methods, functions, Flutter widget entities, imports, calls, containment, and inheritance. |
 
 Parser maturity varies by language. Python and Dart/Flutter currently have the richest project-specific validation in this repository.
+
+## Real-Life Workflows
+
+These are the workflows RIP is built for. The examples use realistic names, but the same commands work against any indexed project.
+
+### 1. A new engineer joins a large codebase
+
+The question is not "where are the files?" It is "what should I understand first?"
+
+```bash
+repo init /work/billing-api --project-name billing-api
+repo index /work/billing-api -v
+repo architecture --format mermaid
+repo metrics --top-risk 10
+repo onboard --output ONBOARDING.md
+```
+
+Expected result:
+
+- A service/module architecture diagram.
+- A ranked list of central or risky modules.
+- An onboarding document grounded in actual indexed files and relationships.
+- A repeatable starting point for the next engineer instead of tribal memory.
+
+### 2. A developer needs to change authentication
+
+The risky part is not editing `AuthService`. The risky part is missing a caller, route, provider, widget, test fixture, or downstream dependency.
+
+```bash
+repo search "authentication token refresh"
+repo trace AuthService --depth 8
+repo impact AuthService --format json
+repo explain "how token refresh works" --diagram --tree --deps
+```
+
+What RIP should surface:
+
+- The core auth classes/functions.
+- Files that call or import the auth path.
+- Related routes, repositories, providers, or UI screens.
+- A workflow tree suitable for a PR description or implementation plan.
+
+### 3. A production bug appears in payment retry logic
+
+Keyword search may find `retry`, but it will not show whether the retry path is connected to checkout, invoices, jobs, or notifications.
+
+```bash
+repo search "payment failure retry backoff"
+repo dependencies core/payments/retry.py
+repo trace PaymentRetryPolicy --depth 10
+repo impact core/payments/retry.py
+```
+
+How this helps:
+
+- Search finds fuzzy matches such as `backoff`, `attempt`, `idempotency`, or `failure handler`.
+- Dependency view shows file-level imports in both directions.
+- Trace shows the execution path.
+- Impact analysis shows the change surface before the fix is written.
+
+### 4. A Flutter screen behavior needs investigation
+
+RIP indexes Dart/Flutter structure as graph data, including widget classes, methods, imports, calls, containment, and inheritance.
+
+```bash
+repo search "daily add entry floating action button"
+repo trace ModuleScreenV2 --depth 8
+repo dependencies lib/features/modules/module_screen_v2.dart
+repo explain "how Daily Add Entry works" --tree --deps
+```
+
+Useful output:
+
+- Candidate widgets and providers by semantic relevance.
+- Caller/callee and import context around the screen.
+- A dependency table showing what the screen imports and what imports it.
+- A compact explanation that an agent can use before touching UI code.
+
+### 5. A tech lead wants to delete old code
+
+Dead code is rarely just "no text references." The better question is whether indexed call/import/dependency relationships still reach it.
+
+```bash
+repo dead-code --type all
+repo impact LegacyInvoiceExporter
+repo search "legacy invoice export"
+```
+
+The safe workflow is:
+
+1. Use graph evidence to identify likely unused entities.
+2. Run impact analysis before deletion.
+3. Search semantically for business names that may not match symbol names.
+4. Delete only after tests and reviewers confirm the runtime path is gone.
+
+### 6. An AI coding agent needs context before editing
+
+Without RIP, an agent usually starts by grepping, opening files, and guessing what matters. With RIP, it can ask for a bounded context package first.
+
+```bash
+uv run gateway mcp config
+```
+
+Then the agent can call:
+
+```text
+get_context(
+  task = "Add audit logging to failed login attempts",
+  repo_path = "/work/auth-service",
+  token_budget = 6000
+)
+```
+
+The gateway classifies the task, plans retrieval, queries RIP and optional sources, ranks and compresses evidence, checks session conflicts, applies permissions, and returns a package designed for implementation.
+
+### 7. A reviewer wants to validate a proposed change
+
+Review is faster when the reviewer can see likely blast radius before reading every line.
+
+```text
+validate_change(
+  files = ["core/auth/session.py", "server/routers/auth.py"],
+  summary = "Change session expiry calculation and login failure audit logging"
+)
+```
+
+Expected context:
+
+- Impacted symbols and files.
+- Related routes or callers.
+- Possible overlap with active sessions.
+- Risk hints from graph centrality, coupling, and ownership signals.
+
+## Example Outputs
+
+RIP output is intentionally structured so it can be read by humans or passed into agents.
+
+### Dependency View
+
+```text
+repo dependencies lib/typeProvider/type_provider.dart
+
+Target
+  lib/typeProvider/type_provider.dart
+
+Imported by
+  lib/features/modules/module_screen_v2.dart
+  lib/features/pm/screens/pm_screen.dart
+
+Imports
+  package:flutter_riverpod/flutter_riverpod.dart
+  lib/models/work_type.dart
+
+Contained symbols
+  TypeNotifier
+  typeProvider
+```
+
+### Explain View
+
+```text
+repo explain "how login works" --diagram --tree --deps
+
+Workflow
+  LoginScreen
+    -> AuthController.login
+    -> AuthRepository.authenticate
+    -> TokenStore.save
+    -> SessionProvider.refresh
+
+Dependencies
+  AuthController imports AuthRepository
+  LoginScreen watches SessionProvider
+  AuthRepository calls ApiClient.post
+
+Explanation
+  Login starts in the UI, passes credentials through the controller,
+  writes tokens through the repository path, and refreshes session state
+  through the provider layer. The highest-risk change points are the
+  repository call and token persistence boundary.
+```
+
+### Agent Context Package
+
+```json
+{
+  "intent": "feature_addition",
+  "domain": "auth",
+  "risk": "medium",
+  "context": [
+    {
+      "source": "rip.trace",
+      "title": "Login workflow",
+      "files": ["server/routers/auth.py", "core/auth/session.py"]
+    },
+    {
+      "source": "rip.impact",
+      "title": "Affected symbols",
+      "symbols": ["AuthController.login", "SessionProvider.refresh"]
+    }
+  ],
+  "conflicts": [],
+  "token_budget_used": 4310
+}
+```
 
 ## CLI Examples
 

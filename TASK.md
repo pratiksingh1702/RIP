@@ -728,6 +728,25 @@ uv run gateway mcp config
 #### Known Limitations:
 1. External sources (GitHub/Jira/Slack) are placeholders
 2. LLM fallback (classifier) is a placeholder
-3. Storage backend for memory/feedback is in‑memory placeholder
-4. Full integration tests need live RIP server and DB
+3. Full integration tests need live RIP server and DB
+
+## Context Gateway: RIP Integration Complete
+- [x] Integrate gateway into RIP monorepo (reuse RIP venv/dependencies)
+- [x] Update gateway config to match RIP's Postgres/Redis setup
+- [x] Add .repo-intel/config.toml support in gateway config
+- [x] Update gateway env vars and docker-compose.yml
+- [x] Create/update start scripts (bash and PowerShell)
+- [x] Create gateway.env in RIP root
+- [x] Get both RIP and Gateway servers running
+- [x] Gateway uses same Postgres DB as RIP
+
+Checkpoint for RIP-Gateway Integration: Context Gateway is now integrated into the RIP monorepo! Reuses RIP's venv and packages, config matches RIP's Postgres (port 5433, repo_intel user) and Redis (port 6379) setup, loads from .repo-intel/config.toml just like RIP! Both servers running successfully! RIP at http://127.0.0.1:8000, Gateway at http://127.0.0.1:8001! Docker services (neo4j, qdrant, postgres, redis) running!
+
+## CLI Verbose Logs for Every Command
+- [x] Add shared verbose logging helper that writes command logs to `.repo-intel/logs/<command>-YYYYMMDD-HHMMSS.log`
+- [x] Add `-v` / `--verbose` to top-level CLI commands and MCP subcommands
+- [x] Capture command start, parameters, elapsed completion, failures, and existing `cli.*` / `core.*` / service logs
+- [x] Keep `repo index -v` on the shared log-file setup while preserving its live progress UI
+- [x] Update `cli.md` with verbose usage and log-path behavior
+- [x] Validate with `py_compile`, command help checks, and `repo config -v` log creation
 
