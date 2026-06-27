@@ -31,10 +31,10 @@
   ],
   "channels": [
     {
-      "guid": "github-sponsors",
+      "guid": "github",
       "type": "payment-provider",
       "name": "GitHub Sponsors",
-      "address": "https://github.com/sponsors/pratiksingh1702",
+      "address": "https://github.com/pratiksingh1702",
       "currencies": ["USD"]
     }
   ],
@@ -47,27 +47,27 @@
       "amount": 100,
       "currency": "USD",
       "frequency": "monthly",
-      "channels": ["github-sponsors"]
+      "channels": ["github"]
     },
     {
       "guid": "full-time-development",
       "status": "active",
       "name": "Full-time Development",
-      "description": "Supports dedicated full-time work on RIP and Context Gateway - expanding language parsers, improving retrieval quality, shipping Context Gateway phases 5-15, and building the public documentation and open source community.",
+      "description": "Supports dedicated full-time work on RIP and Context Gateway - expanding language parsers, improving retrieval quality, shipping Context Gateway phases, and building the public documentation and open source community.",
       "amount": 500,
       "currency": "USD",
       "frequency": "monthly",
-      "channels": ["github-sponsors"]
+      "channels": ["github"]
     },
     {
       "guid": "one-time-support",
       "status": "active",
       "name": "One-time Support",
       "description": "Any one-time contribution to support the project.",
-      "amount": 0,
+      "amount": 10,
       "currency": "USD",
       "frequency": "one-time",
-      "channels": ["github-sponsors"]
+      "channels": ["github"]
     }
   ]
 }
