@@ -1,73 +1,93 @@
 {
-  "$schema": "https://fundingjson.org/schema/v1.1.0.json",
-  "version": "v1.1.0",
-  "entity": {
-    "type": "individual",
-    "role": "maintainer",
-    "name": "Pratik Singh",
-    "email": "pratiks.ec.23@nitj.ac.in",
-    "description": "Third-year B.Tech student at NIT Jalandhar building AI infrastructure and developer tooling. Created Repository Intelligence Platform (RIP) - a production system that transforms codebases into a Neo4j knowledge graph with hybrid BM25 + vector retrieval, a VS Code extension, and MCP integration for AI coding agents. Also building Context Gateway, an LLM context optimization layer for concurrent AI agent sessions.",
-    "webpageUrl": "https://github.com/pratiksingh1702"
-  },
-  "projects": [
-    {
-      "guid": "rip-repository-intelligence-platform",
-      "name": "Repository Intelligence Platform (RIP)",
-      "description": "A production repository intelligence system that parses 9 languages into a Neo4j knowledge graph with typed relationships, hybrid BM25 + Qdrant + cross-encoder retrieval, a two-phase async indexing pipeline, VS Code extension with live terminal streaming, and MCP auto-configuration for Claude, Cursor, Codex, Windsurf, and Aider. Enables AI coding agents to reason over software architecture instead of raw source code.",
-      "webpageUrl": "https://github.com/pratiksingh1702/RIP",
-      "repositoryUrl": "https://github.com/pratiksingh1702/RIP",
-      "licenses": ["spdx:MIT"],
-      "tags": ["developer-tools", "ai-infrastructure", "knowledge-graph", "retrieval", "mcp", "llm", "neo4j", "qdrant", "vscode-extension"]
+    "$schema": "https://fundingjson.org/schema/v1.1.0.json",
+    "version": "v1.1.0",
+    "entity": {
+        "type": "individual",
+        "role": "maintainer",
+        "name": "Pratik Singh",
+        "email": "pratiks.ec.23@nitj.ac.in",
+        "description": "Third-year B.Tech student at NIT Jalandhar. Solo developer of RIP (Repository Intelligence Platform) and Context Gateway - production AI infrastructure for code understanding. Built a Neo4j knowledge graph engine with hybrid retrieval, VS Code extension, MCP server, and AI agent orchestration layer in 20 days.",
+        "webpageUrl": {
+            "url": "https://github.com/pratiksingh1702"
+        }
     },
-    {
-      "guid": "context-gateway-llm-optimization",
-      "name": "Context Gateway",
-      "description": "An LLM context optimization layer that classifies intent, plans token-budgeted multi-source retrieval, runs parallel source execution with circuit breakers, and manages session memory and conflict detection for concurrent AI coding agent sessions.",
-      "webpageUrl": "https://github.com/pratiksingh1702/RIP",
-      "repositoryUrl": "https://github.com/pratiksingh1702/RIP",
-      "licenses": ["spdx:MIT"],
-      "tags": ["developer-tools", "ai-infrastructure", "llm", "context-engineering", "mcp"]
+    "projects": [
+        {
+            "guid": "rip",
+            "name": "Repository Intelligence Platform (RIP)",
+            "description": "Production codebase knowledge graph engine. Parses 9 languages into Neo4j (12 relationship types) with Qdrant vector search and cross-encoder reranking. Two-phase async indexing pipeline. VS Code extension with unified chat panel and live terminal streaming. MCP server with 7 tools. Auto-configures Claude Code, Codex, Cursor, Windsurf, and Aider. AI agents query architecture, trace dependencies, and detect conflicts in 1.2s instead of reading 30 files for 12 minutes. 65% token reduction verified. 100% local-first.",
+            "webpageUrl": {
+                "url": "https://github.com/pratiksingh1702/RIP"
+            },
+            "repositoryUrl": {
+                "url": "https://github.com/pratiksingh1702/RIP"
+            },
+            "licenses": ["spdx:MIT"],
+            "tags": ["developer-tools", "ai-infrastructure", "knowledge-graph", "retrieval", "mcp", "neo4j", "qdrant", "vscode-extension", "llm"]
+        },
+        {
+            "guid": "context-gateway",
+            "name": "Context Gateway",
+            "description": "AI agent orchestration layer. Intent classifier (rule-based + LLM fallback). Multi-source retrieval planner with token budget allocation. Parallel executor with circuit breakers. 5-factor context ranker (semantic, centrality, recency, pattern, authority). Token budget compressor. Session memory with cross-session conflict detection. Permission filter. Tier-1 MCP server (4 tools) for AI agents. Reduces context tokens by 65% vs raw AI agent usage.",
+            "webpageUrl": {
+                "url": "https://github.com/pratiksingh1702/RIP"
+            },
+            "repositoryUrl": {
+                "url": "https://github.com/pratiksingh1702/RIP"
+            },
+            "licenses": ["spdx:MIT"],
+            "tags": ["developer-tools", "ai-infrastructure", "llm", "context-engineering", "mcp", "token-management"]
+        }
+    ],
+    "funding": {
+        "channels": [
+            {
+                "guid": "github",
+                "type": "payment-provider",
+                "address": "https://github.com/pratiksingh1702",
+                "description": "GitHub profile for sponsoring development work"
+            }
+        ],
+        "plans": [
+            {
+                "guid": "infra-monthly",
+                "status": "active",
+                "name": "Infrastructure Support",
+                "description": "Monthly Neo4j, Qdrant, PostgreSQL hosting and GPU compute for embedding testing",
+                "amount": 100,
+                "currency": "USD",
+                "frequency": "monthly",
+                "channels": ["github"]
+            },
+            {
+                "guid": "dev-monthly",
+                "status": "active",
+                "name": "Full-time Development",
+                "description": "Dedicated development: language parsers, retrieval quality, Context Gateway completion, documentation, community building",
+                "amount": 500,
+                "currency": "USD",
+                "frequency": "monthly",
+                "channels": ["github"]
+            },
+            {
+                "guid": "one-time",
+                "status": "active",
+                "name": "One-time Support",
+                "description": "Any one-time contribution to support RIP and Context Gateway",
+                "amount": 0,
+                "currency": "USD",
+                "frequency": "one-time",
+                "channels": ["github"]
+            }
+        ],
+        "history": [
+            {
+                "year": 2025,
+                "income": 0,
+                "expenses": 0,
+                "currency": "USD",
+                "description": "First year of development. Self-funded. Built entirely with free tier services and local development."
+            }
+        ]
     }
-  ],
-  "channels": [
-    {
-      "guid": "github",
-      "type": "payment-provider",
-      "name": "GitHub Sponsors",
-      "address": "https://github.com/pratiksingh1702",
-      "currencies": ["USD"]
-    }
-  ],
-  "plans": [
-    {
-      "guid": "infrastructure-costs",
-      "status": "active",
-      "name": "Infrastructure and Compute",
-      "description": "Covers monthly costs for Neo4j, Qdrant, and PostgreSQL hosting plus GPU compute for embedding model development and testing.",
-      "amount": 100,
-      "currency": "USD",
-      "frequency": "monthly",
-      "channels": ["github"]
-    },
-    {
-      "guid": "full-time-development",
-      "status": "active",
-      "name": "Full-time Development",
-      "description": "Supports dedicated full-time work on RIP and Context Gateway - expanding language parsers, improving retrieval quality, shipping Context Gateway phases, and building the public documentation and open source community.",
-      "amount": 500,
-      "currency": "USD",
-      "frequency": "monthly",
-      "channels": ["github"]
-    },
-    {
-      "guid": "one-time-support",
-      "status": "active",
-      "name": "One-time Support",
-      "description": "Any one-time contribution to support the project.",
-      "amount": 10,
-      "currency": "USD",
-      "frequency": "one-time",
-      "channels": ["github"]
-    }
-  ]
 }
