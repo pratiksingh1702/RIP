@@ -499,7 +499,43 @@ uv run repo --help
 uv run repo index --help
 ```
 
-On Windows, the checked-in startup scripts can launch the local infrastructure and runtime services from existing virtual environments:
+## Setup And Startup
+
+RIP has two startup paths. Use the bootstrap scripts when the environment still needs dependency sync or migrations. Use the runtime scripts when the virtual environments already exist and you just want to run the local platform.
+
+### First-Time Bootstrap
+
+Use these when setting up the repository on a machine for the first time:
+
+```bash
+./start_rip.sh
+```
+
+or on Windows PowerShell:
+
+```powershell
+.\start_rip.ps1
+```
+
+These scripts:
+
+- Check that `uv` is installed.
+- Start Docker infrastructure.
+- Run `uv sync` for the RIP workspace.
+- Enter `gateway/`, run its setup flow, and apply Alembic migrations.
+- Print service URLs and next commands.
+
+They are setup/bootstrap helpers, not the fastest daily runtime path.
+
+### Daily Runtime Start
+
+Use these after the environment already exists:
+
+```bash
+./start.sh
+```
+
+or on Windows PowerShell:
 
 ```powershell
 .\start.ps1
@@ -509,6 +545,46 @@ or:
 
 ```cmd
 start.bat
+```
+
+The runtime scripts:
+
+- Reuse the existing `.venv` Python.
+- Start Docker services from the root compose file: Neo4j, Qdrant, Postgres, Redis.
+- Stop any process already using `RIP_PORT` or `GATEWAY_PORT`.
+- Start RIP on `http://127.0.0.1:8000`.
+- Start the Context Gateway on `http://127.0.0.1:8001`.
+- Write logs to `logs/repo-serve.log` and `logs/gateway.log`.
+- Do not run `uv sync`, install packages, build gateway images, or run migrations.
+
+Default runtime environment:
+
+| Variable | Default |
+|---|---|
+| `RIP_HOST` | `127.0.0.1` |
+| `RIP_PORT` | `8000` |
+| `GATEWAY_HOST` | `127.0.0.1` |
+| `GATEWAY_PORT` | `8001` |
+| `GATEWAY_POSTGRES_URL` | `postgresql+asyncpg://repo_intel:repo_intel@localhost:5433/repo_intel?ssl=disable` |
+| `GATEWAY_REDIS_URL` | `redis://localhost:6379` |
+| `GATEWAY_RIP_MCP_CWD` | repository root |
+
+After startup:
+
+```bash
+curl http://127.0.0.1:8000/health
+curl http://127.0.0.1:8001/health
+tail -f logs/repo-serve.log
+tail -f logs/gateway.log
+```
+
+On Windows PowerShell:
+
+```powershell
+Invoke-WebRequest http://127.0.0.1:8000/health
+Invoke-WebRequest http://127.0.0.1:8001/health
+Get-Content .\logs\repo-serve.log -Wait
+Get-Content .\logs\gateway.log -Wait
 ```
 
 ## Quick Start
