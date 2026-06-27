@@ -32,13 +32,13 @@ flowchart TD
     parser --> ast["Language ASTs"]
     ast --> entities["Entity extraction"]
     ast --> rels["Relationship extraction"]
-    entities --> graph["Neo4j knowledge graph"]
-    rels --> graph
+    entities --> kg["Neo4j knowledge graph"]
+    rels --> kg
     entities --> payloads["Compact semantic payloads"]
     payloads --> embeddings["Sentence Transformers / ONNX embeddings"]
     embeddings --> qdrant["Qdrant vector index"]
     repo --> metadata["PostgreSQL metadata and file hashes"]
-    graph --> retrieval["Hybrid retrieval"]
+    kg --> retrieval["Hybrid retrieval"]
     qdrant --> retrieval
     metadata --> retrieval
     retrieval --> rerank["Cross-encoder reranking"]
