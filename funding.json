@@ -1,0 +1,67 @@
+{
+  "name": "RIP - Repository Intelligence Platform",
+  "description": "Codebase knowledge graph engine. Indexes source code into Neo4j + Qdrant. AI agents query architecture, trace dependencies, detect conflicts in seconds. 65% fewer tokens. 100% local-first.",
+  "version": "1.0.0",
+  "license": "MIT",
+  "repository": "https://github.com/pratiksingh1702/RIP",
+  "website": "https://github.com/pratiksingh1702/RIP",
+  "documentation": "https://github.com/pratiksingh1702/RIP#readme",
+
+  "funding": {
+    "status": "active",
+    "requirements": {
+      "one_time": {
+        "amount": 5000,
+        "currency": "USD",
+        "description": "Benchmark infrastructure for 5 open-source repos"
+      },
+      "monthly": {
+        "amount": 2000,
+        "currency": "USD",
+        "description": "Development, community support, infrastructure"
+      }
+    },
+    "usage": [
+      "Cloud infrastructure for public benchmarks",
+      "CI/CD for multi-platform testing",
+      "Community support and documentation",
+      "Conference travel for presenting RIP"
+    ]
+  },
+
+  "project": {
+    "category": "developer-tools",
+    "tags": [
+      "code-intelligence",
+      "ai-agents",
+      "knowledge-graph",
+      "mcp-server",
+      "developer-productivity",
+      "local-first"
+    ],
+    "stage": "beta",
+    "languages": ["Python", "TypeScript", "Dart"],
+    "technologies": ["Neo4j", "Qdrant", "Tree-sitter", "FastAPI", "MCP", "VS Code API"]
+  },
+
+  "maintainer": {
+    "name": "Pratik Singh",
+    "email": "pratiks.ec.23@nitj.ac.in",
+    "role": "Solo Developer",
+    "links": {
+      "github": "https://github.com/pratiksingh1702"
+    }
+  },
+
+  "impact": {
+    "problem": "AI agents spend 58% of time reading code instead of writing it. Claude Code reads 30 files, burns 85K tokens for basic questions.",
+    "solution": "RIP builds Neo4j dependency graph in 90s. AI agents query graph directly. 1.2s answers. 65% token reduction. Conflict detection across sessions.",
+    "metrics": [
+      "65% token reduction vs raw AI agent usage",
+      "11x faster codebase understanding",
+      "12 relationship types extracted",
+      "500+ files indexed in under 2 minutes",
+      "100% local-first"
+    ]
+  }
+}
