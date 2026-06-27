@@ -6,7 +6,7 @@
     "role": "maintainer",
     "name": "Pratik Singh",
     "email": "pratiks.ec.23@nitj.ac.in",
-    "description": "Third-year B.Tech student at NIT Jalandhar building AI infrastructure and developer tooling. Created Repository Intelligence Platform (RIP) — a production system that transforms codebases into a Neo4j knowledge graph with hybrid BM25 + vector retrieval, a VS Code extension, and MCP integration for AI coding agents. Also building Context Gateway, an LLM context optimization layer for concurrent AI agent sessions.",
+    "description": "Third-year B.Tech student at NIT Jalandhar building AI infrastructure and developer tooling. Created Repository Intelligence Platform (RIP) - a production system that transforms codebases into a Neo4j knowledge graph with hybrid BM25 + vector retrieval, a VS Code extension, and MCP integration for AI coding agents. Also building Context Gateway, an LLM context optimization layer for concurrent AI agent sessions.",
     "webpageUrl": "https://github.com/pratiksingh1702"
   },
   "projects": [
@@ -53,7 +53,7 @@
       "guid": "full-time-development",
       "status": "active",
       "name": "Full-time Development",
-      "description": "Supports dedicated full-time work on RIP and Context Gateway — expanding language parsers, improving retrieval quality, shipping Context Gateway phases 5-15, and building the public documentation and open source community.",
+      "description": "Supports dedicated full-time work on RIP and Context Gateway - expanding language parsers, improving retrieval quality, shipping Context Gateway phases 5-15, and building the public documentation and open source community.",
       "amount": 500,
       "currency": "USD",
       "frequency": "monthly",
