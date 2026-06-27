@@ -1,67 +1,73 @@
 {
-  "name": "RIP - Repository Intelligence Platform",
-  "description": "Codebase knowledge graph engine. Indexes source code into Neo4j + Qdrant. AI agents query architecture, trace dependencies, detect conflicts in seconds. 65% fewer tokens. 100% local-first.",
-  "version": "1.0.0",
-  "license": "MIT",
-  "repository": "https://github.com/pratiksingh1702/RIP",
-  "website": "https://github.com/pratiksingh1702/RIP",
-  "documentation": "https://github.com/pratiksingh1702/RIP#readme",
-
-  "funding": {
-    "status": "active",
-    "requirements": {
-      "one_time": {
-        "amount": 5000,
-        "currency": "USD",
-        "description": "Benchmark infrastructure for 5 open-source repos"
-      },
-      "monthly": {
-        "amount": 2000,
-        "currency": "USD",
-        "description": "Development, community support, infrastructure"
-      }
-    },
-    "usage": [
-      "Cloud infrastructure for public benchmarks",
-      "CI/CD for multi-platform testing",
-      "Community support and documentation",
-      "Conference travel for presenting RIP"
-    ]
-  },
-
-  "project": {
-    "category": "developer-tools",
-    "tags": [
-      "code-intelligence",
-      "ai-agents",
-      "knowledge-graph",
-      "mcp-server",
-      "developer-productivity",
-      "local-first"
-    ],
-    "stage": "beta",
-    "languages": ["Python", "TypeScript", "Dart"],
-    "technologies": ["Neo4j", "Qdrant", "Tree-sitter", "FastAPI", "MCP", "VS Code API"]
-  },
-
-  "maintainer": {
+  "$schema": "https://fundingjson.org/schema/v1.1.0.json",
+  "version": "v1.1.0",
+  "entity": {
+    "type": "individual",
+    "role": "maintainer",
     "name": "Pratik Singh",
     "email": "pratiks.ec.23@nitj.ac.in",
-    "role": "Solo Developer",
-    "links": {
-      "github": "https://github.com/pratiksingh1702"
-    }
+    "description": "Third-year B.Tech student at NIT Jalandhar building AI infrastructure and developer tooling. Created Repository Intelligence Platform (RIP) — a production system that transforms codebases into a Neo4j knowledge graph with hybrid BM25 + vector retrieval, a VS Code extension, and MCP integration for AI coding agents. Also building Context Gateway, an LLM context optimization layer for concurrent AI agent sessions.",
+    "webpageUrl": "https://github.com/pratiksingh1702"
   },
-
-  "impact": {
-    "problem": "AI agents spend 58% of time reading code instead of writing it. Claude Code reads 30 files, burns 85K tokens for basic questions.",
-    "solution": "RIP builds Neo4j dependency graph in 90s. AI agents query graph directly. 1.2s answers. 65% token reduction. Conflict detection across sessions.",
-    "metrics": [
-      "65% token reduction vs raw AI agent usage",
-      "11x faster codebase understanding",
-      "12 relationship types extracted",
-      "500+ files indexed in under 2 minutes",
-      "100% local-first"
-    ]
-  }
+  "projects": [
+    {
+      "guid": "rip-repository-intelligence-platform",
+      "name": "Repository Intelligence Platform (RIP)",
+      "description": "A production repository intelligence system that parses 9 languages into a Neo4j knowledge graph with typed relationships, hybrid BM25 + Qdrant + cross-encoder retrieval, a two-phase async indexing pipeline, VS Code extension with live terminal streaming, and MCP auto-configuration for Claude, Cursor, Codex, Windsurf, and Aider. Enables AI coding agents to reason over software architecture instead of raw source code.",
+      "webpageUrl": "https://github.com/pratiksingh1702/RIP",
+      "repositoryUrl": "https://github.com/pratiksingh1702/RIP",
+      "licenses": ["spdx:MIT"],
+      "tags": ["developer-tools", "ai-infrastructure", "knowledge-graph", "retrieval", "mcp", "llm", "neo4j", "qdrant", "vscode-extension"]
+    },
+    {
+      "guid": "context-gateway-llm-optimization",
+      "name": "Context Gateway",
+      "description": "An LLM context optimization layer that classifies intent, plans token-budgeted multi-source retrieval, runs parallel source execution with circuit breakers, and manages session memory and conflict detection for concurrent AI coding agent sessions.",
+      "webpageUrl": "https://github.com/pratiksingh1702/RIP",
+      "repositoryUrl": "https://github.com/pratiksingh1702/RIP",
+      "licenses": ["spdx:MIT"],
+      "tags": ["developer-tools", "ai-infrastructure", "llm", "context-engineering", "mcp"]
+    }
+  ],
+  "channels": [
+    {
+      "guid": "github-sponsors",
+      "type": "payment-provider",
+      "name": "GitHub Sponsors",
+      "address": "https://github.com/sponsors/pratiksingh1702",
+      "currencies": ["USD"]
+    }
+  ],
+  "plans": [
+    {
+      "guid": "infrastructure-costs",
+      "status": "active",
+      "name": "Infrastructure and Compute",
+      "description": "Covers monthly costs for Neo4j, Qdrant, and PostgreSQL hosting plus GPU compute for embedding model development and testing.",
+      "amount": 100,
+      "currency": "USD",
+      "frequency": "monthly",
+      "channels": ["github-sponsors"]
+    },
+    {
+      "guid": "full-time-development",
+      "status": "active",
+      "name": "Full-time Development",
+      "description": "Supports dedicated full-time work on RIP and Context Gateway — expanding language parsers, improving retrieval quality, shipping Context Gateway phases 5-15, and building the public documentation and open source community.",
+      "amount": 500,
+      "currency": "USD",
+      "frequency": "monthly",
+      "channels": ["github-sponsors"]
+    },
+    {
+      "guid": "one-time-support",
+      "status": "active",
+      "name": "One-time Support",
+      "description": "Any one-time contribution to support the project.",
+      "amount": 0,
+      "currency": "USD",
+      "frequency": "one-time",
+      "channels": ["github-sponsors"]
+    }
+  ]
 }
