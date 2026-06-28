@@ -6,23 +6,21 @@ import asyncio
 import logging
 import signal
 import sys
-import time
 import threading
+import time
 from pathlib import Path
 
 from rich.console import Console
-from rich.table import Table
 from rich.live import Live
 from rich.panel import Panel
+from rich.table import Table
 from watchdog.events import FileSystemEvent, FileSystemEventHandler
 from watchdog.observers import Observer
 
 from cli.runtime_logging import configure_verbose_logging
 from core.graph.client import Neo4jClient
 from core.indexer.incremental import incremental_index
-from core.indexer.pipeline import (
-    IndexProgress, IndexPipeline, request_skip
-)
+from core.indexer.pipeline import IndexPipeline, IndexProgress, request_skip
 from core.parser.registry import build_default_registry
 from core.storage.database import async_session_factory
 from server.config import get_settings
@@ -84,7 +82,8 @@ def _listen_for_skip_unix():
     """Unix skip listener."""
     global _skip_pressed_count
     try:
-        import termios, tty
+        import termios
+        import tty
         fd = sys.stdin.fileno()
         old = termios.tcgetattr(fd)
         tty.setcbreak(fd)
@@ -228,10 +227,10 @@ def _make_display(repo_path: Path, p: IndexProgress) -> Panel:
         if p.current_file_duration > 5:
             lines.append(f"   [yellow]⚠ SLOW FILE - taking {p.current_file_duration:.0f}s...[/yellow]")
         if p.current_file_duration > 15:
-            lines.append(f"   [bold red]🐌 VERY SLOW - Press 's' to skip![/bold red]")
+            lines.append("   [bold red]🐌 VERY SLOW - Press 's' to skip![/bold red]")
         lines.append("")
 
-    lines.append("[dim]Press [bold yellow]'s'[/bold yellow] to skip current file | Skipped so far: {}[/dim]".format(len(p.skipped_files)))
+    lines.append(f"[dim]Press [bold yellow]'s'[/bold yellow] to skip current file | Skipped so far: {len(p.skipped_files)}[/dim]")
 
     # Recent warnings (last 5)
     if p.warnings:

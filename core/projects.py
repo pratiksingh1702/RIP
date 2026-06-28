@@ -47,9 +47,16 @@ def _read_project_config(root: Path) -> dict[str, object]:
 class ProjectRef:
     id: str
     name: str
-    root: str
+    root: str | None = None
     language: str = "mixed"
     created_at: datetime | None = None
+    git_url: str | None = None
+    branch: str | None = None
+    files_count: int = 0
+    entities_count: int = 0
+    languages: list[str] | None = None
+    indexed_at: datetime | None = None
+    last_reindexed_at: datetime | None = None
 
 
 def project_id_for_root(root: Path) -> str:
@@ -96,6 +103,44 @@ async def ensure_project(
     return ref
 
 
+async def upsert_project(
+    session: AsyncSession,
+    project_id: str,
+    project_name: str,
+    git_url: str | None = None,
+    branch: str | None = None,
+    files_count: int = 0,
+    entities_count: int = 0,
+    languages: list[str] | None = None,
+) -> ProjectRef:
+    existing = await session.get(Project, project_id)
+    now = datetime.now(UTC)
+    if existing is None:
+        session.add(
+            Project(
+                id=project_id,
+                name=project_name,
+                git_url=git_url,
+                branch=branch,
+                files_count=files_count,
+                entities_count=entities_count,
+                languages=languages or [],
+                created_at=now,
+                indexed_at=now,
+            )
+        )
+    else:
+        existing.name = project_name
+        existing.git_url = git_url
+        existing.branch = branch
+        existing.files_count = files_count
+        existing.entities_count = entities_count
+        existing.languages = languages or []
+        existing.last_reindexed_at = now
+    await session.commit()
+    return await get_project(session, project_id)
+
+
 async def list_projects(session: AsyncSession) -> list[ProjectRef]:
     rows = (await session.execute(select(Project).order_by(Project.created_at))).scalars().all()
     return [
@@ -105,6 +150,13 @@ async def list_projects(session: AsyncSession) -> list[ProjectRef]:
             root=row.root,
             language=row.language,
             created_at=row.created_at,
+            git_url=row.git_url,
+            branch=row.branch,
+            files_count=row.files_count,
+            entities_count=row.entities_count,
+            languages=row.languages,
+            indexed_at=row.indexed_at,
+            last_reindexed_at=row.last_reindexed_at,
         )
         for row in rows
     ]
@@ -120,7 +172,72 @@ async def get_project(session: AsyncSession, project_id: str) -> ProjectRef | No
         root=row.root,
         language=row.language,
         created_at=row.created_at,
+        git_url=row.git_url,
+        branch=row.branch,
+        files_count=row.files_count,
+        entities_count=row.entities_count,
+        languages=row.languages,
+        indexed_at=row.indexed_at,
+        last_reindexed_at=row.last_reindexed_at,
     )
+
+
+async def delete_project(session: AsyncSession, project_id: str) -> bool:
+    # First delete Neo4j data
+    from qdrant_client import AsyncQdrantClient
+    from qdrant_client.http.exceptions import UnexpectedResponse
+    from qdrant_client.models import FieldCondition, Filter, MatchValue
+
+    from core.graph.client import Neo4jClient
+    from server.config import get_settings
+
+    settings = get_settings()
+    COLLECTION_NAME = "repo_entities"
+
+    # Delete from Neo4j
+    neo4j_client = Neo4jClient(settings.neo4j_uri, settings.neo4j_user, settings.neo4j_password)
+    try:
+        if await neo4j_client.connect():
+            await neo4j_client.execute(
+                """
+                MATCH (n)
+                WHERE n.project_id = $project_id OR (n:Project AND n.id = $project_id)
+                DETACH DELETE n
+                """,
+                {"project_id": project_id},
+            )
+            await neo4j_client.execute(
+                """
+                MATCH (n)
+                WHERE (n:Developer OR n:Commit) AND NOT (n)--()
+                DETACH DELETE n
+                """
+            )
+    finally:
+        await neo4j_client.close()
+
+    # Delete from Qdrant
+    qdrant_client = AsyncQdrantClient(host=settings.qdrant_host, port=settings.qdrant_port)
+    filter_ = Filter(
+        must=[FieldCondition(key="project_id", match=MatchValue(value=project_id))]
+    )
+    try:
+        try:
+            await qdrant_client.delete(collection_name=COLLECTION_NAME, points_selector=filter_)
+        except UnexpectedResponse:
+            pass  # Ignore if collection doesn't exist
+    except Exception:
+        pass
+    finally:
+        await qdrant_client.close()
+
+    # Delete from storage
+    row = await session.get(Project, project_id)
+    if row is None:
+        return False
+    await session.delete(row)
+    await session.commit()
+    return True
 
 
 def active_project_path(repo_path: Path | None = None) -> Path:

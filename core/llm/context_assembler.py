@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 from core.graph.client import Neo4jClient
 from core.graph.models import SearchResult
 from core.llm.models import ExplainContext, ExplainIntent

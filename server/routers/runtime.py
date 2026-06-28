@@ -8,6 +8,10 @@ from fastapi import APIRouter, Request
 
 from server.schemas.responses import ApiEnvelope
 
+# Health router (public)
+health_router = APIRouter(tags=["health"])
+
+# Runtime router (protected)
 router = APIRouter(tags=["runtime"])
 
 
@@ -23,7 +27,7 @@ async def runtime_status(request: Request) -> ApiEnvelope:
     )
 
 
-@router.get("/health")
+@health_router.get("/health")
 async def health(request: Request) -> dict[str, object]:
     runtime = request.app.state.runtime
     status = runtime.status()

@@ -16,14 +16,15 @@ router = APIRouter(tags=["architecture"])
 
 @router.get("/architecture", response_model=ApiEnvelope)
 async def architecture_endpoint(
-    format: str = Query("json", description="json|mermaid")
+    format: str = Query("json", description="json|mermaid"),
+    project_id: str = Query(None, description="Project id to get architecture for"),
 ) -> ApiEnvelope:
     start = time.perf_counter()
     settings = get_settings()
     client = Neo4jClient(settings.neo4j_uri, settings.neo4j_user, settings.neo4j_password)
     try:
         generator = ArchitectureGenerator(client)
-        arch_data = await generator.generate()
+        arch_data = await generator.generate(project_id=project_id)
     finally:
         await client.close()
 

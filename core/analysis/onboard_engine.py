@@ -4,20 +4,24 @@ from __future__ import annotations
 
 from core.analysis.base import BaseAnalyser
 from core.analysis.risk_scorer import RiskScorer
+from core.projects import DEFAULT_PROJECT_ID
 
 
 class OnboardEngine(BaseAnalyser):
     """Generates an onboarding document for the repository using graph insights."""
 
-    async def generate_onboarding_data(self) -> dict[str, object]:
+    async def generate_onboarding_data(self, project_id: str | None = None) -> dict[str, object]:
         """Collect all data needed for the onboarding document."""
+        project_id = project_id or DEFAULT_PROJECT_ID
+        
         # 1. Entry Points: APIRoutes and functions named 'main'
         entry_points_query = """
         MATCH (e)
-        WHERE e:APIRoute OR (e:Function AND e.name = "main")
+        WHERE (e:APIRoute OR (e:Function AND e.name = "main"))
+          AND e.project_id = $project_id
         RETURN DISTINCT e.name AS name, e.file_path AS file_path, labels(e)[0] AS type
         """
-        ep_records = await self.graph_client.execute(entry_points_query)
+        ep_records = await self.graph_client.execute(entry_points_query, {"project_id": project_id})
         entry_points = [
             f"{r['name']} ({r['type']} in {r['file_path']})" for r in ep_records
         ]
@@ -25,23 +29,26 @@ class OnboardEngine(BaseAnalyser):
         # 2. Key Modules / Architecture Summary (list files with class/function counts)
         modules_query = """
         MATCH (f:File)
+        WHERE f.project_id = $project_id
         OPTIONAL MATCH (f)-[:CONTAINS]->(e)
+        WHERE e IS NULL OR e.project_id = $project_id
         RETURN f.path AS path, f.language AS language,
                count(DISTINCT e) AS entity_count
         ORDER BY entity_count DESC
         LIMIT 10
         """
-        mod_records = await self.graph_client.execute(modules_query)
+        mod_records = await self.graph_client.execute(modules_query, {"project_id": project_id})
         key_modules = [r["path"] for r in mod_records]
 
         # 3. Ownership Map (Top developers per file)
         ownership_query = """
         MATCH (f:File)-[r:OWNED_BY]->(d:Developer)
+        WHERE f.project_id = $project_id
         RETURN f.path AS file_path, d.name AS dev_name, d.email AS dev_email,
                r.percentage AS percentage, r.line_count AS line_count
         ORDER BY f.path, r.percentage DESC
         """
-        own_records = await self.graph_client.execute(ownership_query)
+        own_records = await self.graph_client.execute(ownership_query, {"project_id": project_id})
         owner_map = {}
         for r in own_records:
             fp = r["file_path"]
@@ -55,7 +62,7 @@ class OnboardEngine(BaseAnalyser):
 
         # 4. Risk Highlights (top risk score files)
         scorer = RiskScorer(self.graph_client)
-        risks = await scorer.get_all_risks()
+        risks = await scorer.get_all_risks(project_id=project_id)
         risk_highlights = risks[:5]
 
         # Assemble markdown

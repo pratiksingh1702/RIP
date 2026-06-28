@@ -10,7 +10,7 @@ from fastapi import APIRouter, Request
 
 from core.llm.client import query_llm
 from core.llm.context_assembler import ContextAssembler
-from core.llm.models import ExplanationRequest, ExplainIntent
+from core.llm.models import ExplainIntent, ExplanationRequest
 from core.llm.prompts.explain import get_explain_prompt
 from core.search.searcher import Searcher
 from server.schemas.responses import ApiEnvelope

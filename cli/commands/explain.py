@@ -7,12 +7,10 @@ import logging
 
 from rich.console import Console
 from rich.panel import Panel
-from rich.tree import Tree
 from rich.table import Table
+from rich.tree import Tree
 
 from core.graph.client import Neo4jClient
-from core.graph.queries.trace import trace_workflow_chain
-from core.graph.queries.impact import dependency_graph as get_dependency_graph
 from core.llm.client import query_llm
 from core.llm.context_assembler import ContextAssembler
 from core.llm.models import ExplainContext

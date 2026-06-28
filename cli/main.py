@@ -530,6 +530,66 @@ def config(
     )
 
 
+api_keys_app = typer.Typer(help="API Key management")
+app.add_typer(api_keys_app, name="api-keys")
+
+
+@api_keys_app.command("list")
+def api_keys_list(
+    verbose: Annotated[
+        bool,
+        typer.Option("-v", "--verbose", help="Show detailed runtime logs and save a full log file"),
+    ] = False,
+) -> None:
+    """List all API keys."""
+    from cli.commands.api_keys import list_keys
+    _run_command("api-keys-list", verbose=verbose, params={}, action=list_keys)
+
+
+@api_keys_app.command("create")
+def api_keys_create(
+    name: Annotated[str, typer.Argument(help="Human-readable name for the API key")],
+    description: Annotated[
+        str | None,
+        typer.Option("--description", "-d", help="Optional description of the key's purpose"),
+    ] = None,
+    expires_in_days: Annotated[
+        int | None,
+        typer.Option("--expires-in", "-e", help="Optional number of days until the key expires"),
+    ] = None,
+    verbose: Annotated[
+        bool,
+        typer.Option("-v", "--verbose", help="Show detailed runtime logs and save a full log file"),
+    ] = False,
+) -> None:
+    """Create a new API key."""
+    from cli.commands.api_keys import create_key
+    _run_command(
+        "api-keys-create",
+        verbose=verbose,
+        params={"name": name, "description": description, "expires_in_days": expires_in_days},
+        action=lambda: create_key(name, description, expires_in_days),
+    )
+
+
+@api_keys_app.command("revoke")
+def api_keys_revoke(
+    api_key_id: Annotated[int, typer.Argument(help="ID of the API key to revoke")],
+    verbose: Annotated[
+        bool,
+        typer.Option("-v", "--verbose", help="Show detailed runtime logs and save a full log file"),
+    ] = False,
+) -> None:
+    """Revoke an API key."""
+    from cli.commands.api_keys import revoke_key
+    _run_command(
+        "api-keys-revoke",
+        verbose=verbose,
+        params={"api_key_id": api_key_id},
+        action=lambda: revoke_key(api_key_id),
+    )
+
+
 mcp_app = typer.Typer(help="MCP installation and configuration for AI agents")
 app.add_typer(mcp_app, name="mcp")
 

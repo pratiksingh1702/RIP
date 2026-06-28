@@ -20,7 +20,7 @@ class Settings(BaseSettings):
     top_k: int = 20
     postgres_url: str = "postgresql+asyncpg://repo_intel:repo_intel@localhost:5433/repo_intel?ssl=disable"
     redis_url: str = "redis://localhost:6379"
-    rip_server_host: str = Field(default="127.0.0.1", alias="RIP_SERVER_HOST")
+    rip_server_host: str = Field(default="0.0.0.0", alias="RIP_SERVER_HOST")
     rip_server_port: int = Field(default=8000, alias="RIP_SERVER_PORT")
     llm_primary_provider: str = "ollama"
     llm_primary_model: str = "qwen2.5-coder:7b"
@@ -237,7 +237,7 @@ max_context_tokens = 6000
 explain_by_default = false
 
 [server]
-host = "127.0.0.1"
+host = "0.0.0.0"
 port = 8000
 auto_start = true
 """

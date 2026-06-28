@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hashlib
 import re
-from collections import defaultdict
 from pathlib import Path
 
 from core.parser.base import BaseParser, ParsedEntity, ParsedFile, ParsedRelationship

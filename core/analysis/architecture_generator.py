@@ -16,9 +16,9 @@ def _safe_id(name: str) -> str:
 class ArchitectureGenerator(BaseAnalyser):
     """Generates Mermaid diagrams and JSON service maps."""
 
-    async def generate(self) -> dict[str, object]:
+    async def generate(self, project_id: str | None = None) -> dict[str, object]:
         """Generate architecture data and Mermaid diagram."""
-        data = await get_architecture_data(self.graph_client)
+        data = await get_architecture_data(self.graph_client, project_id=project_id)
         services = data["services"]
         dependencies = data["dependencies"]
 

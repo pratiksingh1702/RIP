@@ -13,19 +13,20 @@ class DeadCodeDetector(BaseAnalyser):
         self,
         entity_type: str = "all",
         known_entry_points: list[str] | None = None,
+        project_id: str | None = None,
     ) -> list[dict]:
         """Detect unused code entities (functions, classes, or all)."""
         entry_points = known_entry_points or ["main"]
         dead_entities = []
 
         if entity_type in ("functions", "all"):
-            funcs = await get_dead_functions(self.graph_client, entry_points)
+            funcs = await get_dead_functions(self.graph_client, entry_points, project_id=project_id)
             for f in funcs:
                 f["type"] = "function"
                 dead_entities.append(f)
 
         if entity_type in ("classes", "all"):
-            cls_list = await get_dead_classes(self.graph_client)
+            cls_list = await get_dead_classes(self.graph_client, project_id=project_id)
             for c in cls_list:
                 c["type"] = "class"
                 dead_entities.append(c)

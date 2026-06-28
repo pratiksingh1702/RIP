@@ -9,9 +9,9 @@ if not exist "%ROOT%\.venv\Scripts\python.exe" (
   exit /b 1
 )
 
-if "%RIP_HOST%"=="" set "RIP_HOST=127.0.0.1"
+if "%RIP_HOST%"=="" set "RIP_HOST=0.0.0.0"
 if "%RIP_PORT%"=="" set "RIP_PORT=8000"
-if "%GATEWAY_HOST%"=="" set "GATEWAY_HOST=127.0.0.1"
+if "%GATEWAY_HOST%"=="" set "GATEWAY_HOST=0.0.0.0"
 if "%GATEWAY_PORT%"=="" set "GATEWAY_PORT=8001"
 if "%GATEWAY_POSTGRES_URL%"=="" set "GATEWAY_POSTGRES_URL=postgresql+asyncpg://repo_intel:repo_intel@localhost:5433/repo_intel?ssl=disable"
 if "%GATEWAY_REDIS_URL%"=="" set "GATEWAY_REDIS_URL=redis://localhost:6379"

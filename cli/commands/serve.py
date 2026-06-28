@@ -15,4 +15,6 @@ def serve(host: str | None = None, port: int | None = None, reload: bool = False
         port=port or settings.rip_server_port,
         reload=reload,
         factory=False,
+        log_level="debug",  # Enable verbose logging
+        access_log=True,
     )

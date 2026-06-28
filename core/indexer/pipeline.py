@@ -6,12 +6,11 @@ import asyncio
 import logging
 import os
 import time
+from collections.abc import AsyncGenerator
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
-from typing import AsyncGenerator, Optional
-import gc
 
 try:
     import psutil
@@ -23,7 +22,7 @@ from core.graph.builder import GraphBuilder
 from core.graph.client import Neo4jClient
 from core.graph.schema import setup_schema
 from core.parser.base import ParsedFile
-from core.parser.registry import LanguageParserRegistry, build_default_registry
+from core.parser.registry import build_default_registry
 from core.projects import ProjectRef, ensure_project, project_ref_for_root
 from core.search.client import QdrantClientWrapper
 from core.search.embedder import EmbeddingPipeline, embedding_dimension
@@ -172,6 +171,7 @@ class IndexSummary:
     indexed_files: int
     total_entities: int
     progress: IndexProgress = field(default_factory=IndexProgress)
+    languages_detected: list[str] = field(default_factory=list)
 
 # ============================================================================
 # WORKER - with detailed diagnostics
@@ -676,6 +676,7 @@ class IndexPipeline:
         background: bool = True, structural_only: bool = False,
         qdrant_client=None, embedder=None,
         progress: IndexProgress | None = None,
+        project_id: str | None = None, project_name: str | None = None,
     ) -> IndexResult:
         if progress is None: progress = IndexProgress()
         total_start = time.perf_counter()
@@ -685,7 +686,7 @@ class IndexPipeline:
         logger.info("   Repo: %s | Mode: %s | Workers: %d", repo_path, mode, MAX_PARALLEL_WORKERS)
         logger.info("=" * 70)
 
-        project = await _resolve_index_project(repo_path)
+        project = await _resolve_index_project(repo_path, project_id, project_name)
         parsed_stream = self._phase1_parse_and_graph_streaming(repo_path, client, progress, project)
         graph_stream, embed_stream = _tee_async_generator(parsed_stream, 2)
 
@@ -738,8 +739,15 @@ def _tee_async_generator(gen, n=2):
     asyncio.create_task(feed())
     return [consumer(q) for q in queues]
 
-async def _resolve_index_project(repo_path: Path) -> ProjectRef:
+async def _resolve_index_project(repo_path: Path, project_id: str | None = None, project_name: str | None = None) -> ProjectRef:
     from core.storage.database import async_session_factory, ensure_storage_schema
+    if project_id and project_name:
+        # If we have both, create a ProjectRef directly
+        return ProjectRef(
+            id=project_id,
+            name=project_name,
+            root=str(repo_path)
+        )
     ref = project_ref_for_root(repo_path)
     try:
         await ensure_storage_schema()
@@ -763,11 +771,36 @@ async def index_repository_with_resources(
     pipeline = IndexPipeline()
     if progress is None: progress = IndexProgress()
     result = await pipeline.run(repo_path, client, background=False,
-                                qdrant_client=qdrant_client, embedder=embedder,
-                                progress=progress)
-    return IndexSummary(repo_path=str(repo_path), indexed_files=result.files_indexed,
-                       total_entities=result.progress.entities_extracted,
-                       progress=result.progress)
+                                    qdrant_client=qdrant_client, embedder=embedder,
+                                    progress=progress, project_id=project_id, project_name=project_name)
+    
+    # Detect languages from file extensions
+    languages = set()
+    for root, _, files in os.walk(repo_path):
+        for file in files:
+            ext = os.path.splitext(file)[1].lower()
+            if ext in SUPPORTED_EXTENSIONS:
+                lang_map = {
+                    '.py': 'Python',
+                    '.ts': 'TypeScript',
+                    '.tsx': 'TypeScript',
+                    '.js': 'JavaScript',
+                    '.jsx': 'JavaScript',
+                    '.java': 'Java',
+                    '.go': 'Go',
+                    '.rs': 'Rust',
+                    '.dart': 'Dart',
+                }
+                if ext in lang_map:
+                    languages.add(lang_map[ext])
+    
+    return IndexSummary(
+        repo_path=str(repo_path), 
+        indexed_files=result.files_indexed,
+        total_entities=result.progress.entities_extracted,
+        progress=result.progress,
+        languages_detected=list(languages)
+    )
 
 async def index_repository(repo_path: Path, client: Neo4jClient) -> IndexSummary:
     return await index_repository_with_resources(repo_path, client)

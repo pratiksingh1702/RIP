@@ -13,9 +13,9 @@ if [[ ! -f "$PYTHON" ]]; then
   exit 1
 fi
 
-export RIP_HOST="${RIP_HOST:-127.0.0.1}"
+export RIP_HOST="${RIP_HOST:-0.0.0.0}"
 export RIP_PORT="${RIP_PORT:-8000}"
-export GATEWAY_HOST="${GATEWAY_HOST:-127.0.0.1}"
+export GATEWAY_HOST="${GATEWAY_HOST:-0.0.0.0}"
 export GATEWAY_PORT="${GATEWAY_PORT:-8001}"
 export GATEWAY_POSTGRES_URL="${GATEWAY_POSTGRES_URL:-postgresql+asyncpg://repo_intel:repo_intel@localhost:5433/repo_intel?ssl=disable}"
 export GATEWAY_REDIS_URL="${GATEWAY_REDIS_URL:-redis://localhost:6379}"

@@ -22,7 +22,9 @@ Every CLI command accepts `-v` / `--verbose`. When enabled, RIP prints detailed 
 - [repo metrics](#repo-metrics)
 - [repo serve](#repo-serve)
 - [repo status](#repo-status)
+- [repo delete](#repo-delete)
 - [repo config](#repo-config)
+- [repo api-keys](#repo-api-keys)
 
 ---
 
@@ -430,3 +432,50 @@ repo config [-v|--verbose]
 - **-v, --verbose**: Show detailed runtime logs and write a full log file to `.repo-intel/logs/`
 
 *Note: This command is not yet implemented.*
+
+---
+
+## repo api-keys
+Manage API keys for authenticating with the RIP server.
+
+### Subcommands
+- `list`: List all API keys
+- `create`: Create a new API key
+- `revoke`: Revoke an existing API key
+
+### Usage - List Keys
+```powershell
+repo api-keys list [-v|--verbose]
+```
+
+### Usage - Create Key
+```powershell
+repo api-keys create <name> [--description <text>] [--expires-in <days>] [-v|--verbose]
+```
+
+### Arguments & Options - Create Key
+- **name**: Human-readable name for the API key
+- **--description <text>**: Optional description of the key's purpose
+- **--expires-in <days>**: Optional number of days until the key expires
+- **-v, --verbose**: Show detailed runtime logs
+
+### Usage - Revoke Key
+```powershell
+repo api-keys revoke <api_key_id> [-v|--verbose]
+```
+
+### Arguments & Options - Revoke Key
+- **api_key_id**: ID of the API key to revoke
+- **-v, --verbose**: Show detailed runtime logs
+
+### Example
+```powershell
+# List all keys
+repo api-keys list
+
+# Create a new key
+repo api-keys create "Flutter App" --description "For mobile app" --expires-in 365
+
+# Revoke a key
+repo api-keys revoke 2
+```

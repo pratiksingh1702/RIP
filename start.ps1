@@ -10,9 +10,9 @@ if (-not (Test-Path $PYTHON)) {
 }
 
 # Default environment variables
-$env:RIP_HOST = "127.0.0.1"
+$env:RIP_HOST = "0.0.0.0"
 $env:RIP_PORT = "8000"
-$env:GATEWAY_HOST = "127.0.0.1"
+$env:GATEWAY_HOST = "0.0.0.0"
 $env:GATEWAY_PORT = "8001"
 $env:GATEWAY_POSTGRES_URL = "postgresql+asyncpg://repo_intel:repo_intel@localhost:5433/repo_intel?ssl=disable"
 $env:GATEWAY_REDIS_URL = "redis://localhost:6379"

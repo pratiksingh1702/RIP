@@ -9,9 +9,13 @@ from core.graph.queries.coupling import get_all_coupling, get_module_coupling
 class CouplingAnalyser(BaseAnalyser):
     """Computes coupling metrics (afferent, efferent, instability) for modules and files."""
 
-    async def analyze_module(self, module_path: str) -> dict[str, object]:
+    async def analyze_module(
+        self, 
+        module_path: str,
+        project_id: str | None = None,
+    ) -> dict[str, object]:
         """Analyze coupling for a specific module/file path."""
-        coupling = await get_module_coupling(self.graph_client, module_path)
+        coupling = await get_module_coupling(self.graph_client, module_path, project_id=project_id)
         ca = coupling["afferent"]
         ce = coupling["efferent"]
         
@@ -27,9 +31,12 @@ class CouplingAnalyser(BaseAnalyser):
             "instability": instability,
         }
 
-    async def analyze_all(self) -> list[dict[str, object]]:
+    async def analyze_all(
+        self,
+        project_id: str | None = None,
+    ) -> list[dict[str, object]]:
         """Analyze coupling for all files/modules in the repository."""
-        results = await get_all_coupling(self.graph_client)
+        results = await get_all_coupling(self.graph_client, project_id=project_id)
         analysed = []
         for r in results:
             ca = r["afferent"]

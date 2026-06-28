@@ -51,7 +51,7 @@ class GatewaySettings(BaseSettings):
     )
     
     # Server
-    host: str = "127.0.0.1"
+    host: str = "0.0.0.0"
     port: int = 8001
     version: str = "0.1.0"
     debug: bool = False

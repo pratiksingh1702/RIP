@@ -19,13 +19,14 @@ router = APIRouter(tags=["analysis"])
 @router.get("/dead-code", response_model=ApiEnvelope)
 async def dead_code_endpoint(
     type: str = Query("all", description="functions|classes|all"),
+    project_id: str = Query(None, description="Project id to detect dead code in"),
 ) -> ApiEnvelope:
     start = time.perf_counter()
     settings = get_settings()
     client = Neo4jClient(settings.neo4j_uri, settings.neo4j_user, settings.neo4j_password)
     try:
         detector = DeadCodeDetector(client)
-        unused = await detector.detect(entity_type=type)
+        unused = await detector.detect(entity_type=type, project_id=project_id)
     finally:
         await client.close()
 
@@ -44,6 +45,7 @@ async def dead_code_endpoint(
 async def metrics_endpoint(
     module: str | None = Query(None, description="Specific module/file path"),
     top_risk: int | None = Query(None, description="Limit to top risk files"),
+    project_id: str = Query(None, description="Project id to get metrics for"),
 ) -> ApiEnvelope:
     start = time.perf_counter()
     settings = get_settings()
@@ -51,9 +53,9 @@ async def metrics_endpoint(
     try:
         if module:
             analyser = CouplingAnalyser(client)
-            coupling_data = await analyser.analyze_module(module)
+            coupling_data = await analyser.analyze_module(module, project_id=project_id)
             scorer = RiskScorer(client)
-            risk_data = await scorer.get_file_risk(module)
+            risk_data = await scorer.get_file_risk(module, project_id=project_id)
             result = [
                 {
                     **coupling_data,
@@ -64,19 +66,19 @@ async def metrics_endpoint(
             ]
         elif top_risk is not None:
             scorer = RiskScorer(client)
-            all_risks = await scorer.get_all_risks()
+            all_risks = await scorer.get_all_risks(project_id=project_id)
             top_risky = all_risks[:top_risk]
 
             analyser = CouplingAnalyser(client)
             result = []
             for r in top_risky:
-                coupling_data = await analyser.analyze_module(r["file_path"])
+                coupling_data = await analyser.analyze_module(r["file_path"], project_id=project_id)
                 result.append({**coupling_data, **r})
         else:
             analyser = CouplingAnalyser(client)
-            all_coupling = await analyser.analyze_all()
+            all_coupling = await analyser.analyze_all(project_id=project_id)
             scorer = RiskScorer(client)
-            all_risks = {r["file_path"]: r for r in await scorer.get_all_risks()}
+            all_risks = {r["file_path"]: r for r in await scorer.get_all_risks(project_id=project_id)}
 
             result = []
             for c in all_coupling:
