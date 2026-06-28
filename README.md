@@ -476,6 +476,7 @@ RIP treats each indexed repository as a project.
 
 This prevents duplicate filenames or symbol names in different repositories from colliding during search, trace, impact, explain, or dependency queries.
 
+
 ## API Key Authentication
 
 RIP provides API key authentication to secure access to the FastAPI server.
@@ -539,7 +540,7 @@ RIP includes a Flutter mobile app that provides an intuitive interface for inter
    ```
 
 4. On the Setup screen:
-   - Enter your RIP server URL (e.g., `http://localhost:8000`)
+   - Enter your RIP server URL (e.g., `http://localhost:8000` for local emulator, or `http://10.93.222.45:8000` for real mobile device on same Wi-Fi)
    - Optionally enter your API key (if authentication is enabled)
    - Connect to start using the app
 
@@ -619,8 +620,8 @@ The runtime scripts:
 - Reuse the existing `.venv` Python.
 - Start Docker services from the root compose file: Neo4j, Qdrant, Postgres, Redis.
 - Stop any process already using `RIP_PORT` or `GATEWAY_PORT`.
-- Start RIP on `http://127.0.0.1:8000`.
-- Start the Context Gateway on `http://127.0.0.1:8001`.
+- Start RIP on `http://0.0.0.0:8000`.
+- Start the Context Gateway on `http://0.0.0.0:8001`.
 - Write logs to `logs/repo-serve.log` and `logs/gateway.log`.
 - Do not run `uv sync`, install packages, build gateway images, or run migrations.
 
@@ -628,9 +629,9 @@ Default runtime environment:
 
 | Variable | Default |
 |---|---|
-| `RIP_HOST` | `127.0.0.1` |
+| `RIP_HOST` | `0.0.0.0` |
 | `RIP_PORT` | `8000` |
-| `GATEWAY_HOST` | `127.0.0.1` |
+| `GATEWAY_HOST` | `0.0.0.0` |
 | `GATEWAY_PORT` | `8001` |
 | `GATEWAY_POSTGRES_URL` | `postgresql+asyncpg://repo_intel:repo_intel@localhost:5433/repo_intel?ssl=disable` |
 | `GATEWAY_REDIS_URL` | `redis://localhost:6379` |
@@ -639,8 +640,8 @@ Default runtime environment:
 After startup:
 
 ```bash
-curl http://127.0.0.1:8000/health
-curl http://127.0.0.1:8001/health
+curl http://localhost:8000/health
+curl http://localhost:8001/health
 tail -f logs/repo-serve.log
 tail -f logs/gateway.log
 ```
@@ -648,8 +649,8 @@ tail -f logs/gateway.log
 On Windows PowerShell:
 
 ```powershell
-Invoke-WebRequest http://127.0.0.1:8000/health
-Invoke-WebRequest http://127.0.0.1:8001/health
+Invoke-WebRequest http://localhost:8000/health
+Invoke-WebRequest http://localhost:8001/health
 Get-Content .\logs\repo-serve.log -Wait
 Get-Content .\logs\gateway.log -Wait
 ```
@@ -674,7 +675,7 @@ uv run repo impact AuthService
 For persistent API use:
 
 ```bash
-uv run repo serve --host 127.0.0.1 --port 8000
+uv run repo serve --host 0.0.0.0 --port 8000
 ```
 
 For gateway use:
@@ -683,6 +684,17 @@ For gateway use:
 uv run gateway status
 uv run gateway start
 ```
+
+### Accessing from mobile device
+To access the RIP server from a mobile device on the same Wi-Fi network:
+1. Find your laptop's IP address (e.g., `10.93.222.45` from `ipconfig` on Windows or `ifconfig` on macOS/Linux)
+2. Use that IP in your Flutter app's Setup screen (e.g., `http://10.93.222.45:8000`)
+3. Make sure your server is running with `--host 0.0.0.0` (default now)
+4. Ensure your firewall allows inbound connections on port 8000
+
+### Accessing from emulator
+For Android emulator: Use `http://10.0.2.2:8000`
+For iOS simulator: Use `http://localhost:8000`
 
 ## API Surface
 
@@ -782,13 +794,13 @@ Gateway health, when services are running:
 
 ```bash
 uv run gateway status
-curl http://127.0.0.1:8001/health
+curl http://localhost:8001/health
 ```
 
 RIP service health, when `repo serve` is running:
 
 ```bash
-curl http://127.0.0.1:8000/health
+curl http://localhost:8000/health
 ```
 
 ## Limitations
