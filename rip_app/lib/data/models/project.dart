@@ -7,7 +7,10 @@ class Project extends Equatable {
   final int filesCount;
   final int entitiesCount;
   final List<String> languages;
+  final String? root;
   final String? gitUrl;
+  final String? branch;
+  final String? author;
 
   const Project({
     required this.projectId,
@@ -16,7 +19,10 @@ class Project extends Equatable {
     required this.filesCount,
     required this.entitiesCount,
     required this.languages,
+    this.root,
     this.gitUrl,
+    this.branch,
+    this.author,
   });
 
   factory Project.fromJson(Map<String, dynamic> json) => Project(
@@ -29,7 +35,12 @@ class Project extends Equatable {
                 ?.map((l) => l as String)
                 .toList() ??
             [],
+        root: json['root'] as String? ?? json['root_path'] as String?,
         gitUrl: json['git_url'] as String?,
+        branch: json['branch'] as String? ?? json['git_branch'] as String?,
+        author: json['author'] as String? ??
+            json['owner'] as String? ??
+            json['created_by'] as String?,
       );
 
   Map<String, dynamic> toJson() => {
@@ -39,8 +50,31 @@ class Project extends Equatable {
         'files_count': filesCount,
         'entities_count': entitiesCount,
         'languages': languages,
+        'root': root,
         'git_url': gitUrl,
+        'branch': branch,
+        'author': author,
       };
+
+  String? get repositoryOwner {
+    if (author != null && author!.trim().isNotEmpty) return author;
+    if (gitUrl == null || gitUrl!.trim().isEmpty) return null;
+
+    final cleaned = gitUrl!
+        .replaceFirst(RegExp(r'^https?://'), '')
+        .replaceFirst(RegExp(r'^git@'), '')
+        .replaceFirst(':', '/')
+        .replaceAll(RegExp(r'\.git$'), '');
+    final parts = cleaned.split('/').where((part) => part.isNotEmpty).toList();
+    if (parts.length >= 2) return parts[parts.length - 2];
+    return null;
+  }
+
+  String get locationLabel {
+    if (root != null && root!.trim().isNotEmpty) return root!;
+    if (gitUrl != null && gitUrl!.trim().isNotEmpty) return gitUrl!;
+    return 'Local indexed workspace';
+  }
 
   @override
   List<Object?> get props => [
@@ -50,6 +84,9 @@ class Project extends Equatable {
         filesCount,
         entitiesCount,
         languages,
+        root,
         gitUrl,
+        branch,
+        author,
       ];
 }

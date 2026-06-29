@@ -6,11 +6,15 @@ import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.storage.models.project import Project
+
+if TYPE_CHECKING:
+    from core.storage.models import ApiKey
 
 ACTIVE_PROJECT_FILE = ".repo-intel/active_project"
 DEFAULT_PROJECT_ID = "default"
@@ -141,31 +145,34 @@ async def upsert_project(
     return await get_project(session, project_id)
 
 
-async def list_projects(session: AsyncSession) -> list[ProjectRef]:
+async def list_projects(
+    session: AsyncSession,
+    associated_project_id: str | None = None,
+    is_global: bool = True,
+) -> list[ProjectRef]:
+    """
+    List indexed/open repositories.
+
+    Args:
+        session: Database session
+        associated_project_id: Optional project ID for legacy scoped callers.
+        is_global: If True, return all indexed/open projects.
+    """
     rows = (await session.execute(select(Project).order_by(Project.created_at))).scalars().all()
-    return [
-        ProjectRef(
-            id=row.id,
-            name=row.name,
-            root=row.root,
-            language=row.language,
-            created_at=row.created_at,
-            git_url=row.git_url,
-            branch=row.branch,
-            files_count=row.files_count,
-            entities_count=row.entities_count,
-            languages=row.languages,
-            indexed_at=row.indexed_at,
-            last_reindexed_at=row.last_reindexed_at,
+
+    filtered_refs: list[ProjectRef] = []
+    for row in rows:
+        is_specifically_associated = (
+            associated_project_id is not None and row.id == associated_project_id
         )
-        for row in rows
-    ]
+
+        if is_global or is_specifically_associated:
+            filtered_refs.append(_project_ref_from_row(row))
+
+    return filtered_refs
 
 
-async def get_project(session: AsyncSession, project_id: str) -> ProjectRef | None:
-    row = await session.get(Project, project_id)
-    if row is None:
-        return None
+def _project_ref_from_row(row: Project) -> ProjectRef:
     return ProjectRef(
         id=row.id,
         name=row.name,
@@ -180,6 +187,64 @@ async def get_project(session: AsyncSession, project_id: str) -> ProjectRef | No
         indexed_at=row.indexed_at,
         last_reindexed_at=row.last_reindexed_at,
     )
+
+
+def api_key_access_scope(api_key: object | None) -> str:
+    """
+    Classify project visibility for the current authenticated caller.
+
+    Scopes:
+    - all: caller can see every indexed/open project.
+    - project: legacy scope for a single linked project.
+    """
+    if api_key is None:
+        return "all"
+
+    explicit_scope = getattr(api_key, "_rip_access_scope", None)
+    if explicit_scope in {"all", "project"}:
+        return explicit_scope
+
+    return "all"
+
+
+async def get_project(session: AsyncSession, project_id: str) -> ProjectRef | None:
+    row = await session.get(Project, project_id)
+    if row is None:
+        return None
+    return _project_ref_from_row(row)
+
+
+async def verify_project_access(
+    session: AsyncSession,
+    api_key: ApiKey | None,
+    project_id: str,
+) -> bool:
+    """
+    Verify if the given API key has access to the requested project.
+
+    Args:
+        session: Database session
+        api_key: The API key object (None if in development mode or env-key)
+        project_id: The project ID to check access for
+
+    Returns:
+        True if access is allowed, False otherwise
+    """
+    if api_key is not None and api_key_access_scope(api_key) == "all":
+        return True
+
+    if api_key and api_key.project_id == project_id:
+        return True
+
+    if api_key is None:
+        from core.storage.models.api_key import ApiKey as ApiKeyModel
+
+        result = await session.execute(
+            select(ApiKeyModel).where(ApiKeyModel.is_active.is_(True)).limit(1)
+        )
+        return result.scalar_one_or_none() is None
+
+    return False
 
 
 async def delete_project(session: AsyncSession, project_id: str) -> bool:

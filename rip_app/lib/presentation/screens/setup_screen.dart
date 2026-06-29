@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../providers/settings_provider.dart';
-import '../providers/connection_provider.dart';
 import '../../core/api/rip_client.dart';
 
 class SetupScreen extends ConsumerStatefulWidget {

@@ -4,13 +4,19 @@ from __future__ import annotations
 
 import time
 
-from fastapi import APIRouter, Query
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.analysis.coupling_analyser import CouplingAnalyser
 from core.analysis.dead_code_detector import DeadCodeDetector
 from core.analysis.risk_scorer import RiskScorer
 from core.graph.client import Neo4jClient
+from core.projects import verify_project_access
+from core.storage.database import get_db_session
 from server.config import get_settings
+from server.middleware.auth import verify_api_key
 from server.schemas.responses import ApiEnvelope
 
 router = APIRouter(tags=["analysis"])
@@ -18,10 +24,20 @@ router = APIRouter(tags=["analysis"])
 
 @router.get("/dead-code", response_model=ApiEnvelope)
 async def dead_code_endpoint(
+    request: Request,
     type: str = Query("all", description="functions|classes|all"),
     project_id: str = Query(None, description="Project id to detect dead code in"),
+    auth: Annotated[None, Depends(verify_api_key)] = None,
+    db: Annotated[AsyncSession, Depends(get_db_session)] = None,
 ) -> ApiEnvelope:
     start = time.perf_counter()
+    
+    # Isolation check
+    if project_id:
+        api_key = getattr(request.state, "api_key", None)
+        if not await verify_project_access(db, api_key, project_id):
+            raise HTTPException(status_code=403, detail=f"Access to project {project_id} denied")
+
     settings = get_settings()
     client = Neo4jClient(settings.neo4j_uri, settings.neo4j_user, settings.neo4j_password)
     try:
@@ -43,11 +59,21 @@ async def dead_code_endpoint(
 
 @router.get("/metrics", response_model=ApiEnvelope)
 async def metrics_endpoint(
+    request: Request,
     module: str | None = Query(None, description="Specific module/file path"),
     top_risk: int | None = Query(None, description="Limit to top risk files"),
     project_id: str = Query(None, description="Project id to get metrics for"),
+    auth: Annotated[None, Depends(verify_api_key)] = None,
+    db: Annotated[AsyncSession, Depends(get_db_session)] = None,
 ) -> ApiEnvelope:
     start = time.perf_counter()
+    
+    # Isolation check
+    if project_id:
+        api_key = getattr(request.state, "api_key", None)
+        if not await verify_project_access(db, api_key, project_id):
+            raise HTTPException(status_code=403, detail=f"Access to project {project_id} denied")
+
     settings = get_settings()
     client = Neo4jClient(settings.neo4j_uri, settings.neo4j_user, settings.neo4j_password)
     try:

@@ -1,6 +1,6 @@
 import 'dart:async';
-import 'dart:developer';
 import 'package:web_socket_channel/web_socket_channel.dart';
+import '../../utils/logger.dart';
 
 class RipWebSocketClient {
   final String serverUrl;
@@ -9,64 +9,58 @@ class RipWebSocketClient {
   final StreamController<Map<String, dynamic>> _controller = StreamController.broadcast();
 
   RipWebSocketClient({required this.serverUrl, this.apiKey}) {
-    log('[RipWebSocketClient] Created with serverUrl: $serverUrl', name: 'RipWebSocketClient');
+    RipLogger.info('Created with serverUrl: $serverUrl', tag: 'RipWebSocketClient');
   }
 
   Stream<Map<String, dynamic>> get stream => _controller.stream;
 
   Future<void> connect(String jobId) async {
-    log('[RipWebSocketClient] Connecting for jobId: $jobId', name: 'RipWebSocketClient');
+    RipLogger.info('Connecting for jobId: $jobId', tag: 'RipWebSocketClient');
     try {
       final uri = Uri.parse(
         '${serverUrl.replaceFirst('http://', 'ws://').replaceFirst('https://', 'wss://')}/ws/index/$jobId',
       );
-      log('[RipWebSocketClient] WebSocket URI: $uri', name: 'RipWebSocketClient');
+      RipLogger.info('WebSocket URI: $uri', tag: 'RipWebSocketClient');
 
-      // Note: web_socket_channel v2 doesn't support headers parameter
-      // For headers support, you'd need a different implementation
       _channel = WebSocketChannel.connect(uri);
-      log('[RipWebSocketClient] Connected', name: 'RipWebSocketClient');
+      RipLogger.success('Connected', tag: 'RipWebSocketClient');
+      
       _channel!.stream.listen(
         (data) {
-          log('[RipWebSocketClient] Received data: $data', name: 'RipWebSocketClient');
+          RipLogger.info('Received data: $data', tag: 'RipWebSocketClient');
           try {
             final decoded = data is String
                 ? data
                 : String.fromCharCodes(data as List<int>);
-            // For simplicity, we'll handle both raw strings and JSON
-            // In a real app, you'd parse JSON properly
-            if (decoded.startsWith('{')) {
-              // TODO: Parse JSON properly
-            }
             _controller.add({'data': decoded});
           } catch (e) {
-            log('[RipWebSocketClient] Error decoding data: $e', name: 'RipWebSocketClient', error: e);
+            RipLogger.error('Error decoding data: $e', tag: 'RipWebSocketClient', error: e);
             _controller.add({'error': e.toString()});
           }
         },
         onError: (error) {
-          log('[RipWebSocketClient] Stream error: $error', name: 'RipWebSocketClient', error: error);
+          RipLogger.error('Stream error: $error', tag: 'RipWebSocketClient', error: error);
           _controller.add({'error': error.toString()});
         },
         onDone: () {
-          log('[RipWebSocketClient] Stream done', name: 'RipWebSocketClient');
+          RipLogger.warning('Stream done', tag: 'RipWebSocketClient');
           _controller.add({'done': true});
         },
       );
     } catch (e) {
-      log('[RipWebSocketClient] Error connecting: $e', name: 'RipWebSocketClient', error: e);
+      RipLogger.error('Error connecting: $e', tag: 'RipWebSocketClient', error: e);
       _controller.add({'error': e.toString()});
     }
   }
 
   void disconnect() {
-    log('[RipWebSocketClient] Disconnecting', name: 'RipWebSocketClient');
+    RipLogger.info('Disconnecting', tag: 'RipWebSocketClient');
     _channel?.sink.close();
     _channel = null;
   }
 
   void dispose() {
-    log('[RipWebSocketClient] Disposing', name: 'RipWebSocketClient');
+    RipLogger.info('Disposing', tag: 'RipWebSocketClient');
     disconnect();
     _controller.close();
   }

@@ -21,7 +21,7 @@ class TableView extends StatelessWidget {
         ),
         child: DataTable(
           headingRowColor: WidgetStateProperty.all(
-            Theme.of(context).colorScheme.primaryContainer.withOpacity(0.5),
+            Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.5),
           ),
           columns: headers.map((header) {
             return DataColumn(

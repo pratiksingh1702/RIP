@@ -14,7 +14,7 @@ class ProgressBar extends StatelessWidget {
       borderRadius: BorderRadius.circular(8),
       child: LinearProgressIndicator(
         value: progress.clamp(0, 1),
-        backgroundColor: effectiveColor.withOpacity(0.2),
+        backgroundColor: effectiveColor.withValues(alpha: 0.2),
         valueColor: AlwaysStoppedAnimation<Color>(effectiveColor),
         minHeight: 8,
       ),

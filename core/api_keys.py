@@ -4,13 +4,20 @@ from __future__ import annotations
 
 import secrets
 import hashlib
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Tuple
 
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.storage.models import ApiKey
+
+try:
+    # Python 3.11+
+    UTC = datetime.UTC
+except AttributeError:
+    # Older Python versions
+    UTC = timezone.utc  # noqa: UP017
 
 
 def generate_api_key() -> Tuple[str, str, str]:
@@ -38,6 +45,7 @@ async def create_api_key(
     name: str,
     description: str | None = None,
     expires_in_days: int | None = None,
+    project_id: str | None = None,
 ) -> Tuple[str, ApiKey]:
     """
     Create a new API key in the database.
@@ -47,6 +55,7 @@ async def create_api_key(
         name: Human-readable name for the key
         description: Optional description
         expires_in_days: Optional number of days until key expires
+        project_id: Optional project ID to associate with the key
     
     Returns:
         Tuple of (plaintext_key, api_key_object)
@@ -55,7 +64,7 @@ async def create_api_key(
     
     expires_at = None
     if expires_in_days:
-        expires_at = datetime.utcnow() + timedelta(days=expires_in_days)
+        expires_at = datetime.now(UTC) + timedelta(days=expires_in_days)
     
     api_key = ApiKey(
         name=name,
@@ -64,6 +73,7 @@ async def create_api_key(
         is_active=True,
         expires_at=expires_at,
         description=description,
+        project_id=project_id,
     )
     
     session.add(api_key)
@@ -98,14 +108,14 @@ async def verify_api_key(
     
     if api_key:
         # Check if expired
-        if api_key.expires_at and datetime.utcnow() > api_key.expires_at:
+        if api_key.expires_at and datetime.now(UTC) > api_key.expires_at:
             return None
         
         # Update last used time
         await session.execute(
             update(ApiKey)
             .where(ApiKey.id == api_key.id)
-            .values(last_used_at=datetime.utcnow())
+            .values(last_used_at=datetime.now(UTC))
         )
         await session.commit()
         

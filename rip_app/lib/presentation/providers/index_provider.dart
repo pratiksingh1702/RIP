@@ -1,6 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/models/index_job.dart';
-import 'connection_provider.dart';
 
 class IndexJobsNotifier extends Notifier<Map<String, IndexJob>> {
   @override

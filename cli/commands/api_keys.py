@@ -54,7 +54,7 @@ def list_keys():
     asyncio.run(_list_api_keys())
 
 
-async def _create_api_key(name: str, description: str | None, expires_in_days: int | None):
+async def _create_api_key(name: str, description: str | None, expires_in_days: int | None, project_id: str | None = None):
     """Create a new API key."""
     await ensure_storage_schema()
     async with async_session_factory() as session:
@@ -63,11 +63,14 @@ async def _create_api_key(name: str, description: str | None, expires_in_days: i
             name=name,
             description=description,
             expires_in_days=expires_in_days,
+            project_id=project_id,
         )
+        await session.commit()
         
         console.print("\n[green]API Key Created Successfully![/green]\n")
         console.print(f"[bold]Name:[/bold] {api_key.name}")
         console.print(f"[bold]Prefix:[/bold] {api_key.prefix}")
+        console.print(f"[bold]Project ID:[/bold] {api_key.project_id or 'All public'}")
         if description:
             console.print(f"[bold]Description:[/bold] {description}")
         if expires_in_days:
@@ -81,9 +84,10 @@ def create_key(
     name: str,
     description: str | None,
     expires_in_days: int | None,
+    project_id: str | None = None,
 ):
     """Create a new API key."""
-    asyncio.run(_create_api_key(name, description, expires_in_days))
+    asyncio.run(_create_api_key(name, description, expires_in_days, project_id))
 
 
 async def _revoke_api_key(api_key_id: int):

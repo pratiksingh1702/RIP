@@ -3,11 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/api/rip_websocket_client.dart';
 import '../../../data/models/index_job.dart';
 import '../../../domain/enums/job_status.dart';
-import '../../../core/api/rip_client.dart';
 import '../../providers/connection_provider.dart';
 import '../../providers/project_provider.dart';
 import '../../providers/settings_provider.dart';
-import '../common/progress_bar.dart';
 import '../common/status_badge.dart';
 
 class AddRepoSheet extends ConsumerStatefulWidget {
@@ -80,11 +78,9 @@ class _AddRepoSheetState extends ConsumerState<AddRepoSheet> {
         serverUrl: ref.read(serverUrlProvider),
       );
       _wsClient!.stream.listen((event) {
-        if (event is Map<String, dynamic>) {
-          // Update job from socket event
-          if (mounted) {
-            setState(() {});
-          }
+        // Update UI from socket event
+        if (mounted) {
+          setState(() {});
         }
       });
       await _wsClient!.connect(job.jobId);

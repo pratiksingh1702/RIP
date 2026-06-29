@@ -1,13 +1,25 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/models/project.dart';
 import 'connection_provider.dart';
-import 'settings_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/constants.dart';
 
 final projectListProvider = FutureProvider.autoDispose<List<Project>>((ref) async {
   final client = ref.watch(ripClientProvider);
-  return await client.listProjects();
+  final projects = await client.listProjects();
+  
+  // Side effect: if the active project is not in the new list, clear it
+  final activeId = ref.read(activeProjectIdProvider);
+  if (activeId != null && projects.isNotEmpty) {
+    final stillExists = projects.any((p) => p.projectId == activeId);
+    if (!stillExists) {
+      ref.read(activeProjectNotifierProvider.notifier).setActiveProject(null);
+    }
+  } else if (activeId != null && projects.isEmpty) {
+     ref.read(activeProjectNotifierProvider.notifier).setActiveProject(null);
+  }
+  
+  return projects;
 });
 
 final activeProjectIdProvider = StateProvider<String?>((ref) {

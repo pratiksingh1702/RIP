@@ -557,6 +557,10 @@ def api_keys_create(
         int | None,
         typer.Option("--expires-in", "-e", help="Optional number of days until the key expires"),
     ] = None,
+    project_id: Annotated[
+        str | None,
+        typer.Option("--project-id", "-p", help="Optional project ID to associate with the key"),
+    ] = None,
     verbose: Annotated[
         bool,
         typer.Option("-v", "--verbose", help="Show detailed runtime logs and save a full log file"),
@@ -567,8 +571,13 @@ def api_keys_create(
     _run_command(
         "api-keys-create",
         verbose=verbose,
-        params={"name": name, "description": description, "expires_in_days": expires_in_days},
-        action=lambda: create_key(name, description, expires_in_days),
+        params={
+            "name": name,
+            "description": description,
+            "expires_in_days": expires_in_days,
+            "project_id": project_id,
+        },
+        action=lambda: create_key(name, description, expires_in_days, project_id),
     )
 
 

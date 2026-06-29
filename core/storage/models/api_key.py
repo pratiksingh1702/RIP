@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import Boolean, DateTime, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from core.storage.database import Base
+
+
+def utc_now():
+    return datetime.now(timezone.utc)
 
 
 class ApiKey(Base):
@@ -22,5 +26,6 @@ class ApiKey(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False, doc="Whether the key is active")
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, doc="Optional expiration date")
     last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, doc="Last time the key was used")
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
     description: Mapped[str | None] = mapped_column(Text, nullable=True, doc="Optional description of the key's purpose")
+    project_id: Mapped[str | None] = mapped_column(String(255), nullable=True, doc="Optional project isolation ID")

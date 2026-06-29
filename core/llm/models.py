@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import Enum
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, AliasChoices
 
 
 class ExplainIntent(str, Enum):
@@ -57,7 +57,11 @@ class ExplainContext:
 
 class ExplanationRequest(BaseModel):
     """Request for code symbol explanation."""
-    symbol: str = Field(..., description="The symbol (function, class, etc.) to explain")
+    symbol: str = Field(
+        ...,
+        validation_alias=AliasChoices("symbol", "query"),
+        description="The symbol (function, class, etc.) to explain",
+    )
     context_level: str = Field("file", description="Context scope: 'file', 'class', or 'function'")
     provider: str | None = Field(None, description="Optional: LLM provider to use")
     model: str | None = Field(None, description="Optional: LLM model to use")

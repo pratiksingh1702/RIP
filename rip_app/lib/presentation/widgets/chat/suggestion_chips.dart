@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/design/app_colors.dart';
+
 class SuggestionChip {
   final String id;
   final String text;
@@ -33,7 +35,21 @@ class SuggestionChips extends StatelessWidget {
         return ActionChip(
           label: Text(suggestion.text),
           onPressed: () => onSelected(suggestion),
-          avatar: const Icon(Icons.lightbulb_outline, size: 16),
+          avatar: const Icon(
+            Icons.auto_awesome_rounded,
+            size: 16,
+            color: AppColors.textPrimary,
+          ),
+          backgroundColor: Colors.white.withValues(alpha: 0.075),
+          side: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(18),
+          ),
+          labelStyle: const TextStyle(
+            color: AppColors.textPrimary,
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+          ),
         );
       }).toList(),
     );

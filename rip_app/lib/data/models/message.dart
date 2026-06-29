@@ -1,5 +1,6 @@
 import 'package:equatable/equatable.dart';
 import '../../domain/enums/message_type.dart';
+import 'rip_response.dart';
 
 class Message extends Equatable {
   final String id;
@@ -8,6 +9,8 @@ class Message extends Equatable {
   final MessageType type;
   final DateTime timestamp;
   final Map<String, dynamic>? metadata;
+  final List<RipResponseBlock>? blocks;
+  final bool isLoading;
 
   const Message({
     required this.id,
@@ -16,6 +19,8 @@ class Message extends Equatable {
     this.type = MessageType.text,
     required this.timestamp,
     this.metadata,
+    this.blocks,
+    this.isLoading = false,
   });
 
   Message copyWith({
@@ -25,6 +30,8 @@ class Message extends Equatable {
     MessageType? type,
     DateTime? timestamp,
     Map<String, dynamic>? metadata,
+    List<RipResponseBlock>? blocks,
+    bool? isLoading,
   }) {
     return Message(
       id: id ?? this.id,
@@ -33,6 +40,8 @@ class Message extends Equatable {
       type: type ?? this.type,
       timestamp: timestamp ?? this.timestamp,
       metadata: metadata ?? this.metadata,
+      blocks: blocks ?? this.blocks,
+      isLoading: isLoading ?? this.isLoading,
     );
   }
 
@@ -44,5 +53,7 @@ class Message extends Equatable {
         type,
         timestamp,
         metadata,
+        blocks,
+        isLoading,
       ];
 }

@@ -6,13 +6,19 @@ import logging
 import re
 import time
 
-from fastapi import APIRouter, Request
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, HTTPException, Request
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.llm.client import query_llm
 from core.llm.context_assembler import ContextAssembler
 from core.llm.models import ExplainIntent, ExplanationRequest
 from core.llm.prompts.explain import get_explain_prompt
+from core.projects import verify_project_access
 from core.search.searcher import Searcher
+from core.storage.database import get_db_session
+from server.middleware.auth import verify_api_key
 from server.schemas.responses import ApiEnvelope
 
 router = APIRouter(tags=["explain"])
@@ -68,8 +74,20 @@ def parse_suggested_improvements(text: str) -> list[str]:
 
 
 @router.post("/explain", response_model=ApiEnvelope)
-async def explain_endpoint(http_request: Request, request: ExplanationRequest) -> ApiEnvelope:
+async def explain_endpoint(
+    http_request: Request,
+    request: ExplanationRequest,
+    auth: Annotated[None, Depends(verify_api_key)] = None,
+    db: Annotated[AsyncSession, Depends(get_db_session)] = None,
+) -> ApiEnvelope:
     start = time.perf_counter()
+    
+    # Isolation check
+    if request.project_id:
+        api_key = getattr(http_request.state, "api_key", None)
+        if not await verify_project_access(db, api_key, request.project_id):
+            raise HTTPException(status_code=403, detail=f"Access to project {request.project_id} denied")
+
     runtime = http_request.app.state.runtime
     assembler = ContextAssembler(runtime.neo4j, project_id=request.project_id)
     

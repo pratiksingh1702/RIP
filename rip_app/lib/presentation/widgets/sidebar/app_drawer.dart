@@ -1,190 +1,407 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import 'package:rip_app/core/design/app_colors.dart';
 import 'package:rip_app/data/models/message.dart';
 import 'package:rip_app/utils/date_formatter.dart';
+
 import '../../providers/chat_provider.dart';
+import '../../providers/project_provider.dart';
 import '../../providers/settings_provider.dart';
-
-import 'project_list.dart';
 import '../overlays/add_repo_sheet.dart';
-import 'package:go_router/go_router.dart';
+import 'project_list.dart';
 
-class AppDrawer extends ConsumerStatefulWidget {
+class AppDrawer extends ConsumerWidget {
   const AppDrawer({super.key});
 
   @override
-  ConsumerState<AppDrawer> createState() => _AppDrawerState();
-}
-
-class _AppDrawerState extends ConsumerState<AppDrawer> {
-  @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final themeMode = ref.watch(themeModeProvider);
     final messages = ref.watch(chatProvider);
-
-    Map<DateTime, List<Message>> _groupMessagesByDate(List<Message> messages) {
-      final Map<DateTime, List<Message>> grouped = {};
-      for (final msg in messages) {
-        final date = DateTime(msg.timestamp.year, msg.timestamp.month, msg.timestamp.day);
-        if (!grouped.containsKey(date)) {
-          grouped[date] = [];
-        }
-        grouped[date]!.add(msg);
-      }
-      return grouped;
-    }
-
-    final groupedMessages = _groupMessagesByDate(messages);
-    final sortedDates = groupedMessages.keys.toList()..sort((a, b) => b.compareTo(a));
+    final recentMessages = _recentMessages(messages);
 
     return Drawer(
-      child: ListView(
-        padding: EdgeInsets.zero,
+      width: MediaQuery.sizeOf(context).width * 0.82,
+      backgroundColor: AppColors.background,
+      elevation: 0,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.only(
+          topRight: Radius.circular(20),
+          bottomRight: Radius.circular(20),
+        ),
+      ),
+      child: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(10, 10, 10, 12),
+          child: Column(
+            children: [
+              const _DrawerHeaderCompact(),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(
+                    child: _CompactAction(
+                      icon: Icons.add_rounded,
+                      label: 'Add repo',
+                      onTap: () {
+                        HapticFeedback.selectionClick();
+                        showModalBottomSheet(
+                          context: context,
+                          isScrollControlled: true,
+                          backgroundColor: Colors.transparent,
+                          builder: (context) => const AddRepoSheet(),
+                        );
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _CompactAction(
+                      icon: Icons.folder_open_rounded,
+                      label: 'Projects',
+                      onTap: () {
+                        HapticFeedback.selectionClick();
+                        ref.invalidate(projectListProvider);
+                        showDialog(
+                          context: context,
+                          builder: (context) => const Dialog(
+                            backgroundColor: Colors.transparent,
+                            insetPadding: EdgeInsets.all(18),
+                            child: SizedBox(height: 440, child: ProjectList()),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Expanded(
+                child: ListView(
+                  padding: EdgeInsets.zero,
+                  children: [
+                    if (recentMessages.isNotEmpty)
+                      _CompactSection(
+                        title: 'Recent',
+                        children: [
+                          for (final msg in recentMessages)
+                            _CompactRow(
+                              icon: msg.isUser
+                                  ? Icons.person_outline_rounded
+                                  : Icons.bolt_rounded,
+                              title: msg.content,
+                              subtitle: DateFormatter.formatTime(msg.timestamp),
+                              onTap: () => Navigator.pop(context),
+                            ),
+                        ],
+                      ),
+                    _CompactSection(
+                      title: 'Tools',
+                      children: [
+                        _CompactRow(
+                          icon: Icons.history_rounded,
+                          title: 'Clear chat',
+                          subtitle: 'Reset current conversation',
+                          onTap: () async {
+                            HapticFeedback.mediumImpact();
+                            await ref.read(chatProvider.notifier).clearChat();
+                            if (context.mounted) Navigator.pop(context);
+                          },
+                        ),
+                        const _CompactRow(
+                          icon: Icons.memory_rounded,
+                          title: 'Memory',
+                          subtitle: 'Workspace context',
+                        ),
+                      ],
+                    ),
+                    _CompactSection(
+                      title: 'Theme',
+                      children: [
+                        _ThemeRow(
+                          label: 'Light',
+                          selected: themeMode == ThemeMode.light,
+                          onTap: () => ref
+                              .read(settingsNotifierProvider.notifier)
+                              .saveThemeMode(ThemeMode.light),
+                        ),
+                        _ThemeRow(
+                          label: 'Dark',
+                          selected: themeMode == ThemeMode.dark,
+                          onTap: () => ref
+                              .read(settingsNotifierProvider.notifier)
+                              .saveThemeMode(ThemeMode.dark),
+                        ),
+                        _ThemeRow(
+                          label: 'System',
+                          selected: themeMode == ThemeMode.system,
+                          onTap: () => ref
+                              .read(settingsNotifierProvider.notifier)
+                              .saveThemeMode(ThemeMode.system),
+                        ),
+                      ],
+                    ),
+                    _CompactSection(
+                      title: 'Settings',
+                      children: [
+                        _CompactRow(
+                          icon: Icons.tune_rounded,
+                          title: 'Server settings',
+                          subtitle: 'Connection and API key',
+                          onTap: () {
+                            HapticFeedback.selectionClick();
+                            Navigator.pop(context);
+                            context.go('/setup');
+                          },
+                        ),
+                        const _CompactRow(
+                          icon: Icons.info_outline_rounded,
+                          title: 'About RIP',
+                          subtitle: 'Repository intelligence',
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  List<Message> _recentMessages(List<Message> messages) {
+    return messages
+        .where((message) => message.content.trim().isNotEmpty)
+        .toList()
+        .reversed
+        .take(4)
+        .toList();
+  }
+}
+
+class _DrawerHeaderCompact extends StatelessWidget {
+  const _DrawerHeaderCompact();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+      ),
+      child: const Row(
         children: [
-          const DrawerHeader(
-            decoration: BoxDecoration(
-              color: Colors.blue,
+          SizedBox(
+            width: 36,
+            height: 36,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: AppColors.primary,
+                borderRadius: BorderRadius.all(Radius.circular(14)),
+              ),
+              child: Icon(Icons.auto_awesome_rounded, color: Colors.white),
             ),
+          ),
+          SizedBox(width: 10),
+          Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(Icons.code, size: 48, color: Colors.white),
-                SizedBox(height: 8),
                 Text(
                   'RIP',
                   style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
+                    color: AppColors.textPrimary,
+                    fontSize: 20,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                Text(
+                  'AI workspace',
+                  style: TextStyle(
+                    color: AppColors.textSecondary,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
                   ),
                 ),
               ],
             ),
           ),
-          ListTile(
-            leading: const Icon(Icons.add),
-            title: const Text('Add Repository'),
-            onTap: () {
-              showModalBottomSheet(
-                context: context,
-                isScrollControlled: true,
-                builder: (context) => const AddRepoSheet(),
-              );
-            },
-          ),
-          ListTile(
-            leading: const Icon(Icons.folder),
-            title: const Text('Projects'),
-            onTap: () {
-              showDialog(
-                context: context,
-                builder: (context) => Dialog(
-                  child: SizedBox(
-                    height: 400,
-                    child: ProjectList(),
+        ],
+      ),
+    );
+  }
+}
+
+class _CompactAction extends StatelessWidget {
+  const _CompactAction({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: AppColors.surface,
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, color: AppColors.primary, size: 18),
+              const SizedBox(width: 7),
+              Flexible(
+                child: Text(
+                  label,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: AppColors.textPrimary,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
-              );
-            },
-          ),
-          const Divider(),
-          if (messages.isNotEmpty) ...[
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              child: Text(
-                'Chat History',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 16,
-                ),
-              ),
-            ),
-            for (final date in sortedDates)
-              ExpansionTile(
-                title: Text(DateFormatter.formatDate(date)),
-                children: [
-                  for (final msg in groupedMessages[date]!.take(10))
-                    ListTile(
-                      leading: Icon(msg.isUser ? Icons.person : Icons.smart_toy),
-                      title: Text(
-                        msg.content,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      subtitle: Text(DateFormatter.formatTime(msg.timestamp)),
-                      onTap: () {
-                        Navigator.pop(context);
-                      },
-                    ),
-                ],
-              ),
-            const Divider(),
-          ],
-          ListTile(
-            leading: const Icon(Icons.history),
-            title: const Text('Clear Chat History'),
-            onTap: () async {
-              await ref.read(chatProvider.notifier).clearChat();
-              if (context.mounted) {
-                Navigator.pop(context);
-              }
-            },
-          ),
-          const Divider(),
-          ExpansionTile(
-            leading: const Icon(Icons.palette),
-            title: const Text('Theme'),
-            children: [
-              ListTile(
-                title: const Text('Light'),
-                trailing: themeMode == ThemeMode.light
-                    ? const Icon(Icons.check)
-                    : null,
-                onTap: () {
-                  ref
-                      .read(settingsNotifierProvider.notifier)
-                      .saveThemeMode(ThemeMode.light);
-                },
-              ),
-              ListTile(
-                title: const Text('Dark'),
-                trailing: themeMode == ThemeMode.dark
-                    ? const Icon(Icons.check)
-                    : null,
-                onTap: () {
-                  ref
-                      .read(settingsNotifierProvider.notifier)
-                      .saveThemeMode(ThemeMode.dark);
-                },
-              ),
-              ListTile(
-                title: const Text('System'),
-                trailing: themeMode == ThemeMode.system
-                    ? const Icon(Icons.check)
-                    : null,
-                onTap: () {
-                  ref
-                      .read(settingsNotifierProvider.notifier)
-                      .saveThemeMode(ThemeMode.system);
-                },
               ),
             ],
           ),
-          ListTile(
-            leading: const Icon(Icons.settings),
-            title: const Text('Server Settings'),
-            onTap: () {
-              context.go('/setup');
-            },
+        ),
+      ),
+    );
+  }
+}
+
+class _CompactSection extends StatelessWidget {
+  const _CompactSection({required this.title, required this.children});
+
+  final String title;
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(4, 0, 4, 5),
+            child: Text(
+              title,
+              style: TextStyle(
+                color: AppColors.textSecondary.withValues(alpha: 0.78),
+                fontSize: 11,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 0,
+              ),
+            ),
           ),
-          const Divider(),
-          ListTile(
-            leading: const Icon(Icons.info),
-            title: const Text('About RIP'),
-            onTap: () {},
+          DecoratedBox(
+            decoration: BoxDecoration(
+              color: AppColors.surface,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+            ),
+            child: Column(children: children),
           ),
         ],
       ),
+    );
+  }
+}
+
+class _CompactRow extends StatelessWidget {
+  const _CompactRow({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    this.onTap,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          child: Row(
+            children: [
+              Icon(icon, color: AppColors.textSecondary, size: 18),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: AppColors.textPrimary,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 1),
+                    Text(
+                      subtitle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: AppColors.textSecondary.withValues(alpha: 0.7),
+                        fontSize: 11,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ThemeRow extends StatelessWidget {
+  const _ThemeRow({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return _CompactRow(
+      icon: selected ? Icons.radio_button_checked : Icons.radio_button_off,
+      title: label,
+      subtitle: selected ? 'Selected' : 'Theme mode',
+      onTap: () {
+        HapticFeedback.selectionClick();
+        onTap();
+      },
     );
   }
 }

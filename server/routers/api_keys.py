@@ -18,6 +18,7 @@ class CreateApiKeyRequest(BaseModel):
     name: str = Field(..., description="Human-readable name for the API key")
     description: str | None = Field(None, description="Optional description of the key's purpose")
     expires_in_days: int | None = Field(None, description="Optional number of days until the key expires")
+    project_id: str | None = Field(None, description="Optional project ID to associate with the key")
 
 
 class ApiKeyResponse(BaseModel):
@@ -29,6 +30,7 @@ class ApiKeyResponse(BaseModel):
     last_used_at: str | None
     created_at: str
     description: str | None
+    project_id: str | None
 
     @classmethod
     def from_model(cls, api_key):
@@ -41,6 +43,7 @@ class ApiKeyResponse(BaseModel):
             last_used_at=api_key.last_used_at.isoformat() if api_key.last_used_at else None,
             created_at=api_key.created_at.isoformat(),
             description=api_key.description,
+            project_id=api_key.project_id,
         )
 
 
@@ -60,6 +63,7 @@ async def create_new_api_key(
         name=request.name,
         description=request.description,
         expires_in_days=request.expires_in_days,
+        project_id=request.project_id,
     )
     return CreateApiKeyResponse(
         api_key=plaintext_key,
