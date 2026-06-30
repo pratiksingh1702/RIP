@@ -14,7 +14,7 @@ class App extends ConsumerWidget {
     final themeMode = ref.watch(themeModeProvider);
 
     return MaterialApp.router(
-      title: 'RIP',
+      title: 'RIP · Repository Intelligence',
       theme: AppTheme.ripLightTheme,
       darkTheme: AppTheme.ripDarkTheme,
       themeMode: themeMode,

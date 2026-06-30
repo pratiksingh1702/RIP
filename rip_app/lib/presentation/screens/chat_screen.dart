@@ -7,6 +7,9 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/design/app_colors.dart';
 import '../../core/design/app_theme.dart';
+import '../../data/models/message.dart';
+import '../../data/models/project.dart';
+import '../../utils/date_formatter.dart';
 import '../providers/chat_provider.dart';
 import '../providers/connection_provider.dart';
 import '../providers/project_provider.dart';
@@ -144,34 +147,29 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               Column(
                 children: [
                   Expanded(
-                    child: messages.isEmpty
-                        ? const _PremiumEmptyState()
-                        : ListView.builder(
-                            controller: _scrollController,
-                            keyboardDismissBehavior:
-                                ScrollViewKeyboardDismissBehavior.onDrag,
-                            padding: const EdgeInsets.fromLTRB(0, 96, 0, 184),
-                            itemCount: messages.length,
-                            itemBuilder: (context, index) {
-                              return TweenAnimationBuilder<double>(
-                                tween: Tween(begin: 0, end: 1),
-                                duration: Duration(
-                                  milliseconds: 220 + (index % 4) * 34,
-                                ),
-                                curve: Curves.easeOutCubic,
-                                builder: (context, value, child) {
-                                  return Opacity(
-                                    opacity: value,
-                                    child: Transform.translate(
-                                      offset: Offset(0, 14 * (1 - value)),
-                                      child: child,
-                                    ),
-                                  );
-                                },
-                                child: ChatBubble(message: messages[index]),
-                              );
-                            },
-                          ),
+                    child: activeProject.when(
+                      loading: () => messages.isEmpty
+                          ? const _PremiumEmptyState(project: null)
+                          : _MessageList(
+                              messages: messages,
+                              project: null,
+                              scrollController: _scrollController,
+                            ),
+                      error: (_, __) => messages.isEmpty
+                          ? const _PremiumEmptyState(project: null)
+                          : _MessageList(
+                              messages: messages,
+                              project: null,
+                              scrollController: _scrollController,
+                            ),
+                      data: (project) => messages.isEmpty
+                          ? _PremiumEmptyState(project: project)
+                          : _MessageList(
+                              messages: messages,
+                              project: project,
+                              scrollController: _scrollController,
+                            ),
+                    ),
                   ),
                 ],
               ),
@@ -185,8 +183,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                   HapticFeedback.selectionClick();
                   context.push('/setup');
                 },
-                activeProjectName: activeProject.maybeWhen(
-                  data: (project) => project?.projectName,
+                project: activeProject.maybeWhen(
+                  data: (project) => project,
                   orElse: () => null,
                 ),
               ),
@@ -232,6 +230,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                   focusNode: _focusNode,
                   expanded: _composerExpanded,
                   isBusy: isAssistantBusy,
+                  activeProjectName: activeProject.maybeWhen(
+                    data: (project) => project?.projectName,
+                    orElse: () => null,
+                  ),
                   onSend: _sendMessage,
                   onStop: () {
                     HapticFeedback.mediumImpact();
@@ -249,18 +251,160 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   }
 }
 
+class _MessageList extends StatelessWidget {
+  const _MessageList({
+    required this.messages,
+    required this.project,
+    required this.scrollController,
+  });
+
+  final List<Message> messages;
+  final Project? project;
+  final ScrollController scrollController;
+
+  @override
+  Widget build(BuildContext context) {
+    final itemCount = messages.length + (project == null ? 0 : 1);
+    return ListView.builder(
+      controller: scrollController,
+      keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+      padding: const EdgeInsets.fromLTRB(0, 108, 0, 184),
+      itemCount: itemCount,
+      itemBuilder: (context, index) {
+        if (project != null && index == 0) {
+          return _ProjectContextCard(project: project!);
+        }
+        final messageIndex = project == null ? index : index - 1;
+        return TweenAnimationBuilder<double>(
+          tween: Tween(begin: 0, end: 1),
+          duration: Duration(milliseconds: 220 + (messageIndex % 4) * 34),
+          curve: Curves.easeOutCubic,
+          builder: (context, value, child) {
+            return Opacity(
+              opacity: value,
+              child: Transform.translate(
+                offset: Offset(0, 14 * (1 - value)),
+                child: child,
+              ),
+            );
+          },
+          child: ChatBubble(
+            message: messages[messageIndex],
+            project: project,
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _ProjectContextCard extends StatelessWidget {
+  const _ProjectContextCard({required this.project});
+
+  final Project project;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(14, 0, 14, 10),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: AppColors.surface.withValues(alpha: 0.94),
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: AppColors.border),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.account_tree_rounded, color: AppColors.primary, size: 20),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      project.projectName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: AppColors.textPrimary,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  _ProjectStatPill(label: 'Files', value: '${project.filesCount}'),
+                  _ProjectStatPill(label: 'Entities', value: '${project.entitiesCount}'),
+                  _ProjectStatPill(label: 'Language', value: _primaryLanguage(project)),
+                  _ProjectStatPill(label: 'Indexed', value: _indexedLabel(project)),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _primaryLanguage(Project project) {
+    if (project.languages.isEmpty) return 'Unknown';
+    return project.languages.take(2).join(', ');
+  }
+
+  String _indexedLabel(Project project) {
+    final parsed = DateTime.tryParse(project.indexedAt);
+    if (parsed == null) return project.indexedAt.isEmpty ? 'Unknown' : project.indexedAt;
+    return DateFormatter.formatRelativeTime(parsed);
+  }
+}
+
+class _ProjectStatPill extends StatelessWidget {
+  const _ProjectStatPill({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.055),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.075)),
+      ),
+      child: Text(
+        '$label: $value',
+        style: const TextStyle(
+          color: AppColors.textSecondary,
+          fontSize: 11,
+          fontWeight: FontWeight.w800,
+        ),
+      ),
+    );
+  }
+}
+
 class _FloatingHeader extends StatelessWidget {
   const _FloatingHeader({
     required this.progress,
     required this.onMenuTap,
     required this.onSettingsTap,
-    required this.activeProjectName,
+    required this.project,
   });
 
   final double progress;
   final VoidCallback onMenuTap;
   final VoidCallback onSettingsTap;
-  final String? activeProjectName;
+  final Project? project;
 
   @override
   Widget build(BuildContext context) {
@@ -321,7 +465,7 @@ class _FloatingHeader extends StatelessWidget {
                           crossAxisAlignment: CrossAxisAlignment.center,
                           children: [
                             const Text(
-                              'AI Assistant',
+                              'RIP · Repository Intelligence',
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: TextStyle(
@@ -332,11 +476,20 @@ class _FloatingHeader extends StatelessWidget {
                             ),
                             AnimatedSwitcher(
                               duration: const Duration(milliseconds: 180),
-                              child: activeProjectName == null
-                                  ? const SizedBox(height: 2)
+                              child: project == null
+                                  ? const Text(
+                                      'Select an indexed repository',
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        color: AppColors.textSecondary,
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    )
                                   : Text(
-                                      activeProjectName!,
-                                      key: ValueKey(activeProjectName),
+                                      '${project!.projectName} · ${project!.entitiesCount} entities',
+                                      key: ValueKey(project!.projectId),
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
                                       style: TextStyle(
@@ -409,6 +562,7 @@ class _FloatingComposer extends StatelessWidget {
     required this.focusNode,
     required this.expanded,
     required this.isBusy,
+    required this.activeProjectName,
     required this.onSend,
     required this.onStop,
     required this.onCommandSelected,
@@ -419,6 +573,7 @@ class _FloatingComposer extends StatelessWidget {
   final FocusNode focusNode;
   final bool expanded;
   final bool isBusy;
+  final String? activeProjectName;
   final VoidCallback onSend;
   final VoidCallback onStop;
   final ValueChanged<String> onCommandSelected;
@@ -519,7 +674,9 @@ class _FloatingComposer extends StatelessWidget {
                                 height: 1.35,
                               ),
                               decoration: InputDecoration(
-                                hintText: 'Ask RIP anything',
+                                hintText: activeProjectName == null
+                                    ? 'Select a repository, then query architecture'
+                                    : 'Explore ${activeProjectName!}: trace flow, dependencies, symbols',
                                 hintStyle: TextStyle(
                                   color: AppColors.textSecondary
                                       .withValues(alpha: 0.72),
@@ -606,7 +763,7 @@ class _ComposerLoadingBar extends StatelessWidget {
                   const SizedBox(width: 9),
                   Expanded(
                     child: Text(
-                      'RIP is working. Long commands can take a while.',
+                      'Querying repository graph. Deep analysis can take a while.',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
@@ -1099,7 +1256,9 @@ class _SuggestionRow extends StatelessWidget {
 }
 
 class _PremiumEmptyState extends StatelessWidget {
-  const _PremiumEmptyState();
+  const _PremiumEmptyState({required this.project});
+
+  final Project? project;
 
   @override
   Widget build(BuildContext context) {
@@ -1125,16 +1284,18 @@ class _PremiumEmptyState extends StatelessWidget {
                 ],
               ),
               child: const Icon(
-                Icons.auto_awesome_rounded,
+                Icons.account_tree_rounded,
                 color: Colors.white,
                 size: 42,
               ),
             ),
             const SizedBox(height: 24),
-            const Text(
-              'What are we building today?',
+            Text(
+              project == null
+                  ? 'Select a repository to inspect'
+                  : project!.projectName,
               textAlign: TextAlign.center,
-              style: TextStyle(
+              style: const TextStyle(
                 fontSize: 25,
                 height: 1.12,
                 fontWeight: FontWeight.w800,
@@ -1142,7 +1303,9 @@ class _PremiumEmptyState extends StatelessWidget {
             ),
             const SizedBox(height: 10),
             Text(
-              'Ask about code, architecture, impact, dependencies, or the next change.',
+              project == null
+                  ? 'RIP indexes repositories into a graph so you can trace architecture, dependencies, workflows, and symbols.'
+                  : '${project!.filesCount} files · ${project!.entitiesCount} entities · ${_primaryLanguage(project!)} · indexed ${_indexedLabel(project!)}',
               textAlign: TextAlign.center,
               style: TextStyle(
                 color: colorScheme.onSurfaceVariant.withValues(alpha: 0.9),
@@ -1150,10 +1313,34 @@ class _PremiumEmptyState extends StatelessWidget {
                 height: 1.45,
               ),
             ),
+            const SizedBox(height: 18),
+            if (project != null)
+              _ProjectContextCard(project: project!)
+            else
+              Text(
+                'Use @ or the drawer to select an indexed codebase.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: colorScheme.onSurfaceVariant.withValues(alpha: 0.74),
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
           ],
         ),
       ),
     );
+  }
+
+  String _primaryLanguage(Project project) {
+    if (project.languages.isEmpty) return 'unknown language';
+    return project.languages.take(2).join(', ');
+  }
+
+  String _indexedLabel(Project project) {
+    final parsed = DateTime.tryParse(project.indexedAt);
+    if (parsed == null) return project.indexedAt.isEmpty ? 'unknown' : project.indexedAt;
+    return DateFormatter.formatRelativeTime(parsed);
   }
 }
 

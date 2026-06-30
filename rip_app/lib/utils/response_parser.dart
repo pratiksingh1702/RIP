@@ -12,8 +12,8 @@ class ResponseParser {
         endIndex: match.end,
         block: RipResponseBlock(
           type: BlockType.mermaid,
-          title: 'Mermaid Diagram',
-          subtitle: 'Visual representation of the flow',
+          title: 'Architecture Graph',
+          subtitle: 'Interactive repository relationship map',
           textContent: match.group(1)?.trim(),
         ),
       ));

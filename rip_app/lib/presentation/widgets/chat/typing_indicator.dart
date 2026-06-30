@@ -5,7 +5,7 @@ import '../../../core/design/app_colors.dart';
 class TypingIndicator extends StatelessWidget {
   const TypingIndicator({
     super.key,
-    this.label = 'RIP is working...',
+    this.label = 'Querying repository graph...',
     this.onStop,
   });
 

@@ -83,7 +83,7 @@ class AppDrawer extends ConsumerWidget {
                   children: [
                     if (recentMessages.isNotEmpty)
                       _CompactSection(
-                        title: 'Recent',
+                        title: 'Recent Queries',
                         children: [
                           for (final msg in recentMessages)
                             _CompactRow(
@@ -97,12 +97,12 @@ class AppDrawer extends ConsumerWidget {
                         ],
                       ),
                     _CompactSection(
-                      title: 'Tools',
+                      title: 'Repository Tools',
                       children: [
                         _CompactRow(
                           icon: Icons.history_rounded,
-                          title: 'Clear chat',
-                          subtitle: 'Reset current conversation',
+                          title: 'Clear query history',
+                          subtitle: 'Reset current repository session',
                           onTap: () async {
                             HapticFeedback.mediumImpact();
                             await ref.read(chatProvider.notifier).clearChat();
@@ -111,8 +111,8 @@ class AppDrawer extends ConsumerWidget {
                         ),
                         const _CompactRow(
                           icon: Icons.memory_rounded,
-                          title: 'Memory',
-                          subtitle: 'Workspace context',
+                          title: 'Index context',
+                          subtitle: 'Graph-backed workspace memory',
                         ),
                       ],
                     ),
@@ -222,7 +222,7 @@ class _DrawerHeaderCompact extends StatelessWidget {
                   ),
                 ),
                 Text(
-                  'AI workspace',
+                  'Repository graph',
                   style: TextStyle(
                     color: colorScheme.onSurfaceVariant,
                     fontSize: 12,

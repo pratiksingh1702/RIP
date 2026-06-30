@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/design/app_colors.dart';
 import '../../../core/design/app_text_styles.dart';
 import '../../../data/models/message.dart';
+import '../../../data/models/project.dart';
 import '../../../data/models/rip_response.dart';
 import '../../../utils/date_formatter.dart';
 import '../../providers/chat_provider.dart';
@@ -19,14 +20,15 @@ import 'suggestion_chips.dart';
 
 class RipMessage extends ConsumerWidget {
   final Message message;
+  final Project? project;
 
-  const RipMessage({super.key, required this.message});
+  const RipMessage({super.key, required this.message, this.project});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     if (message.isLoading) {
       return TypingIndicator(
-        label: message.content.isEmpty ? 'RIP is working...' : message.content,
+        label: message.content.isEmpty ? 'Querying repository graph...' : message.content,
         onStop: () => ref.read(chatProvider.notifier).cancelCurrentRequest(),
       );
     }
@@ -82,7 +84,7 @@ class RipMessage extends ConsumerWidget {
                   ),
                   const SizedBox(width: 8),
                   Text(
-                    'RIP',
+                    'Repository Intelligence',
                     style: AppTextStyles.bodySmMuted.copyWith(
                       fontWeight: FontWeight.w800,
                       color: AppColors.textPrimary,
@@ -109,6 +111,11 @@ class RipMessage extends ConsumerWidget {
                   data: message.content,
                   styleSheet: _markdownStyle(),
                 ),
+              const SizedBox(height: 10),
+              _RepositorySearchFooter(
+                project: project,
+                timestamp: message.timestamp,
+              ),
               const SizedBox(height: 10),
               Row(
                 mainAxisSize: MainAxisSize.min,
@@ -170,7 +177,7 @@ class RipMessage extends ConsumerWidget {
         );
       case BlockType.mermaid:
         return MermaidBlock(
-          title: block.title ?? 'Mermaid Diagram',
+          title: block.title ?? 'Architecture Graph',
           subtitle: block.subtitle,
           diagramCode: block.textContent ?? '',
         );
@@ -252,6 +259,36 @@ class RipMessage extends ConsumerWidget {
       tableHead: AppTextStyles.bodyMdBold,
       tableBody: AppTextStyles.bodyMd,
       tableBorder: TableBorder.all(color: Colors.white.withValues(alpha: 0.07)),
+    );
+  }
+}
+
+class _RepositorySearchFooter extends StatelessWidget {
+  const _RepositorySearchFooter({
+    required this.project,
+    required this.timestamp,
+  });
+
+  final Project? project;
+  final DateTime timestamp;
+
+  @override
+  Widget build(BuildContext context) {
+    final projectName = project?.projectName ?? 'selected repository';
+    final entityCount = project?.entitiesCount ?? 0;
+    final scope = entityCount > 0
+        ? 'Searched $entityCount entities in $projectName'
+        : 'Searched indexed graph in $projectName';
+
+    return Text(
+      '$scope · ${DateFormatter.formatTime(timestamp)}',
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: TextStyle(
+        color: AppColors.textSecondary.withValues(alpha: 0.72),
+        fontSize: 11,
+        fontWeight: FontWeight.w700,
+      ),
     );
   }
 }

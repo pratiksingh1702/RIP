@@ -1,0 +1,1004 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RIP — Repository Intelligence Platform</title>
+<meta name="description" content="Turn any codebase into a queryable knowledge graph. Trace call chains, analyze impact, and ship AI agents that actually understand your code.">
+
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+<style>
+  :root{
+    --bg: #0a0a0f;
+    --bg-raised: #101018;
+    --line: rgba(255,255,255,0.08);
+    --line-strong: rgba(255,255,255,0.14);
+    --cyan: #00d4ff;
+    --cyan-dim: #00d4ff66;
+    --text: #f5f6f8;
+    --text-dim: #9498a8;
+    --text-faint: #5b5f70;
+    --mono: 'JetBrains Mono', monospace;
+    --sans: 'Inter', -apple-system, sans-serif;
+  }
+
+  *{margin:0;padding:0;box-sizing:border-box;}
+  html{scroll-behavior:smooth;}
+
+  body{
+    background:var(--bg);
+    color:var(--text);
+    font-family:var(--sans);
+    overflow-x:hidden;
+    -webkit-font-smoothing:antialiased;
+  }
+
+  ::selection{ background:var(--cyan); color:#000; }
+
+  a{color:inherit; text-decoration:none;}
+
+  /* ---------- noise + grid texture ---------- */
+  .grain{
+    position:fixed; inset:0; z-index:1; pointer-events:none;
+    opacity:0.035; mix-blend-mode:overlay;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+
+  .bg-grid{
+    position:fixed; inset:0; z-index:0; pointer-events:none;
+    background-image:
+      linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px);
+    background-size:64px 64px;
+    mask-image:radial-gradient(ellipse 80% 60% at 50% 0%, black 10%, transparent 70%);
+  }
+
+  /* ---------- nav ---------- */
+  nav{
+    position:fixed; top:0; left:0; right:0; z-index:100;
+    display:flex; align-items:center; justify-content:space-between;
+    padding:20px 32px;
+    backdrop-filter:blur(16px) saturate(140%);
+    background:rgba(10,10,15,0.55);
+    border-bottom:1px solid transparent;
+    transition:border-color .3s ease, background .3s ease;
+  }
+  nav.scrolled{ border-bottom-color:var(--line); background:rgba(10,10,15,0.82); }
+
+  .nav-brand{ display:flex; align-items:center; gap:10px; font-family:var(--mono); font-weight:800; font-size:18px; letter-spacing:0.08em; }
+  .nav-brand .dot{ width:9px; height:9px; border-radius:50%; background:var(--cyan); box-shadow:0 0 18px var(--cyan); }
+  .nav-brand .rip-text{ 
+    background: linear-gradient(120deg, var(--cyan), #c0fcff 50%, var(--cyan));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    text-shadow: 0 0 24px rgba(0,212,255,0.4);
+    font-weight: 900;
+  }
+
+  .nav-links{ display:flex; align-items:center; gap:36px; }
+  .nav-links a{ font-size:13.5px; color:var(--text-dim); transition:color .2s ease; font-weight:500; }
+  .nav-links a:hover{ color:var(--text); }
+
+  .nav-cta{
+    font-family:var(--mono); font-size:12.5px; font-weight:500;
+    padding:9px 18px; border:1px solid var(--line-strong); border-radius:6px;
+    color:var(--text); transition:all .2s ease;
+  }
+  .nav-cta:hover{ border-color:var(--cyan); background:rgba(0,212,255,0.08); }
+
+  .nav-toggle{ display:none; flex-direction:column; gap:5px; cursor:pointer; background:none; border:none; padding:4px; }
+  .nav-toggle span{ width:20px; height:1.5px; background:var(--text); }
+
+  /* ---------- hero ---------- */
+  #hero{
+    position:relative; min-height:100vh;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    padding:120px 24px 80px;
+    text-align:center;
+    overflow:hidden;
+  }
+
+  #graph-canvas{
+    position:absolute; inset:0; z-index:0;
+    opacity:0; transition:opacity 1.8s ease;
+  }
+  #graph-canvas.loaded{ opacity:1; }
+
+  .hero-vignette{
+    position:absolute; inset:0; z-index:1; pointer-events:none;
+    background:radial-gradient(ellipse 60% 50% at 50% 38%, transparent 0%, var(--bg) 78%);
+  }
+
+  .hero-content{ position:relative; z-index:2; max-width:880px; }
+
+  .eyebrow{
+    display:inline-flex; align-items:center; gap:8px;
+    font-family:var(--mono); font-size:12px; letter-spacing:0.06em;
+    color:var(--cyan); background:rgba(0,212,255,0.08);
+    border:1px solid rgba(0,212,255,0.25); border-radius:20px;
+    padding:6px 14px; margin-bottom:28px;
+    opacity:0; animation:rise .8s ease forwards .1s;
+  }
+  .eyebrow::before{ content:''; width:5px; height:5px; border-radius:50%; background:var(--cyan); box-shadow:0 0 8px var(--cyan); }
+
+  h1{
+    font-size:clamp(2.6rem, 6.4vw, 5rem);
+    line-height:1.04;
+    font-weight:800;
+    letter-spacing:-0.03em;
+    margin-bottom:24px;
+    opacity:0; animation:rise .9s ease forwards .25s;
+  }
+  h1 .accent{
+    background:linear-gradient(120deg, var(--cyan), #7af0ff 60%, var(--cyan));
+    -webkit-background-clip:text; background-clip:text; color:transparent;
+  }
+  h1 .grey{ color:var(--text-faint); }
+
+  .hero-sub{
+    font-size:clamp(1.02rem, 1.6vw, 1.22rem);
+    color:var(--text-dim);
+    max-width:600px; margin:0 auto 40px;
+    line-height:1.6; font-weight:400;
+    opacity:0; animation:rise .9s ease forwards .4s;
+  }
+  .hero-sub code{
+    font-family:var(--mono); font-size:0.92em; color:var(--text);
+    background:rgba(255,255,255,0.06); padding:2px 7px; border-radius:4px;
+    border:1px solid var(--line);
+  }
+
+  .hero-actions{
+    display:flex; gap:14px; justify-content:center; flex-wrap:wrap;
+    opacity:0; animation:rise .9s ease forwards .55s;
+  }
+
+  .btn{
+    font-family:var(--mono); font-size:13.5px; font-weight:500;
+    padding:13px 24px; border-radius:7px;
+    display:inline-flex; align-items:center; gap:9px;
+    transition:all .22s cubic-bezier(.2,.8,.2,1);
+    border:1px solid transparent;
+  }
+  .btn-primary{
+    background:var(--cyan); color:#031014;
+    box-shadow:0 0 0 0 rgba(0,212,255,0.5);
+  }
+  .btn-primary:hover{ transform:translateY(-2px); box-shadow:0 8px 28px -6px rgba(0,212,255,0.55); }
+  .btn-ghost{
+    background:rgba(255,255,255,0.03); color:var(--text); border-color:var(--line-strong);
+  }
+  .btn-ghost:hover{ border-color:var(--text-dim); background:rgba(255,255,255,0.06); transform:translateY(-2px); }
+
+  .hero-meta{
+    margin-top:56px; display:flex; gap:28px; flex-wrap:wrap; justify-content:center;
+    font-family:var(--mono); font-size:11.5px; color:var(--text-faint);
+    opacity:0; animation:rise .9s ease forwards .7s;
+  }
+  .hero-meta span{ display:flex; align-items:center; gap:7px; }
+  .hero-meta b{ color:var(--text-dim); font-weight:500; }
+
+  @keyframes rise{ from{opacity:0; transform:translateY(16px);} to{opacity:1; transform:translateY(0);} }
+
+  .scroll-hint{
+    position:absolute; bottom:32px; left:50%; transform:translateX(-50%);
+    z-index:2; display:flex; flex-direction:column; align-items:center; gap:8px;
+    color:var(--text-faint); font-family:var(--mono); font-size:10.5px; letter-spacing:0.08em;
+    opacity:0; animation:rise .9s ease forwards 1s;
+  }
+  .scroll-line{ width:1px; height:32px; background:linear-gradient(var(--text-faint), transparent); animation:scrollpulse 2s ease-in-out infinite; }
+  @keyframes scrollpulse{ 0%,100%{opacity:.3;} 50%{opacity:1;} }
+
+  /* ---------- section shell ---------- */
+  section{ position:relative; z-index:2; padding:140px 24px; }
+  .wrap{ max-width:1160px; margin:0 auto; }
+
+  .section-head{ max-width:640px; margin-bottom:72px; }
+  .section-tag{
+    font-family:var(--mono); font-size:12px; letter-spacing:0.08em; color:var(--cyan);
+    margin-bottom:16px; display:block; text-transform:uppercase;
+  }
+  .section-head h2{
+    font-size:clamp(1.9rem, 3.6vw, 2.7rem); font-weight:800; letter-spacing:-0.025em;
+    line-height:1.12; margin-bottom:18px;
+  }
+  .section-head p{ color:var(--text-dim); font-size:1.05rem; line-height:1.65; }
+
+  .reveal{ opacity:0; transform:translateY(28px); transition:opacity .8s cubic-bezier(.2,.7,.2,1), transform .8s cubic-bezier(.2,.7,.2,1); }
+  .reveal.in{ opacity:1; transform:translateY(0); }
+
+  /* ---------- what it does — feature grid ---------- */
+  .feat-grid{
+    display:grid; grid-template-columns:repeat(3, 1fr); gap:1px;
+    background:var(--line); border:1px solid var(--line); border-radius:16px; overflow:hidden;
+  }
+  .feat-card{
+    background:var(--bg-raised); padding:34px 28px;
+    transition:background .3s ease;
+    position:relative;
+  }
+  .feat-card:hover{ background:#13131d; }
+  .feat-card:hover .feat-icon{ border-color:var(--cyan-dim); color:var(--cyan); }
+
+  .feat-icon{
+    width:38px; height:38px; border-radius:9px;
+    border:1px solid var(--line-strong);
+    display:flex; align-items:center; justify-content:center;
+    color:var(--text-dim); margin-bottom:20px;
+    transition:all .3s ease;
+  }
+  .feat-icon svg{ width:18px; height:18px; }
+
+  .feat-card h3{ font-size:1.05rem; font-weight:700; margin-bottom:10px; letter-spacing:-0.01em; }
+  .feat-card p{ color:var(--text-dim); font-size:0.92rem; line-height:1.6; }
+  .feat-card .feat-tag{
+    font-family:var(--mono); font-size:10.5px; color:var(--text-faint);
+    margin-top:16px; display:block;
+  }
+
+  /* ---------- terminal ---------- */
+  #terminal-section{ background:linear-gradient(180deg, transparent, rgba(0,212,255,0.025), transparent); }
+
+  .terminal-shell{
+    border-radius:14px; border:1px solid var(--line-strong);
+    background:rgba(16,16,24,0.75); backdrop-filter:blur(20px);
+    box-shadow:0 30px 80px -30px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.02) inset;
+    overflow:hidden;
+  }
+  .terminal-bar{
+    display:flex; align-items:center; gap:8px;
+    padding:13px 18px; border-bottom:1px solid var(--line);
+    background:rgba(255,255,255,0.015);
+  }
+  .terminal-dot{ width:11px; height:11px; border-radius:50%; }
+  .terminal-bar .terminal-dot:nth-child(1){ background:#ff5f57; }
+  .terminal-bar .terminal-dot:nth-child(2){ background:#febc2e; }
+  .terminal-bar .terminal-dot:nth-child(3){ background:#28c840; }
+  .terminal-title{
+    margin-left:10px; font-family:var(--mono); font-size:11.5px; color:var(--text-faint);
+  }
+  .terminal-body{
+    padding:26px 24px 30px; font-family:var(--mono); font-size:13.5px; line-height:1.85;
+    min-height:340px;
+  }
+  .t-prompt{ color:var(--cyan); }
+  .t-cmd{ color:var(--text); }
+  .t-out{ color:var(--text-dim); }
+  .t-out b{ color:var(--text); font-weight:500; }
+  .t-out .ok{ color:#3ddc97; }
+  .t-out .accent{ color:var(--cyan); }
+  .t-line{ opacity:0; white-space:pre-wrap; word-break:break-word; }
+  .cursor{
+    display:inline-block; width:7px; height:14px; background:var(--cyan);
+    margin-left:2px; vertical-align:middle; animation:blink 1s step-end infinite;
+  }
+  @keyframes blink{ 50%{opacity:0;} }
+
+  /* ---------- stats ---------- */
+  .stats-grid{
+    display:grid; grid-template-columns:repeat(4, 1fr); gap:1px;
+    background:var(--line); border:1px solid var(--line); border-radius:16px; overflow:hidden;
+  }
+  .stat-cell{ background:var(--bg-raised); padding:38px 24px; text-align:left; }
+  .stat-num{
+    font-family:var(--mono); font-size:clamp(1.9rem, 3.4vw, 2.6rem); font-weight:700;
+    color:var(--text); letter-spacing:-0.02em; margin-bottom:8px;
+    display:flex; align-items:baseline; gap:2px;
+  }
+  .stat-num .accent{ color:var(--cyan); }
+  .stat-label{ color:var(--text-faint); font-size:0.86rem; font-family:var(--mono); }
+
+  /* ---------- how it works strip ---------- */
+  .flow-strip{
+    display:flex; align-items:center; gap:0; flex-wrap:wrap;
+    border:1px solid var(--line); border-radius:14px; overflow:hidden;
+  }
+  .flow-step{
+    flex:1; min-width:160px; padding:24px 20px; position:relative;
+    background:var(--bg-raised); border-right:1px solid var(--line);
+  }
+  .flow-step:last-child{ border-right:none; }
+  .flow-step .fnum{ font-family:var(--mono); color:var(--cyan); font-size:11px; margin-bottom:10px; display:block; }
+  .flow-step h4{ font-size:0.92rem; font-weight:600; margin-bottom:6px; }
+  .flow-step p{ font-size:0.8rem; color:var(--text-faint); line-height:1.5; }
+
+  /* ---------- community / open source ---------- */
+  .community-grid{
+    display:grid; grid-template-columns:repeat(3, 1fr); gap:1px;
+    background:var(--line); border:1px solid var(--line); border-radius:16px; overflow:hidden;
+    margin-bottom:56px;
+  }
+  .community-card{
+    background:var(--bg-raised); padding:30px 26px;
+    transition:background .3s ease;
+  }
+  .community-card:hover{ background:#13131d; }
+  .community-card:hover .feat-icon{ border-color:var(--cyan-dim); color:var(--cyan); }
+  .community-card h3{ font-size:1.0rem; font-weight:700; margin-bottom:9px; letter-spacing:-0.01em; }
+  .community-card p{ color:var(--text-dim); font-size:0.875rem; line-height:1.58; }
+  .community-card .feat-tag{
+    font-family:var(--mono); font-size:10.5px; color:var(--text-faint);
+    margin-top:15px; display:block;
+  }
+
+  .contrib-flow{
+    display:flex; align-items:center; gap:18px; flex-wrap:wrap;
+    margin-bottom:56px;
+  }
+  .contrib-step{
+    flex:1; min-width:200px; padding:24px 22px;
+    border:1px solid var(--line); border-radius:12px; background:var(--bg-raised);
+  }
+  .contrib-step .fnum{ font-family:var(--mono); color:var(--cyan); font-size:11px; margin-bottom:10px; display:block; }
+  .contrib-step h4{ font-size:0.95rem; font-weight:700; margin-bottom:7px; }
+  .contrib-step p{ font-size:0.82rem; color:var(--text-faint); line-height:1.55; }
+  .contrib-step code{
+    font-family:var(--mono); font-size:0.85em; color:var(--text-dim);
+    background:rgba(255,255,255,0.05); padding:1px 5px; border-radius:3px;
+  }
+  .contrib-arrow{ color:var(--text-faint); font-size:1.1rem; flex-shrink:0; }
+
+  .community-cta{
+    display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:32px;
+    padding:36px 36px; border:1px solid var(--line-strong); border-radius:16px;
+    background:rgba(255,255,255,0.015);
+  }
+  .community-cta-text h3{ font-size:1.15rem; font-weight:700; margin-bottom:6px; letter-spacing:-0.01em; }
+  .community-cta-text p{ color:var(--text-faint); font-size:0.875rem; }
+  .community-links{ display:flex; gap:12px; flex-wrap:wrap; }
+  .community-link{
+    display:flex; align-items:center; gap:10px;
+    padding:13px 18px; border:1px solid var(--line-strong); border-radius:9px;
+    background:rgba(255,255,255,0.02); transition:all .22s ease;
+    font-size:0.84rem; color:var(--text);
+  }
+  .community-link:hover{ border-color:var(--cyan); background:rgba(0,212,255,0.06); transform:translateY(-2px); }
+  .community-link b{ font-weight:600; }
+  .community-link small{ color:var(--text-faint); font-size:0.78em; }
+  .community-link .cl-icon{ color:var(--cyan); font-size:8px; }
+
+  /* ---------- CTA band ---------- */
+  .cta-band{
+    text-align:center; padding:90px 32px;
+    border-radius:20px; border:1px solid var(--line-strong);
+    background:radial-gradient(ellipse 90% 100% at 50% -10%, rgba(0,212,255,0.08), transparent 60%), var(--bg-raised);
+    position:relative; overflow:hidden;
+  }
+  .cta-band h2{ font-size:clamp(1.7rem, 3.2vw, 2.4rem); font-weight:800; letter-spacing:-0.025em; margin-bottom:16px; }
+  .cta-band p{ color:var(--text-dim); margin-bottom:34px; font-size:1rem; }
+
+  /* ---------- footer ---------- */
+  footer{ border-top:1px solid var(--line); padding:64px 24px 32px; position:relative; z-index:2; }
+  .footer-grid{
+    max-width:1160px; margin:0 auto;
+    display:grid; grid-template-columns:1.4fr repeat(3, 1fr); gap:48px;
+    padding-bottom:48px;
+  }
+  .footer-brand{ display:flex; align-items:center; gap:10px; font-family:var(--mono); font-weight:600; margin-bottom:14px; }
+  .footer-brand .dot{ width:7px; height:7px; border-radius:50%; background:var(--cyan); box-shadow:0 0 12px var(--cyan); }
+  .footer-desc{ color:var(--text-faint); font-size:0.86rem; line-height:1.6; max-width:280px; }
+
+  .footer-col h5{ font-family:var(--mono); font-size:11px; letter-spacing:0.06em; color:var(--text-faint); margin-bottom:18px; text-transform:uppercase; }
+  .footer-col a{ display:block; color:var(--text-dim); font-size:0.875rem; margin-bottom:13px; transition:color .2s ease; }
+  .footer-col a:hover{ color:var(--cyan); }
+
+  .footer-bottom{
+    max-width:1160px; margin:0 auto; padding-top:28px; border-top:1px solid var(--line);
+    display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:16px;
+    font-family:var(--mono); font-size:11.5px; color:var(--text-faint);
+  }
+
+  /* ---------- responsive ---------- */
+  @media (max-width:860px){
+    .nav-links{ display:none; }
+    .nav-toggle{ display:flex; }
+    .feat-grid{ grid-template-columns:1fr; }
+    .stats-grid{ grid-template-columns:repeat(2, 1fr); }
+    .flow-strip{ flex-direction:column; }
+    .flow-step{ border-right:none; border-bottom:1px solid var(--line); width:100%; }
+    .community-grid{ grid-template-columns:1fr; }
+    .contrib-flow{ flex-direction:column; align-items:stretch; }
+    .contrib-arrow{ display:none; }
+    .community-cta{ flex-direction:column; align-items:flex-start; }
+    .footer-grid{ grid-template-columns:1fr 1fr; gap:36px; }
+    section{ padding:90px 20px; }
+  }
+  @media (max-width:520px){
+    .stats-grid{ grid-template-columns:1fr; }
+    .footer-grid{ grid-template-columns:1fr; }
+    .hero-meta{ gap:16px; }
+    .terminal-body{ font-size:12px; padding:20px 16px; }
+    .community-links{ flex-direction:column; width:100%; }
+    .community-link{ width:100%; }
+  }
+
+  @media (prefers-reduced-motion: reduce){
+    *{ animation-duration:0.01ms !important; animation-iteration-count:1 !important; transition-duration:0.01ms !important; scroll-behavior:auto !important; }
+  }
+</style>
+</head>
+<body>
+
+<div class="grain"></div>
+<div class="bg-grid"></div>
+
+<nav id="nav">
+  <div class="nav-brand"><span class="dot"></span><span class="rip-text">&lt;RIP&gt;</span></div>
+  <div class="nav-links">
+    <a href="#what">Platform</a>
+    <a href="#demo">Demo</a>
+    <a href="#stats">Stats</a>
+    <a href="#community">Community</a>
+    <a href="https://github.com/pratiksingh1702/RIP" target="_blank">Docs</a>
+  </div>
+  <a class="nav-cta" href="https://github.com/pratiksingh1702/RIP" target="_blank">View on GitHub →</a>
+  <button class="nav-toggle" aria-label="Menu"><span></span><span></span><span></span></button>
+</nav>
+
+<!-- ============ HERO ============ -->
+<section id="hero">
+  <canvas id="graph-canvas"></canvas>
+  <div class="hero-vignette"></div>
+
+  <div class="hero-content">
+    <span class="eyebrow">v1.0 · local-first · Neo4j + Qdrant</span>
+    <h1>Your codebase,<br><span class="accent">as a graph</span> <span class="grey">your agents</span><br>can actually query.</h1>
+    <p class="hero-sub">
+      RIP parses any repository into a knowledge graph with Tree-sitter, indexes it with Neo4j and Qdrant,
+      and gives AI coding agents <code>trace</code>, <code>impact</code>, and <code>explain</code> — instead of grep.
+    </p>
+    <div class="hero-actions">
+      <a class="btn btn-primary" href="https://github.com/pratiksingh1702/RIP/releases/latest" target="_blank">
+        ↓ Download APK
+      </a>
+      <a class="btn btn-ghost" href="https://github.com/pratiksingh1702/RIP" target="_blank">
+        ⌥ View Source
+      </a>
+    </div>
+    <div class="hero-meta">
+      <span><b>6</b> languages parsed</span>
+      <span><b>MCP</b> native</span>
+      <span><b>local-first</b> · zero cloud</span>
+      <span><b>MIT</b> licensed</span>
+    </div>
+  </div>
+
+  <div class="scroll-hint"><span>SCROLL</span><span class="scroll-line"></span></div>
+</section>
+
+<!-- ============ WHAT IT DOES ============ -->
+<section id="what">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <span class="section-tag">// 01 — Platform</span>
+      <h2>Not a chatbot wrapper.<br>An understanding engine.</h2>
+      <p>Every query is answered from a real graph traversal or vector search — not an LLM guessing at file contents. The model only narrates what the graph already proved.</p>
+    </div>
+
+    <div class="feat-grid">
+      <div class="feat-card reveal">
+        <div class="feat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="6" r="2.5"/><circle cx="12" cy="18" r="2.5"/><path d="M8.2 7.3 10 16M15.8 7.3 14 16M8.5 6h7"/></svg></div>
+        <h3>Knowledge Graph</h3>
+        <p>Every file, class, function and widget becomes a node. Calls, imports, and inheritance become typed edges in Neo4j.</p>
+        <span class="feat-tag">trace · impact · dependencies</span>
+      </div>
+
+      <div class="feat-card reveal">
+        <div class="feat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="11" cy="11" r="6.5"/><path d="m20 20-4-4"/></svg></div>
+        <h3>Semantic Search</h3>
+        <p>Qdrant vector search finds code by what it does, not what it's named. Hybrid-ranked against the graph for precision.</p>
+        <span class="feat-tag">vector + lexical + graph rerank</span>
+      </div>
+
+      <div class="feat-card reveal">
+        <div class="feat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 17V7l8-4 8 4v10l-8 4-8-4Z"/><path d="M4 7l8 4 8-4M12 11v10"/></svg></div>
+        <h3>Agent-Native</h3>
+        <p>Ships as an MCP server. Claude Code, Cursor, and Codex call <code style="font-family:inherit">rip_trace</code> instead of reading files blind.</p>
+        <span class="feat-tag">MCP stdio · Context Gateway</span>
+      </div>
+
+      <div class="feat-card reveal">
+        <div class="feat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 2v4M12 18v4M4.9 4.9l2.8 2.8M16.3 16.3l2.8 2.8M2 12h4M18 12h4M4.9 19.1l2.8-2.8M16.3 7.7l2.8-2.8"/></svg></div>
+        <h3>Impact Analysis</h3>
+        <p>Before you touch a symbol, know exactly what breaks. Risk-scored, graph-traversed, no guessing.</p>
+        <span class="feat-tag">blast-radius before you commit</span>
+      </div>
+
+      <div class="feat-card reveal">
+        <div class="feat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M8 4v5"/></svg></div>
+        <h3>Six Languages</h3>
+        <p>Python, TypeScript, Java, Go, Rust, and Dart/Flutter — same graph schema, same query surface, every repo.</p>
+        <span class="feat-tag">tree-sitter parsed</span>
+      </div>
+
+      <div class="feat-card reveal">
+        <div class="feat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="3" width="7" height="7" rx="1.2"/><rect x="14" y="3" width="7" height="7" rx="1.2"/><rect x="3" y="14" width="7" height="7" rx="1.2"/><rect x="14" y="14" width="7" height="7" rx="1.2"/></svg></div>
+        <h3>Local-First</h3>
+        <p>Neo4j, Qdrant and Postgres on your machine or your server. Your code never has to leave the network.</p>
+        <span class="feat-tag">docker compose up</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ TERMINAL DEMO ============ -->
+<section id="demo">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <span class="section-tag">// 02 — In your terminal</span>
+      <h2>One command. Full understanding.</h2>
+      <p>This is a real session — no mockup data. Index a repo, then ask it anything.</p>
+    </div>
+
+    <div class="terminal-shell reveal" id="terminal-wrap">
+      <div class="terminal-bar">
+        <span class="terminal-dot"></span><span class="terminal-dot"></span><span class="terminal-dot"></span>
+        <span class="terminal-title">~/payment-api — rip</span>
+      </div>
+      <div class="terminal-body" id="terminal-body"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ STATS ============ -->
+<section id="stats">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <span class="section-tag">// 03 — At scale</span>
+      <h2>Built for repos that have outgrown grep.</h2>
+    </div>
+
+    <div class="stats-grid reveal">
+      <div class="stat-cell">
+        <div class="stat-num"><span class="counter" data-target="60">0</span><span class="accent">×</span></div>
+        <div class="stat-label">token reduction vs. raw file context</div>
+      </div>
+      <div class="stat-cell">
+        <div class="stat-num"><span class="counter" data-target="6">0</span></div>
+        <div class="stat-label">languages parsed with Tree-sitter</div>
+      </div>
+      <div class="stat-cell">
+        <div class="stat-num"><span class="counter" data-target="10000" data-suffix="+">0</span></div>
+        <div class="stat-label">entities indexed in &lt;60s on a real repo</div>
+      </div>
+      <div class="stat-cell">
+        <div class="stat-num"><span class="counter" data-target="4">0</span></div>
+        <div class="stat-label">interfaces: CLI · API · MCP · mobile</div>
+      </div>
+    </div>
+
+    <div class="flow-strip reveal" style="margin-top:64px;">
+      <div class="flow-step">
+        <span class="fnum">01</span>
+        <h4>Parse</h4>
+        <p>Tree-sitter builds an exact AST per file. No regex guessing.</p>
+      </div>
+      <div class="flow-step">
+        <span class="fnum">02</span>
+        <h4>Graph</h4>
+        <p>Entities and relationships land in Neo4j as typed nodes and edges.</p>
+      </div>
+      <div class="flow-step">
+        <span class="fnum">03</span>
+        <h4>Embed</h4>
+        <p>Code chunks are vectorized into Qdrant for semantic recall.</p>
+      </div>
+      <div class="flow-step">
+        <span class="fnum">04</span>
+        <h4>Query</h4>
+        <p>CLI, REST, MCP, or mobile — same graph, same answers.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ COMMUNITY / OPEN SOURCE ============ -->
+<section id="community">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <span class="section-tag">// 04 — Open source</span>
+      <h2>Built in the open.<br>Maintained by whoever shows up.</h2>
+      <p>RIP is MIT-licensed and has no roadmap decided behind closed doors. Every graph query, every parser, every line of the Context Gateway is there for you to read, fork, or improve.</p>
+    </div>
+
+    <div class="community-grid reveal">
+      <div class="community-card">
+        <div class="feat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M9 19c-4.3 1.4-4.3-2.5-6-3m12 5v-3.5c0-1 .1-1.4-.5-2 2.8-.3 5.5-1.4 5.5-6a4.6 4.6 0 0 0-1.3-3.2 4.2 4.2 0 0 0-.1-3.2s-1.1-.3-3.5 1.3a12.3 12.3 0 0 0-6.2 0C6.5 2.8 5.4 3.1 5.4 3.1a4.2 4.2 0 0 0-.1 3.2A4.6 4.6 0 0 0 4 9.5c0 4.6 2.7 5.7 5.5 6-.6.6-.6 1.2-.5 2V21"/></svg></div>
+        <h3>Add a language parser</h3>
+        <p>Tree-sitter grammars exist for 100+ languages. The parser interface is small and documented — C#, Kotlin, and Ruby are open.</p>
+        <span class="feat-tag">good first PR · core/parser/</span>
+      </div>
+
+      <div class="community-card">
+        <div class="feat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg></div>
+        <h3>Improve the ranker</h3>
+        <p>The Context Gateway's scoring weights are hand-tuned, not learned. If you have ideas on better relevance signals, this is the highest-leverage area.</p>
+        <span class="feat-tag">help wanted · gateway/core/ranker/</span>
+      </div>
+
+      <div class="community-card">
+        <div class="feat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg></div>
+        <h3>Test it on your repo</h3>
+        <p>Real-world repos surface real-world bugs. Index something messy and file what broke — that's the most valuable signal we get.</p>
+        <span class="feat-tag">report issues · no code required</span>
+      </div>
+
+      <div class="community-card">
+        <div class="feat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></div>
+        <h3>Write docs &amp; examples</h3>
+        <p>Most of the codebase has no written walkthrough beyond inline comments. If you read code to understand it, that's a doc gap to fix.</p>
+        <span class="feat-tag">docs/ · no setup needed</span>
+      </div>
+
+      <div class="community-card">
+        <div class="feat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="m12 19 7-7 3 3-7 7-3-3z"/><path d="m18 13-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="m2 2 7.586 7.586"/><circle cx="11" cy="11" r="2"/></svg></div>
+        <h3>Build a client</h3>
+        <p>The REST API and MCP server are stable interfaces. A web dashboard, a JetBrains plugin, an Obsidian integration — bring your own frontend.</p>
+        <span class="feat-tag">server/ · mcp/ · stable contracts</span>
+      </div>
+
+      <div class="community-card">
+        <div class="feat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg></div>
+        <h3>Run benchmarks</h3>
+        <p>No published numbers exist yet comparing RIP against grep, plain RAG, or other code-intelligence tools. First measured benchmark gets credited.</p>
+        <span class="feat-tag">scripts/benchmark.sh</span>
+      </div>
+    </div>
+
+    <div class="contrib-flow reveal">
+      <div class="contrib-step">
+        <span class="fnum">01</span>
+        <h4>Fork &amp; clone</h4>
+        <p>Standard GitHub fork workflow. <code>uv sync</code> and you're running locally in minutes.</p>
+      </div>
+      <div class="contrib-arrow">→</div>
+      <div class="contrib-step">
+        <span class="fnum">02</span>
+        <h4>Pick an issue</h4>
+        <p>Labelled <code>good first issue</code> or <code>help wanted</code> if you want a starting point.</p>
+      </div>
+      <div class="contrib-arrow">→</div>
+      <div class="contrib-step">
+        <span class="fnum">03</span>
+        <h4>Open a PR</h4>
+        <p>Small, focused changes merge fast. Tests and a one-line rationale go a long way.</p>
+      </div>
+    </div>
+
+    <div class="community-cta reveal">
+      <div class="community-cta-text">
+        <h3>Three ways to talk to the project</h3>
+        <p>No Discord yet — issues and discussions live on GitHub where the code already is.</p>
+      </div>
+      <div class="community-links">
+        <a class="community-link" href="https://github.com/pratiksingh1702/RIP/issues" target="_blank">
+          <span class="cl-icon">●</span>
+          <span><b>Issues</b><br><small>bugs &amp; feature requests</small></span>
+        </a>
+        <a class="community-link" href="https://github.com/pratiksingh1702/RIP/discussions" target="_blank">
+          <span class="cl-icon">●</span>
+          <span><b>Discussions</b><br><small>questions &amp; ideas</small></span>
+        </a>
+        <a class="community-link" href="https://github.com/pratiksingh1702/RIP/pulls" target="_blank">
+          <span class="cl-icon">●</span>
+          <span><b>Pull Requests</b><br><small>see what's in flight</small></span>
+        </a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ CTA ============ -->
+<section style="padding-top:0;">
+  <div class="wrap">
+    <div class="cta-band reveal">
+      <h2>Index your first repo in under a minute.</h2>
+      <p>Open source. Self-hosted. No telemetry leaving your machine.</p>
+      <div class="hero-actions">
+        <a class="btn btn-primary" href="https://github.com/pratiksingh1702/RIP" target="_blank">⌥ git clone &amp; start</a>
+        <a class="btn btn-ghost" href="https://github.com/pratiksingh1702/RIP/releases/latest" target="_blank">↓ Get the app</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ FOOTER ============ -->
+<footer>
+  <div class="footer-grid">
+    <div>
+      <div class="footer-brand"><span class="dot"></span><span class="rip-text">&lt;RIP&gt;</span></div>
+      <p class="footer-desc">Repository Intelligence Platform. Turns source code into a queryable knowledge graph for engineers and the agents they run.</p>
+    </div>
+    <div class="footer-col">
+      <h5>Product</h5>
+      <a href="#what">Platform</a>
+      <a href="#demo">CLI Demo</a>
+      <a href="https://github.com/pratiksingh1702/RIP/releases/latest" target="_blank">Mobile App</a>
+      <a href="https://github.com/pratiksingh1702/RIP/releases/latest" target="_blank">Download APK</a>
+    </div>
+    <div class="footer-col">
+      <h5>Developers</h5>
+      <a href="https://github.com/pratiksingh1702/RIP" target="_blank">GitHub</a>
+      <a href="https://github.com/pratiksingh1702/RIP/blob/main/cli.md" target="_blank">CLI Reference</a>
+      <a href="https://github.com/pratiksingh1702/RIP/blob/main/docs" target="_blank">Docs</a>
+    </div>
+    <div class="footer-col">
+      <h5>Community</h5>
+      <a href="#community">Contribute</a>
+      <a href="https://github.com/pratiksingh1702/RIP/issues" target="_blank">Issues</a>
+      <a href="https://github.com/pratiksingh1702/RIP/discussions" target="_blank">Discussions</a>
+      <a href="https://github.com/pratiksingh1702/RIP/pulls" target="_blank">Pull Requests</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>© 2026 RIP — MIT Licensed</span>
+    <span>built local-first, no telemetry</span>
+  </div>
+</footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+/* ============================================================
+   NAV — scroll state + mobile toggle
+============================================================ */
+const navEl = document.getElementById('nav');
+window.addEventListener('scroll', () => {
+  navEl.classList.toggle('scrolled', window.scrollY > 24);
+}, { passive:true });
+
+/* ============================================================
+   SCROLL REVEAL
+============================================================ */
+const revealEls = document.querySelectorAll('.reveal');
+const io = new IntersectionObserver((entries) => {
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      e.target.classList.add('in');
+      io.unobserve(e.target);
+    }
+  });
+}, { threshold: 0.12, rootMargin: '0px 0px -60px 0px' });
+revealEls.forEach(el => io.observe(el));
+
+/* ============================================================
+   COUNTER ANIMATION
+============================================================ */
+const counters = document.querySelectorAll('.counter');
+const counterIO = new IntersectionObserver((entries) => {
+  entries.forEach(entry => {
+    if (!entry.isIntersecting) return;
+    const el = entry.target;
+    const target = parseInt(el.dataset.target, 10);
+    const suffix = el.dataset.suffix || '';
+    const dur = 1400;
+    const start = performance.now();
+    function tick(now){
+      const p = Math.min((now - start) / dur, 1);
+      const eased = 1 - Math.pow(1 - p, 3);
+      const val = Math.floor(eased * target);
+      el.textContent = val.toLocaleString() + (p === 1 ? suffix : '');
+      if (p < 1) requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+    counterIO.unobserve(el);
+  });
+}, { threshold: 0.5 });
+counters.forEach(c => counterIO.observe(c));
+
+/* ============================================================
+   TERMINAL TYPE-OUT SEQUENCE
+============================================================ */
+const termBody = document.getElementById('terminal-body');
+const termScript = [
+  { t:'cmd', text:'repo index . ' },
+  { t:'out', text:'<span class="ok">✓</span> Parsed <b>847 files</b> across 6 languages in 12.3s' },
+  { t:'out', text:'<span class="ok">✓</span> Graph: <b>4,221 nodes</b> · <b>25,902 edges</b> written to Neo4j' },
+  { t:'out', text:'<span class="ok">✓</span> Semantic index ready — <b>4,221 vectors</b> in Qdrant\n' },
+  { t:'cmd', text:'repo impact PaymentService.charge' },
+  { t:'out', text:'<span class="accent">PaymentService.charge</span> — risk: <b>HIGH</b>' },
+  { t:'out', text:'  affects <b>4</b> downstream services' },
+  { t:'out', text:'  → CheckoutController, InvoiceWorker, RefundHandler, WebhookDispatcher\n' },
+  { t:'cmd', text:'repo explain "how retry works" --no-llm' },
+  { t:'out', text:'<span class="accent">HttpClient.withRetry</span> → exponential backoff, max 3 attempts' },
+  { t:'out', text:'  called by <b>StripeAdapter.charge</b>, <b>EmailService.send</b>' },
+  { t:'out', text:'  pattern matched across <b>2 call sites</b>, 0 LLM tokens used' },
+];
+
+let started = false;
+const termIO = new IntersectionObserver((entries) => {
+  entries.forEach(e => {
+    if (e.isIntersecting && !started) {
+      started = true;
+      runTerminal();
+      termIO.unobserve(e.target);
+    }
+  });
+}, { threshold: 0.3 });
+termIO.observe(document.getElementById('terminal-wrap'));
+
+async function runTerminal(){
+  for (const line of termScript) {
+    const div = document.createElement('div');
+    div.className = 't-line';
+    termBody.appendChild(div);
+    requestAnimationFrame(()=> div.style.transition = 'opacity .3s ease');
+
+    if (line.t === 'cmd') {
+      div.style.opacity = 1;
+      const prompt = document.createElement('span');
+      prompt.className = 't-prompt';
+      prompt.textContent = '❯ ';
+      div.appendChild(prompt);
+      const cmdSpan = document.createElement('span');
+      cmdSpan.className = 't-cmd';
+      div.appendChild(cmdSpan);
+      await typeOut(cmdSpan, line.text, 22);
+      const cursor = document.createElement('span');
+      cursor.className = 'cursor';
+      div.appendChild(cursor);
+      await wait(180);
+      cursor.remove();
+    } else {
+      div.style.opacity = 1;
+      div.className = 't-line t-out';
+      div.innerHTML = line.text;
+      await wait(220);
+    }
+    termBody.scrollTop = termBody.scrollHeight;
+  }
+  const finalCursor = document.createElement('div');
+  finalCursor.className = 't-line';
+  finalCursor.style.opacity = 1;
+  finalCursor.innerHTML = '<span class="t-prompt">❯ </span><span class="cursor"></span>';
+  termBody.appendChild(finalCursor);
+}
+
+function typeOut(el, text, speed){
+  return new Promise(resolve => {
+    let i = 0;
+    const iv = setInterval(() => {
+      el.textContent += text[i];
+      i++;
+      if (i >= text.length) { clearInterval(iv); resolve(); }
+    }, speed);
+  });
+}
+function wait(ms){ return new Promise(r => setTimeout(r, ms)); }
+
+/* ============================================================
+   THREE.JS — Hero knowledge-graph visualization
+   Nodes = code entities, edges = relationships, slow breathing drift
+============================================================ */
+(function(){
+  const canvas = document.getElementById('graph-canvas');
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(55, window.innerWidth/window.innerHeight, 0.1, 1000);
+  camera.position.set(0, 0, 34);
+
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias:true, alpha:true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.8));
+  renderer.setSize(window.innerWidth, window.innerHeight);
+
+  const NODE_COUNT = window.innerWidth < 700 ? 46 : 80;
+  const nodeTypes = ['Function','Class','Module','Widget','Service','File'];
+  const edgeTypes = ['CALLS','IMPORTS','EXTENDS','DEPENDS_ON'];
+
+  const group = new THREE.Group();
+  scene.add(group);
+
+  // node positions (loose sphere-cloud layout)
+  const nodes = [];
+  for (let i=0; i<NODE_COUNT; i++){
+    const r = 13 + Math.random()*9;
+    const theta = Math.random()*Math.PI*2;
+    const phi = Math.acos((Math.random()*2)-1);
+    const x = r * Math.sin(phi) * Math.cos(theta);
+    const y = r * Math.sin(phi) * Math.sin(theta) * 0.62;
+    const z = r * Math.cos(phi) * 0.7;
+    nodes.push({
+      pos: new THREE.Vector3(x,y,z),
+      base: new THREE.Vector3(x,y,z),
+      type: nodeTypes[Math.floor(Math.random()*nodeTypes.length)],
+      phase: Math.random()*Math.PI*2,
+      speed: 0.15 + Math.random()*0.25,
+      isHub: Math.random() < 0.12
+    });
+  }
+
+  // points (nodes) — two tiers: hub (cyan, bigger) and regular (dim white)
+  const hubGeo = new THREE.BufferGeometry();
+  const regGeo = new THREE.BufferGeometry();
+  const hubPositions = [];
+  const regPositions = [];
+  nodes.forEach(n => {
+    if (n.isHub) hubPositions.push(n.pos.x, n.pos.y, n.pos.z);
+    else regPositions.push(n.pos.x, n.pos.y, n.pos.z);
+  });
+  hubGeo.setAttribute('position', new THREE.Float32BufferAttribute(hubPositions, 3));
+  regGeo.setAttribute('position', new THREE.Float32BufferAttribute(regPositions, 3));
+
+  const hubMat = new THREE.PointsMaterial({ color:0x00d4ff, size:2.6, transparent:true, opacity:0.95, sizeAttenuation:true });
+  const regMat = new THREE.PointsMaterial({ color:0xaab2c5, size:1.5, transparent:true, opacity:0.55, sizeAttenuation:true });
+
+  const hubPoints = new THREE.Points(hubGeo, hubMat);
+  const regPoints = new THREE.Points(regGeo, regMat);
+  group.add(hubPoints, regPoints);
+
+  // edges — connect nearby nodes (sparse, intentional, not full mesh)
+  const edgeGeo = new THREE.BufferGeometry();
+  const edgePositions = [];
+  const edgeCount = window.innerWidth < 700 ? 55 : 95;
+  const maxDist = 13;
+  let attempts = 0;
+  let made = 0;
+  while (made < edgeCount && attempts < edgeCount * 12) {
+    attempts++;
+    const a = nodes[Math.floor(Math.random()*nodes.length)];
+    const b = nodes[Math.floor(Math.random()*nodes.length)];
+    if (a === b) continue;
+    const d = a.base.distanceTo(b.base);
+    if (d < maxDist) {
+      edgePositions.push(a.base.x, a.base.y, a.base.z, b.base.x, b.base.y, b.base.z);
+      made++;
+    }
+  }
+  edgeGeo.setAttribute('position', new THREE.Float32BufferAttribute(edgePositions, 3));
+  const edgeMat = new THREE.LineBasicMaterial({ color:0x00d4ff, transparent:true, opacity:0.10 });
+  const edgeLines = new THREE.LineSegments(edgeGeo, edgeMat);
+  group.add(edgeLines);
+
+  // mouse parallax
+  let mouseX = 0, mouseY = 0;
+  window.addEventListener('mousemove', (e) => {
+    mouseX = (e.clientX / window.innerWidth - 0.5);
+    mouseY = (e.clientY / window.innerHeight - 0.5);
+  }, { passive:true });
+
+  let t = 0;
+  function animate(){
+    requestAnimationFrame(animate);
+    t += 0.0042;
+
+    group.rotation.y = t * 0.14 + mouseX * 0.25;
+    group.rotation.x = Math.sin(t*0.3) * 0.05 + mouseY * 0.15;
+
+    // breathing drift on node positions
+    const hubArr = hubGeo.attributes.position.array;
+    const regArr = regGeo.attributes.position.array;
+    let hi = 0, ri = 0;
+    nodes.forEach(n => {
+      const drift = Math.sin(t * n.speed + n.phase) * 0.55;
+      const nx = n.base.x + drift * 0.4;
+      const ny = n.base.y + drift * 0.55;
+      const nz = n.base.z + drift * 0.3;
+      n.pos.set(nx, ny, nz);
+      if (n.isHub) { hubArr[hi++]=nx; hubArr[hi++]=ny; hubArr[hi++]=nz; }
+      else { regArr[ri++]=nx; regArr[ri++]=ny; regArr[ri++]=nz; }
+    });
+    hubGeo.attributes.position.needsUpdate = true;
+    regGeo.attributes.position.needsUpdate = true;
+
+    hubMat.opacity = 0.75 + Math.sin(t*1.4)*0.2;
+
+    renderer.render(scene, camera);
+  }
+  animate();
+
+  // reveal canvas once first frame is ready
+  requestAnimationFrame(() => requestAnimationFrame(() => canvas.classList.add('loaded')));
+
+  window.addEventListener('resize', () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  });
+})();
+</script>
+
+</body>
+</html>

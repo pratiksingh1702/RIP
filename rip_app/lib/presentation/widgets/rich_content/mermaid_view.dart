@@ -30,7 +30,7 @@ class MermaidView extends StatelessWidget {
               const Icon(Icons.architecture, size: 16),
               const SizedBox(width: 8),
               Text(
-                'Mermaid Diagram',
+                'Architecture Graph',
                 style: Theme.of(context).textTheme.labelMedium,
               ),
               const Spacer(),
