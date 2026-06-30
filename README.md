@@ -1,5 +1,7 @@
 # Repository Intelligence Platform
 
+🌐 **Website**: [https://ripdev.netlify.app/](https://ripdev.netlify.app/)
+
 Repository Intelligence Platform (RIP) turns software repositories into structured knowledge graphs, semantic indexes, and agent-ready context packages.
 
 RIP is infrastructure for repository understanding. It parses source code with Tree-sitter, writes architectural relationships into Neo4j, indexes compact semantic payloads in Qdrant, and exposes the result through a CLI, FastAPI service, MCP servers, a Context Gateway, and a VS Code extension.
