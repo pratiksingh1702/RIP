@@ -279,6 +279,32 @@
   }
   @keyframes blink{ 50%{opacity:0;} }
 
+  /* ---------- remote git indexing ---------- */
+  .git-grid{
+    display:grid; grid-template-columns:1.1fr 1fr; gap:1px;
+    background:var(--line); border:1px solid var(--line); border-radius:16px; overflow:hidden;
+  }
+  .git-panel{
+    background:var(--bg-raised); padding:32px 28px;
+  }
+  .git-panel h3{ font-size:1.05rem; font-weight:700; margin-bottom:10px; letter-spacing:-0.01em; }
+  .git-panel p{ color:var(--text-dim); font-size:0.92rem; line-height:1.6; margin-bottom:18px; }
+  .git-panel code{
+    font-family:var(--mono); font-size:0.82rem; color:var(--text);
+    background:rgba(255,255,255,0.05); border:1px solid var(--line);
+    border-radius:6px; padding:12px 14px; display:block;
+    white-space:pre-wrap; word-break:break-word; line-height:1.65;
+  }
+  .git-points{
+    display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:1px;
+    background:var(--line); border:1px solid var(--line); border-radius:14px; overflow:hidden;
+    margin-top:28px;
+  }
+  .git-point{ background:var(--bg-raised); padding:24px 22px; }
+  .git-point .fnum{ font-family:var(--mono); color:var(--cyan); font-size:11px; margin-bottom:9px; display:block; }
+  .git-point h4{ font-size:0.92rem; font-weight:700; margin-bottom:7px; }
+  .git-point p{ font-size:0.82rem; color:var(--text-faint); line-height:1.55; }
+
   /* ---------- stats ---------- */
   .stats-grid{
     display:grid; grid-template-columns:repeat(4, 1fr); gap:1px;
@@ -398,6 +424,8 @@
     .nav-links{ display:none; }
     .nav-toggle{ display:flex; }
     .feat-grid{ grid-template-columns:1fr; }
+    .git-grid{ grid-template-columns:1fr; }
+    .git-points{ grid-template-columns:1fr; }
     .stats-grid{ grid-template-columns:repeat(2, 1fr); }
     .flow-strip{ flex-direction:column; }
     .flow-step{ border-right:none; border-bottom:1px solid var(--line); width:100%; }
@@ -432,6 +460,7 @@
   <div class="nav-links">
     <a href="#what">Platform</a>
     <a href="#demo">Demo</a>
+    <a href="#git-index">Git Index</a>
     <a href="#stats">Stats</a>
     <a href="#community">Community</a>
     <a href="https://github.com/pratiksingh1702/RIP" target="_blank">Docs</a>
@@ -531,16 +560,63 @@
   <div class="wrap">
     <div class="section-head reveal">
       <span class="section-tag">// 02 — In your terminal</span>
-      <h2>One command. Full understanding.</h2>
-      <p>This is a real session — no mockup data. Index a repo, then ask it anything.</p>
+      <h2>Clone, isolate, index, ask.</h2>
+      <p>Remote Git indexing works from terminal and the Flutter APK. Clone any repo into a named folder, then index only the subfolder you care about.</p>
     </div>
 
     <div class="terminal-shell reveal" id="terminal-wrap">
       <div class="terminal-bar">
         <span class="terminal-dot"></span><span class="terminal-dot"></span><span class="terminal-dot"></span>
-        <span class="terminal-title">~/payment-api — rip</span>
+        <span class="terminal-title">remote git indexing - rip</span>
       </div>
       <div class="terminal-body" id="terminal-body"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ REMOTE GIT INDEXING ============ -->
+<section id="git-index">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <span class="section-tag">// 03 - Remote Git indexing</span>
+      <h2>Clone a repo, index only the folder that matters.</h2>
+      <p>RIP can now clone a GitHub repository from the CLI or Flutter APK, initialize the selected project folder, respect .gitignore, and keep that project isolated from every other indexed repo.</p>
+    </div>
+
+    <div class="git-grid reveal">
+      <div class="git-panel">
+        <h3>CLI</h3>
+        <p>Use an explicit clone folder and a subfolder target. For Flutter apps, indexing <code>lib</code> keeps the graph focused on application code instead of Android, iOS, and build scaffolding.</p>
+        <code>repo git-index https://github.com/pratiksingh1702/flutter_music_app.git --folder-name flutter_music_app_lib --project-name flutter_music_app_lib --subdir lib --branch main</code>
+      </div>
+      <div class="git-panel">
+        <h3>Flutter APK</h3>
+        <p>The mobile app exposes the same flow through chat and the Add Repository sheet: Git URL, clone folder, index subfolder, project name, and branch all map to the same backend job.</p>
+        <code>/index https://github.com/pratiksingh1702/flutter_music_app.git --folder flutter_music_app_lib --project-name flutter_music_app_lib --subdir lib --branch main</code>
+      </div>
+    </div>
+
+    <div class="git-points reveal">
+      <div class="git-point">
+        <span class="fnum">WORKING</span>
+        <h4>Windows-safe cloning</h4>
+        <p>Remote clone jobs run Git in a worker thread, avoiding Windows event-loop subprocess failures under Uvicorn reload.</p>
+      </div>
+      <div class="git-point">
+        <span class="fnum">ISOLATED</span>
+        <h4>Stable project roots</h4>
+        <p>The clone folder stores the repository, while the indexed root can be a subfolder such as <code>lib</code>. Project IDs are derived from that indexed path.</p>
+      </div>
+      <div class="git-point">
+        <span class="fnum">CLEAN</span>
+        <h4>.gitignore respected</h4>
+        <p>Git-backed discovery uses tracked plus untracked non-ignored files, so ignored build output does not enter the graph.</p>
+      </div>
+      <div class="git-point">
+        <span class="fnum">VISIBLE</span>
+        <h4>Live job progress</h4>
+        <p>WebSocket and polling status report clone path, index path, subfolder, files indexed, entities found, and actionable failures.</p>
+      </div>
     </div>
   </div>
 </section>
@@ -549,7 +625,7 @@
 <section id="stats">
   <div class="wrap">
     <div class="section-head reveal">
-      <span class="section-tag">// 03 — At scale</span>
+      <span class="section-tag">// 04 — At scale</span>
       <h2>Built for repos that have outgrown grep.</h2>
     </div>
 
@@ -601,7 +677,7 @@
 <section id="community">
   <div class="wrap">
     <div class="section-head reveal">
-      <span class="section-tag">// 04 — Open source</span>
+      <span class="section-tag">// 05 — Open source</span>
       <h2>Built in the open.<br>Maintained by whoever shows up.</h2>
       <p>RIP is MIT-licensed and has no roadmap decided behind closed doors. Every graph query, every parser, every line of the Context Gateway is there for you to read, fork, or improve.</p>
     </div>
@@ -718,6 +794,7 @@
       <h5>Product</h5>
       <a href="#what">Platform</a>
       <a href="#demo">CLI Demo</a>
+      <a href="#git-index">Remote Git Index</a>
       <a href="https://github.com/pratiksingh1702/RIP/releases/latest" target="_blank">Mobile App</a>
       <a href="https://github.com/pratiksingh1702/RIP/releases/latest" target="_blank">Download APK</a>
     </div>
@@ -794,7 +871,22 @@ counters.forEach(c => counterIO.observe(c));
    TERMINAL TYPE-OUT SEQUENCE
 ============================================================ */
 const termBody = document.getElementById('terminal-body');
-const termScript = [
+const remoteGitTermScript = [
+  { t:'cmd', text:'repo git-index https://github.com/pratiksingh1702/flutter_music_app.git --folder-name flutter_music_app_lib --project-name flutter_music_app_lib --subdir lib --branch main' },
+  { t:'out', text:'<span class="ok">OK</span> Cloned into <b>.repo-intel/remote-repos/flutter_music_app_lib</b>' },
+  { t:'out', text:'<span class="ok">OK</span> Initialized project root at <b>flutter_music_app_lib/lib</b>' },
+  { t:'out', text:'<span class="ok">OK</span> .gitignore respected; Android, iOS, and build output skipped' },
+  { t:'out', text:'<span class="ok">OK</span> Graph + semantic index ready for the Flutter app lib folder\n' },
+  { t:'cmd', text:'/index https://github.com/pratiksingh1702/flutter_music_app.git --folder flutter_music_app_lib_2 --project-name flutter_music_app_lib --subdir lib --branch main' },
+  { t:'out', text:'<span class="accent">Flutter APK</span> starts the same backend job over REST + WebSocket progress' },
+  { t:'out', text:'  reports clone_path, index_path, files_indexed, entities_found, and errors\n' },
+  { t:'cmd', text:'repo explain "how typeProvider works" --project flutter_music_app_lib' },
+  { t:'out', text:'<span class="accent">Context</span> loaded from the indexed <b>lib</b> graph' },
+  { t:'out', text:'  workflow, dependencies, and relevant code are resolved from project-scoped nodes' },
+  { t:'out', text:'  same result shape from CLI, API, and mobile chat' },
+];
+const termScript = remoteGitTermScript;
+const legacyTermScript = [
   { t:'cmd', text:'repo index . ' },
   { t:'out', text:'<span class="ok">✓</span> Parsed <b>847 files</b> across 6 languages in 12.3s' },
   { t:'out', text:'<span class="ok">✓</span> Graph: <b>4,221 nodes</b> · <b>25,902 edges</b> written to Neo4j' },

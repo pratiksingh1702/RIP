@@ -47,6 +47,7 @@ class Settings(BaseSettings):
     project_name: str | None = None
     isolation_enabled: bool = True
     qdrant_isolation_strategy: str = "payload_filter"
+    git_repos_root: str = ".repo-intel/remote-repos"
 
 
 def load_toml_settings() -> dict:
@@ -110,6 +111,8 @@ def load_toml_settings() -> dict:
             flat["rip_server_host"] = srv["host"]
         if "port" in srv:
             flat["rip_server_port"] = srv["port"]
+        if "git_repos_root" in srv:
+            flat["git_repos_root"] = srv["git_repos_root"]
     if "llm" in config_data:
         llm_config = config_data["llm"]
         if "primary_provider" in llm_config:
@@ -239,5 +242,6 @@ explain_by_default = false
 [server]
 host = "0.0.0.0"
 port = 8000
+git_repos_root = ".repo-intel/remote-repos"
 auto_start = true
 """

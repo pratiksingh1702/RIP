@@ -93,10 +93,14 @@ class _SetupScreenState extends ConsumerState<SetupScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Icon(
-                Icons.settings,
-                size: 80,
-                color: Theme.of(context).colorScheme.primary,
+              ClipRRect(
+                borderRadius: BorderRadius.circular(20),
+                child: Image.asset(
+                  'assets/images/app_icon.png',
+                  width: 120,
+                  height: 120,
+                  fit: BoxFit.cover,
+                ),
               ),
               const SizedBox(height: 24),
               Text(

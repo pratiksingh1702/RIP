@@ -44,6 +44,12 @@ class CommandParser {
     'language',
     'service',
     'format',
+    'branch',
+    'folder',
+    'folder-name',
+    'project-name',
+    'subdir',
+    'subdirectory',
   };
 
   static const Map<String, String> _flagAliases = {
@@ -160,7 +166,16 @@ class CommandParser {
       {'name': '/metrics [module]', 'description': 'Show project metrics'},
       {'name': '/onboard', 'description': 'Get onboarding guide'},
       {'name': '/dependencies <file>', 'description': 'Show file dependencies'},
-      {'name': '/index <git_url>', 'description': 'Index a git repository'},
+      {
+        'name': '/index <git_url> --folder <name> --subdir lib',
+        'description': 'Index a git repository',
+        'flags': [
+          {'name': '--folder', 'description': 'Clone folder', 'value': '<name>'},
+          {'name': '--subdir', 'description': 'Index subfolder', 'value': '<path>'},
+          {'name': '--project-name', 'description': 'Project label', 'value': '<name>'},
+          {'name': '--branch', 'description': 'Git branch', 'value': '<name>'},
+        ],
+      },
       {'name': '/projects', 'description': 'List all projects'},
       {'name': '/dead-code', 'description': 'Find dead code'},
     ];

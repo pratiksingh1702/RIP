@@ -676,7 +676,7 @@ class _FloatingComposer extends StatelessWidget {
                               decoration: InputDecoration(
                                 hintText: activeProjectName == null
                                     ? 'Select a repository, then query architecture'
-                                    : 'Explore ${activeProjectName!}: trace flow, dependencies, symbols',
+                                    : 'Explore ${activeProjectName!}',
                                 hintStyle: TextStyle(
                                   color: AppColors.textSecondary
                                       .withValues(alpha: 0.72),

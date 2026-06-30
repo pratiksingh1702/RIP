@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import fnmatch
 import logging
+import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -15,6 +16,7 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_EXCLUDES = [
     ".git",
+    ".repo-intel",
     ".venv",
     "__pycache__",
     "node_modules",
@@ -73,6 +75,11 @@ class FileTraversal:
             return [root] if self._is_allowed(root, root.parent) else []
 
         logger.info("Scanning repository for source files under %s", root)
+        git_files = self._git_source_files(root)
+        if git_files is not None:
+            logger.info("Found %s git candidate source files", len(git_files))
+            return git_files
+
         files: list[Path] = []
         for path in root.rglob("*"):
             if path.is_file() and self._is_allowed(path, root):
@@ -108,3 +115,37 @@ class FileTraversal:
             return False
 
         return size_kb <= self.config.max_file_size_kb
+
+    def _git_source_files(self, root: Path) -> list[Path] | None:
+        try:
+            probe = subprocess.run(
+                ["git", "rev-parse", "--is-inside-work-tree"],
+                cwd=root,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+        except (OSError, ValueError):
+            return None
+        if probe.returncode != 0 or probe.stdout.strip() != "true":
+            return None
+
+        result = subprocess.run(
+            ["git", "ls-files", "--cached", "--others", "--exclude-standard", "-z"],
+            cwd=root,
+            capture_output=True,
+            check=False,
+        )
+        if result.returncode != 0:
+            logger.debug("git ls-files failed under %s: %s", root, result.stderr.decode(errors="replace"))
+            return None
+
+        files: list[Path] = []
+        for raw in result.stdout.split(b"\0"):
+            if not raw:
+                continue
+            rel = raw.decode("utf-8", errors="replace")
+            path = (root / rel).resolve()
+            if path.is_file() and self._is_allowed(path, root):
+                files.append(path)
+        return files

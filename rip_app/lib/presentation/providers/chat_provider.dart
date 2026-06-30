@@ -429,13 +429,28 @@ class ChatNotifier extends Notifier<List<Message>> {
 
       case CommandType.indexRepository:
         final gitUrl = cmd.arguments.isNotEmpty ? cmd.arguments.first : '';
-        final name = gitUrl.split('/').last.replaceAll('.git', '');
+        if (gitUrl.isEmpty) {
+          return 'Use `/index <git_url> --folder <clone-folder-name>` to index a repository.';
+        }
+        final folderName = cmd.flagValue('folder') ?? cmd.flagValue('folder-name');
+        if (folderName == null || folderName.trim().isEmpty) {
+          return 'Choose a clone folder first: `/index $gitUrl --folder <clone-folder-name>`.';
+        }
+        final name = cmd.flagValue('project-name') ?? gitUrl.split('/').last.replaceAll('.git', '');
+        final branch = cmd.flagValue('branch') ?? 'main';
+        final subdirectory = cmd.flagValue('subdir') ?? cmd.flagValue('subdirectory');
         final job = await client.startGitIndex(
           gitUrl: gitUrl,
           projectName: name,
+          folderName: folderName.trim(),
+          subdirectory: subdirectory?.trim(),
+          branch: branch,
           cancelToken: cancelToken,
         );
-        return 'Indexing job started. Job ID: ${job.jobId}';
+        final target = subdirectory == null || subdirectory.trim().isEmpty
+            ? (job.folderName ?? folderName)
+            : '${job.folderName ?? folderName}/${subdirectory.trim()}';
+        return 'Indexing job started in `$target`. Job ID: ${job.jobId}';
 
       case CommandType.projects:
         final projects = await client.listProjects(cancelToken: cancelToken);

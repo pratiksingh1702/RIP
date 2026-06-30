@@ -116,14 +116,19 @@ class RipClient {
   Future<IndexJob> startGitIndex({
     required String gitUrl,
     required String projectName,
+    required String folderName,
+    String? subdirectory,
     String branch = 'main',
     CancelToken? cancelToken,
   }) async {
     try {
-      RipLogger.info('Calling startGitIndex(gitUrl: $gitUrl, projectName: $projectName, branch: $branch)', tag: 'RipClient_Endpoint');
+      RipLogger.info('Calling startGitIndex(gitUrl: $gitUrl, projectName: $projectName, folderName: $folderName, subdirectory: $subdirectory, branch: $branch)', tag: 'RipClient_Endpoint');
       final response = await _dio.post('/git/index', data: {
         'git_url': gitUrl,
         'project_name': projectName,
+        'folder_name': folderName,
+        if (subdirectory != null && subdirectory.trim().isNotEmpty)
+          'subdirectory': subdirectory.trim(),
         'branch': branch,
       }, cancelToken: cancelToken);
       final job = IndexJob.fromJson(response.data as Map<String, dynamic>);

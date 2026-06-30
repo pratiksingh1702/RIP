@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:convert';
+import 'package:web_socket_channel/io.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import '../../utils/logger.dart';
 
@@ -17,12 +19,15 @@ class RipWebSocketClient {
   Future<void> connect(String jobId) async {
     RipLogger.info('Connecting for jobId: $jobId', tag: 'RipWebSocketClient');
     try {
-      final uri = Uri.parse(
-        '${serverUrl.replaceFirst('http://', 'ws://').replaceFirst('https://', 'wss://')}/ws/index/$jobId',
-      );
+      final uri = _buildIndexUri(jobId);
       RipLogger.info('WebSocket URI: $uri', tag: 'RipWebSocketClient');
 
-      _channel = WebSocketChannel.connect(uri);
+      _channel = IOWebSocketChannel.connect(
+        uri,
+        headers: apiKey != null && apiKey!.isNotEmpty
+            ? {'Authorization': 'Bearer $apiKey'}
+            : null,
+      );
       RipLogger.success('Connected', tag: 'RipWebSocketClient');
       
       _channel!.stream.listen(
@@ -32,7 +37,12 @@ class RipWebSocketClient {
             final decoded = data is String
                 ? data
                 : String.fromCharCodes(data as List<int>);
-            _controller.add({'data': decoded});
+            final json = jsonDecode(decoded);
+            if (json is Map<String, dynamic>) {
+              _controller.add(json);
+            } else {
+              _controller.add({'data': decoded});
+            }
           } catch (e) {
             RipLogger.error('Error decoding data: $e', tag: 'RipWebSocketClient', error: e);
             _controller.add({'error': e.toString()});
@@ -51,6 +61,17 @@ class RipWebSocketClient {
       RipLogger.error('Error connecting: $e', tag: 'RipWebSocketClient', error: e);
       _controller.add({'error': e.toString()});
     }
+  }
+
+  Uri _buildIndexUri(String jobId) {
+    final base = Uri.parse(serverUrl.trim());
+    final scheme = base.scheme == 'https' ? 'wss' : 'ws';
+    return base.replace(
+      scheme: scheme,
+      path: '/ws/index/$jobId',
+      query: null,
+      fragment: null,
+    );
   }
 
   void disconnect() {

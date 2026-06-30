@@ -39,6 +39,10 @@ async def index_progress_ws(websocket: WebSocket, job_id: str):
                 "files_indexed": job.files_indexed,
                 "entities_found": job.entities_found,
                 "project_id": job.project_id,
+                "folder_name": job.folder_name,
+                "subdirectory": job.subdirectory,
+                "clone_path": job.clone_path,
+                "index_path": job.index_path,
                 "error": job.error,
             })
 

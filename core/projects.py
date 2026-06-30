@@ -111,6 +111,7 @@ async def upsert_project(
     session: AsyncSession,
     project_id: str,
     project_name: str,
+    root: str | None = None,
     git_url: str | None = None,
     branch: str | None = None,
     files_count: int = 0,
@@ -124,6 +125,7 @@ async def upsert_project(
             Project(
                 id=project_id,
                 name=project_name,
+                root=root,
                 git_url=git_url,
                 branch=branch,
                 files_count=files_count,
@@ -135,6 +137,7 @@ async def upsert_project(
         )
     else:
         existing.name = project_name
+        existing.root = root or existing.root
         existing.git_url = git_url
         existing.branch = branch
         existing.files_count = files_count

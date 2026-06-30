@@ -1,5 +1,6 @@
 """RIP CLI entry point."""
 
+import asyncio
 from pathlib import Path
 from typing import Annotated
 
@@ -111,6 +112,79 @@ def index(
         languages=languages,
         verbose=verbose,
     )
+
+
+@app.command("git-index")
+def git_index(
+    git_url: Annotated[str, typer.Argument(help="Git repository URL to clone and index")],
+    folder_name: Annotated[
+        str,
+        typer.Option(
+            "--folder-name",
+            prompt=True,
+            help="Single folder name to clone into under the configured git repositories root",
+        ),
+    ],
+    project_name: Annotated[
+        str | None,
+        typer.Option("--project-name", help="Project name shown in RIP"),
+    ] = None,
+    subdirectory: Annotated[
+        str | None,
+        typer.Option("--subdir", help="Repository subfolder to initialize and index, for example lib"),
+    ] = None,
+    branch: Annotated[
+        str,
+        typer.Option("--branch", help="Git branch to clone"),
+    ] = "main",
+    keep_clone: Annotated[
+        bool,
+        typer.Option("--keep-clone/--remove-clone", help="Keep cloned source folder after indexing"),
+    ] = True,
+    verbose: Annotated[
+        bool,
+        typer.Option("-v", "--verbose", help="Show detailed runtime logs"),
+    ] = False,
+) -> None:
+    from core.git.cloner import CloneStatus, get_clone_service
+
+    def action() -> None:
+        name = project_name or _project_name_from_git_url(git_url)
+        job = asyncio.run(
+            get_clone_service().run_clone_and_index(
+                git_url=git_url,
+                project_name=name,
+                folder_name=folder_name,
+                subdirectory=subdirectory,
+                branch=branch,
+                keep_clone=keep_clone,
+            )
+        )
+        if job.status == CloneStatus.FAILED:
+            raise typer.BadParameter(job.error or "Git index failed")
+        typer.echo(
+            f"Indexed {job.files_indexed} files and {job.entities_found} entities "
+            f"for {job.project_name} ({job.project_id})"
+        )
+
+    _run_command(
+        "git-index",
+        verbose=verbose,
+        params={
+            "git_url": git_url,
+            "folder_name": folder_name,
+            "project_name": project_name,
+            "subdirectory": subdirectory,
+            "branch": branch,
+            "keep_clone": keep_clone,
+        },
+        action=action,
+    )
+
+
+def _project_name_from_git_url(git_url: str) -> str:
+    name = git_url.rstrip("/").split("/")[-1]
+    return name[:-4] if name.endswith(".git") else name
 
 
 @app.command("trace")

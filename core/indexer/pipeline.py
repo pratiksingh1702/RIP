@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import subprocess
 import time
 from collections.abc import AsyncGenerator
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
@@ -205,6 +206,10 @@ def _parse_file_worker_optimized(args: tuple) -> tuple:
 # ============================================================================
 
 def _scan_directory_fast(root: Path) -> tuple[list[Path], int, int]:
+    git_files = _scan_git_files(root)
+    if git_files is not None:
+        return git_files, len(git_files), 0
+
     parseable, scanned, skipped = [], 0, 0
     dirs = [str(root)]
     while dirs:
@@ -226,6 +231,46 @@ def _scan_directory_fast(root: Path) -> tuple[list[Path], int, int]:
         except (PermissionError, OSError):
             pass
     return parseable, scanned, skipped
+
+
+def _scan_git_files(root: Path) -> list[Path] | None:
+    try:
+        probe = subprocess.run(
+            ["git", "rev-parse", "--is-inside-work-tree"],
+            cwd=root,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except (OSError, ValueError):
+        return None
+    if probe.returncode != 0 or probe.stdout.strip() != "true":
+        return None
+
+    result = subprocess.run(
+        ["git", "ls-files", "--cached", "--others", "--exclude-standard", "-z"],
+        cwd=root,
+        capture_output=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        logger.debug("git ls-files failed under %s: %s", root, result.stderr.decode(errors="replace"))
+        return None
+
+    parseable: list[Path] = []
+    for raw in result.stdout.split(b"\0"):
+        if not raw:
+            continue
+        rel = raw.decode("utf-8", errors="replace")
+        if os.path.splitext(rel)[1].lower() not in SUPPORTED_EXTENSIONS:
+            continue
+        path = (root / rel).resolve()
+        if not path.is_file():
+            continue
+        if any(part in SKIP_DIRS for part in path.relative_to(root).parts):
+            continue
+        parseable.append(path)
+    return parseable
 
 async def _discover_files_fast(repo_path: Path, registry, progress: IndexProgress) -> list[Path]:
     progress.current_stage = "Discovering files"
@@ -767,6 +812,8 @@ async def index_repository_with_resources(
     repo_path: Path, client: Neo4jClient,
     qdrant_client=None, embedder=None, progress=None,
     rich_progress=None, rich_task=None,
+    project_id: str | None = None,
+    project_name: str | None = None,
 ) -> IndexSummary:
     pipeline = IndexPipeline()
     if progress is None: progress = IndexProgress()
@@ -776,23 +823,21 @@ async def index_repository_with_resources(
     
     # Detect languages from file extensions
     languages = set()
-    for root, _, files in os.walk(repo_path):
-        for file in files:
-            ext = os.path.splitext(file)[1].lower()
-            if ext in SUPPORTED_EXTENSIONS:
-                lang_map = {
-                    '.py': 'Python',
-                    '.ts': 'TypeScript',
-                    '.tsx': 'TypeScript',
-                    '.js': 'JavaScript',
-                    '.jsx': 'JavaScript',
-                    '.java': 'Java',
-                    '.go': 'Go',
-                    '.rs': 'Rust',
-                    '.dart': 'Dart',
-                }
-                if ext in lang_map:
-                    languages.add(lang_map[ext])
+    for file_path in (_scan_git_files(repo_path) or _scan_directory_fast(repo_path)[0]):
+        ext = file_path.suffix.lower()
+        lang_map = {
+            '.py': 'Python',
+            '.ts': 'TypeScript',
+            '.tsx': 'TypeScript',
+            '.js': 'JavaScript',
+            '.jsx': 'JavaScript',
+            '.java': 'Java',
+            '.go': 'Go',
+            '.rs': 'Rust',
+            '.dart': 'Dart',
+        }
+        if ext in lang_map:
+            languages.add(lang_map[ext])
     
     return IndexSummary(
         repo_path=str(repo_path), 

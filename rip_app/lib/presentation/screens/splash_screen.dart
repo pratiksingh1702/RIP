@@ -41,12 +41,16 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              Icons.code,
-              size: 100,
-              color: Theme.of(context).colorScheme.primary,
+            ClipRRect(
+              borderRadius: BorderRadius.circular(24),
+              child: Image.asset(
+                'assets/images/app_icon.png',
+                width: 180,
+                height: 180,
+                fit: BoxFit.cover,
+              ),
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 32),
             Text(
               'RIP',
               style: Theme.of(context).textTheme.headlineLarge?.copyWith(

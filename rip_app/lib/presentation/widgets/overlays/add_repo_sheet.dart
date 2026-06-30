@@ -18,6 +18,8 @@ class AddRepoSheet extends ConsumerStatefulWidget {
 class _AddRepoSheetState extends ConsumerState<AddRepoSheet> {
   final _gitUrlController = TextEditingController();
   final _projectNameController = TextEditingController();
+  final _folderNameController = TextEditingController();
+  final _subdirectoryController = TextEditingController(text: 'lib');
   final _branchController = TextEditingController(text: 'main');
   IndexJob? _currentJob;
   RipWebSocketClient? _wsClient;
@@ -32,6 +34,8 @@ class _AddRepoSheetState extends ConsumerState<AddRepoSheet> {
   void dispose() {
     _gitUrlController.dispose();
     _projectNameController.dispose();
+    _folderNameController.dispose();
+    _subdirectoryController.dispose();
     _branchController.dispose();
     _wsClient?.dispose();
     super.dispose();
@@ -51,24 +55,36 @@ class _AddRepoSheetState extends ConsumerState<AddRepoSheet> {
           if (_projectNameController.text.isEmpty) {
             _projectNameController.text = name;
           }
+          if (_folderNameController.text.isEmpty) {
+            _folderNameController.text = _safeFolderName(name);
+          }
         }
       } catch (_) {}
     }
   }
 
+  String _safeFolderName(String value) {
+    final safe = value.trim().replaceAll(RegExp(r'[^A-Za-z0-9._-]+'), '-');
+    return safe.replaceAll(RegExp(r'^[-_.]+|[-_.]+$'), '');
+  }
+
   Future<void> _startIndex() async {
     final gitUrl = _gitUrlController.text.trim();
     final projectName = _projectNameController.text.trim();
+    final folderName = _folderNameController.text.trim();
+    final subdirectory = _subdirectoryController.text.trim();
     final branch = _branchController.text.trim();
 
-    if (gitUrl.isEmpty || projectName.isEmpty) return;
+    if (gitUrl.isEmpty || projectName.isEmpty || folderName.isEmpty) return;
 
     final client = ref.read(ripClientProvider);
     try {
       final job = await client.startGitIndex(
         gitUrl: gitUrl,
         projectName: projectName,
-        branch: branch,
+        folderName: folderName,
+        subdirectory: subdirectory.isEmpty ? null : subdirectory,
+        branch: branch.isEmpty ? 'main' : branch,
       );
       setState(() {
         _currentJob = job;
@@ -76,6 +92,7 @@ class _AddRepoSheetState extends ConsumerState<AddRepoSheet> {
       // Connect to WebSocket
       _wsClient = RipWebSocketClient(
         serverUrl: ref.read(serverUrlProvider),
+        apiKey: ref.read(apiKeyProvider),
       );
       _wsClient!.stream.listen((event) {
         // Update UI from socket event
@@ -130,6 +147,8 @@ class _AddRepoSheetState extends ConsumerState<AddRepoSheet> {
       _currentJob = null;
       _gitUrlController.clear();
       _projectNameController.clear();
+      _folderNameController.clear();
+      _subdirectoryController.text = 'lib';
       _branchController.text = 'main';
     });
     _wsClient?.dispose();
@@ -181,6 +200,24 @@ class _AddRepoSheetState extends ConsumerState<AddRepoSheet> {
         ),
         const SizedBox(height: 16),
         TextField(
+          controller: _folderNameController,
+          decoration: const InputDecoration(
+            labelText: 'Clone Folder Name',
+            hintText: 'my-repository',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        const SizedBox(height: 16),
+        TextField(
+          controller: _subdirectoryController,
+          decoration: const InputDecoration(
+            labelText: 'Index Subfolder',
+            hintText: 'lib',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        const SizedBox(height: 16),
+        TextField(
           controller: _branchController,
           decoration: const InputDecoration(
             labelText: 'Branch',
@@ -227,6 +264,17 @@ class _AddRepoSheetState extends ConsumerState<AddRepoSheet> {
         StatusBadge(status: job.status),
         const SizedBox(height: 16),
         Text(job.progressMessage),
+        if (job.folderName != null || job.clonePath != null || job.indexPath != null) ...[
+          const SizedBox(height: 8),
+          Text(
+            [
+              if (job.folderName != null) 'Folder: ${job.folderName}',
+              if (job.clonePath != null) 'Path: ${job.clonePath}',
+              if (job.indexPath != null) 'Index: ${job.indexPath}',
+            ].join(' · '),
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+        ],
         const SizedBox(height: 16),
         Row(
           children: [

@@ -18,21 +18,41 @@
 
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
-  <meta name="description" content="A new Flutter project.">
+  <meta name="description" content="RIP is a Repository Intelligence Platform for indexing codebases into a knowledge graph and querying architecture, dependencies, workflows, and symbols from CLI or Flutter.">
+  <meta name="theme-color" content="#101820">
 
   <!-- iOS meta tags & icons -->
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
-  <meta name="apple-mobile-web-app-title" content="rip_app">
+  <meta name="apple-mobile-web-app-title" content="RIP">
   <link rel="apple-touch-icon" href="icons/Icon-192.png">
 
   <!-- Favicon -->
   <link rel="icon" type="image/png" href="favicon.png"/>
 
-  <title>rip_app</title>
+  <title>RIP · Repository Intelligence</title>
   <link rel="manifest" href="manifest.json">
 </head>
 <body>
+  <noscript>
+    <main style="font-family: Arial, sans-serif; max-width: 760px; margin: 48px auto; padding: 0 20px; color: #101820;">
+      <h1>RIP · Repository Intelligence</h1>
+      <p>
+        RIP indexes repositories into an isolated knowledge graph so developers can query their own codebase from the CLI,
+        server API, or Flutter app.
+      </p>
+      <h2>Git Clone Indexing</h2>
+      <p>
+        Remote repositories can be cloned into an explicit folder, initialized with RIP metadata, and indexed by repository
+        root or by a focused subfolder such as <code>lib</code>. Git ignored files are excluded from indexing.
+      </p>
+      <pre><code>repo git-index https://github.com/pratiksingh1702/flutter_music_app.git --folder-name flutter_music_app_lib --project-name flutter_music_app_lib --subdir lib --branch main</code></pre>
+      <p>
+        Flutter chat supports the same workflow:
+      </p>
+      <pre><code>/index https://github.com/pratiksingh1702/flutter_music_app.git --folder flutter_music_app_lib --project-name flutter_music_app_lib --subdir lib --branch main</code></pre>
+    </main>
+  </noscript>
   <!--
     You can customize the "flutter_bootstrap.js" script.
     This is useful to provide a custom configuration to the Flutter loader
@@ -41,6 +61,11 @@
     For more details:
     * https://docs.flutter.dev/platform-integration/web/initialization
   -->
+  <script>
+    console.info('RIP Repository Intelligence: remote git clone indexing is available from CLI and Flutter.');
+    console.info('CLI: repo git-index <git-url> --folder-name <folder> --project-name <name> --subdir lib --branch main');
+    console.info('Flutter: /index <git-url> --folder <folder> --project-name <name> --subdir lib --branch main');
+  </script>
   <script src="flutter_bootstrap.js" async></script>
 </body>
 </html>
