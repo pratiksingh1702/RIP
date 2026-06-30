@@ -40,9 +40,13 @@ class TableBlock extends StatelessWidget {
               columnSpacing: 24,
               columns: headers.map((header) {
                 return DataColumn(
-                  label: Text(
-                    header,
-                    style: AppTextStyles.bodyMdBold.copyWith(color: AppColors.textSecondary),
+                  label: ConstrainedBox(
+                    constraints: const BoxConstraints(minWidth: 80),
+                    child: Text(
+                      header,
+                      style: AppTextStyles.bodyMdBold.copyWith(color: AppColors.textSecondary),
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
                 );
               }).toList(),
@@ -50,9 +54,13 @@ class TableBlock extends StatelessWidget {
                 return DataRow(
                   cells: row.map((cell) {
                     return DataCell(
-                      Text(
-                        cell,
-                        style: AppTextStyles.bodySm.copyWith(color: AppColors.textPrimary),
+                      ConstrainedBox(
+                        constraints: const BoxConstraints(minWidth: 80),
+                        child: Text(
+                          cell,
+                          style: AppTextStyles.bodySm.copyWith(color: AppColors.textPrimary),
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
                     );
                   }).toList(),

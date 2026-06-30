@@ -23,7 +23,7 @@ class AppDrawer extends ConsumerWidget {
 
     return Drawer(
       width: MediaQuery.sizeOf(context).width * 0.82,
-      backgroundColor: AppColors.background,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       elevation: 0,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.only(
@@ -152,7 +152,7 @@ class AppDrawer extends ConsumerWidget {
                           onTap: () {
                             HapticFeedback.selectionClick();
                             Navigator.pop(context);
-                            context.go('/setup');
+                            context.push('/setup');
                           },
                         ),
                         const _CompactRow(
@@ -187,16 +187,17 @@ class _DrawerHeaderCompact extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     return Container(
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: colorScheme.surface,
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+        border: Border.all(color: colorScheme.outline.withValues(alpha: 0.6)),
       ),
-      child: const Row(
+      child: Row(
         children: [
-          SizedBox(
+          const SizedBox(
             width: 36,
             height: 36,
             child: DecoratedBox(
@@ -207,7 +208,7 @@ class _DrawerHeaderCompact extends StatelessWidget {
               child: Icon(Icons.auto_awesome_rounded, color: Colors.white),
             ),
           ),
-          SizedBox(width: 10),
+          const SizedBox(width: 10),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -215,7 +216,7 @@ class _DrawerHeaderCompact extends StatelessWidget {
                 Text(
                   'RIP',
                   style: TextStyle(
-                    color: AppColors.textPrimary,
+                    color: colorScheme.onSurface,
                     fontSize: 20,
                     fontWeight: FontWeight.w800,
                   ),
@@ -223,7 +224,7 @@ class _DrawerHeaderCompact extends StatelessWidget {
                 Text(
                   'AI workspace',
                   style: TextStyle(
-                    color: AppColors.textSecondary,
+                    color: colorScheme.onSurfaceVariant,
                     fontSize: 12,
                     fontWeight: FontWeight.w500,
                   ),
@@ -250,8 +251,9 @@ class _CompactAction extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     return Material(
-      color: AppColors.surface,
+      color: colorScheme.surface,
       borderRadius: BorderRadius.circular(16),
       child: InkWell(
         borderRadius: BorderRadius.circular(16),
@@ -267,8 +269,8 @@ class _CompactAction extends StatelessWidget {
                 child: Text(
                   label,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: AppColors.textPrimary,
+                  style: TextStyle(
+                    color: colorScheme.onSurface,
                     fontSize: 13,
                     fontWeight: FontWeight.w700,
                   ),
@@ -290,6 +292,7 @@ class _CompactSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: Column(
@@ -300,7 +303,7 @@ class _CompactSection extends StatelessWidget {
             child: Text(
               title,
               style: TextStyle(
-                color: AppColors.textSecondary.withValues(alpha: 0.78),
+                color: colorScheme.onSurfaceVariant.withValues(alpha: 0.9),
                 fontSize: 11,
                 fontWeight: FontWeight.w800,
                 letterSpacing: 0,
@@ -309,9 +312,9 @@ class _CompactSection extends StatelessWidget {
           ),
           DecoratedBox(
             decoration: BoxDecoration(
-              color: AppColors.surface,
+              color: colorScheme.surface,
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+              border: Border.all(color: colorScheme.outline.withValues(alpha: 0.55)),
             ),
             child: Column(children: children),
           ),
@@ -336,6 +339,7 @@ class _CompactRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -344,7 +348,7 @@ class _CompactRow extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
           child: Row(
             children: [
-              Icon(icon, color: AppColors.textSecondary, size: 18),
+              Icon(icon, color: colorScheme.onSurfaceVariant, size: 18),
               const SizedBox(width: 10),
               Expanded(
                 child: Column(
@@ -354,8 +358,8 @@ class _CompactRow extends StatelessWidget {
                       title,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: AppColors.textPrimary,
+                      style: TextStyle(
+                        color: colorScheme.onSurface,
                         fontSize: 13,
                         fontWeight: FontWeight.w700,
                       ),
@@ -366,7 +370,7 @@ class _CompactRow extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        color: AppColors.textSecondary.withValues(alpha: 0.7),
+                        color: colorScheme.onSurfaceVariant.withValues(alpha: 0.8),
                         fontSize: 11,
                       ),
                     ),

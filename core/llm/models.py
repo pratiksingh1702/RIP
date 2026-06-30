@@ -14,6 +14,7 @@ class ExplainIntent(str, Enum):
     ARCHITECTURE = "architecture"  # "Architecture of X", structure, modules
     API = "api"                # "API flow", endpoints, request/response
     STATE = "state"            # "State management", provider, notifier
+    DEPENDENCY = "dependency"  # "Dependencies of X", imports, callers
     SEMANTIC = "semantic"      # Default: semantic search-based
 
 
@@ -44,6 +45,7 @@ class ExplainContext:
     
     # Important files & entities
     important_files: list[str] = field(default_factory=list)
+    imported_files: list[dict] = field(default_factory=list)
     important_entities: list[dict] = field(default_factory=list)
     
     # Overview & suggestions
@@ -65,7 +67,25 @@ class ExplanationRequest(BaseModel):
     context_level: str = Field("file", description="Context scope: 'file', 'class', or 'function'")
     provider: str | None = Field(None, description="Optional: LLM provider to use")
     model: str | None = Field(None, description="Optional: LLM model to use")
-    project_id: str = Field(..., description="Project id to explain within")
+    project_id: str | None = Field(None, description="Project id to explain within")
+    repo_path: str | None = Field(
+        None,
+        description="Optional repository path used to resolve .repo-intel active project",
+    )
+    diagram: bool = Field(False, description="Show Mermaid workflow diagram")
+    tree: bool = Field(
+        False,
+        validation_alias=AliasChoices("tree", "tree_view"),
+        description="Show workflow tree",
+    )
+    dependencies: bool = Field(
+        False,
+        validation_alias=AliasChoices("dependencies", "deps"),
+        description="Show dependency table",
+    )
+    code: bool = Field(False, description="Show relevant indexed code snippets")
+    no_llm: bool = Field(False, description="Skip LLM and return graph context only")
+    max_hops: int = Field(8, description="Maximum workflow trace hops")
 
 
 class ExplanationResponse(BaseModel):

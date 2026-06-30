@@ -48,6 +48,7 @@ def explain(
     diagram: bool = False,        # NEW: Show Mermaid diagram
     tree_view: bool = False,       # NEW: Show Rich tree view
     dependencies: bool = False,    # NEW: Show dependency graph table
+    code: bool = False,            # NEW: Show relevant code snippets
     no_llm: bool = False,          # NEW: Skip LLM, just show graph
     max_hops: int = 8,             # NEW: Max hops for workflow trace
 ) -> None:
@@ -62,6 +63,7 @@ def explain(
         diagram: Show Mermaid diagram
         tree_view: Show Rich tree visualization
         dependencies: Show dependency table
+        code: Show relevant indexed code snippets
         no_llm: Skip LLM, show graph analysis only
         max_hops: Maximum hops for workflow tracing
     """
@@ -75,6 +77,7 @@ def explain(
             diagram=diagram,
             tree_view=tree_view,
             dependencies=dependencies,
+            code=code,
             no_llm=no_llm,
             max_hops=max_hops,
         )
@@ -90,6 +93,7 @@ async def _explain(
     diagram: bool = False,
     tree_view: bool = False,
     dependencies: bool = False,
+    code: bool = False,
     no_llm: bool = False,
     max_hops: int = 8,
 ) -> None:
@@ -131,6 +135,9 @@ async def _explain(
         
         if dependencies:
             _show_dependency_table(ctx)
+
+        if code:
+            _show_code_snippets(ctx)
         
         # Step 5: Show key info panel
         _show_info_panel(ctx)
@@ -242,20 +249,64 @@ def _generate_mermaid(ctx: ExplainContext) -> str:
 
 def _show_dependency_table(ctx: ExplainContext):
     """Show dependency graph as a Rich table."""
-    if not ctx.dependency_graph:
+    if not ctx.dependency_graph and not ctx.imported_files:
         return
     
     _safe_print("\n[bold cyan]Dependency Graph:[/bold cyan]")
-    table = Table(show_header=True, header_style="bold")
-    table.add_column("Component")
-    table.add_column("Relationship")
-    table.add_column("Target")
-    
-    for name, deps in list(ctx.dependency_graph.items())[:15]:
-        for dep_name, rel_type in deps[:3]:
-            table.add_row(name, rel_type, dep_name)
-    
-    console.print(table)
+    if ctx.dependency_graph:
+        table = Table(show_header=True, header_style="bold")
+        table.add_column("Component")
+        table.add_column("Relationship")
+        table.add_column("Target")
+
+        for name, deps in list(ctx.dependency_graph.items())[:15]:
+            for dep_name, rel_type in deps[:3]:
+                table.add_row(name, rel_type, dep_name)
+
+        console.print(table)
+
+    if ctx.imported_files:
+        _safe_print("\n[bold cyan]Imported Files:[/bold cyan]")
+        import_table = Table(show_header=True, header_style="bold")
+        import_table.add_column("Name")
+        import_table.add_column("Path")
+        import_table.add_column("Kind")
+
+        for item in ctx.imported_files:
+            target = str(item.get("target") or "")
+            name = target.replace("\\", "/").rstrip("/").split("/")[-1] or target
+            kind = "external" if item.get("is_external") else "file"
+            import_table.add_row(name, target, kind)
+
+        console.print(import_table)
+
+
+def _show_code_snippets(ctx: ExplainContext):
+    """Show indexed code snippets for the key entities."""
+    snippets = []
+    seen = set()
+    for entity in ctx.important_entities:
+        code = (entity.get("raw_code") or "").strip()
+        if not code:
+            continue
+        key = (entity.get("name"), entity.get("file_path"), code[:80])
+        if key in seen:
+            continue
+        seen.add(key)
+        snippets.append(entity)
+
+    if not snippets:
+        return
+
+    _safe_print("\n[bold cyan]Relevant Code:[/bold cyan]")
+    for entity in snippets[:5]:
+        name = entity.get("name") or "code"
+        file_path = entity.get("file_path") or ""
+        line_start = entity.get("line_start") or "?"
+        line_end = entity.get("line_end") or "?"
+        code = str(entity.get("raw_code") or "").strip()
+        _safe_print(f"\n[bold]{name}[/bold] [dim]({file_path}:{line_start}-{line_end})[/dim]")
+        console.print(_console_safe(code[:1600]), markup=False)
 
 
 def _show_info_panel(ctx: ExplainContext):

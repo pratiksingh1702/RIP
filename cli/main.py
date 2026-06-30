@@ -232,6 +232,10 @@ def explain(
         bool,
         typer.Option("--deps", help="Show dependency table"),
     ] = False,
+    code: Annotated[
+        bool,
+        typer.Option("--code", help="Show relevant indexed code snippets"),
+    ] = False,
     no_llm: Annotated[
         bool,
         typer.Option("--no-llm", help="Skip LLM, show graph analysis only"),
@@ -259,6 +263,7 @@ def explain(
             "diagram": diagram,
             "tree": tree,
             "dependencies": dependencies,
+            "code": code,
             "no_llm": no_llm,
             "max_hops": max_hops,
         },
@@ -271,6 +276,7 @@ def explain(
             diagram=diagram,
             tree_view=tree,
             dependencies=dependencies,
+            code=code,
             no_llm=no_llm,
             max_hops=max_hops,
         ),

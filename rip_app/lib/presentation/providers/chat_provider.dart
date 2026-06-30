@@ -224,6 +224,23 @@ class ChatNotifier extends Notifier<List<Message>> {
     }
   }
 
+  Future<void> resendMessage(String text) async {
+    await sendMessage(text);
+  }
+
+  Future<void> regenerateFromAssistant(String assistantMessageId) async {
+    final index = state.indexWhere((message) => message.id == assistantMessageId);
+    if (index <= 0) return;
+
+    for (var i = index - 1; i >= 0; i--) {
+      final candidate = state[i];
+      if (candidate.isUser && candidate.content.trim().isNotEmpty) {
+        await sendMessage(candidate.content);
+        return;
+      }
+    }
+  }
+
   Future<void> cancelCurrentRequest() async {
     final pendingId = _activePendingId;
     _activeCancelToken?.cancel('User stopped the request.');
@@ -270,6 +287,7 @@ class ChatNotifier extends Notifier<List<Message>> {
         final results = await client.search(
           projectId: projectId!,
           query: query,
+          limit: _intFlag(cmd, 'limit', fallback: 10),
           cancelToken: cancelToken,
         );
         if (results.isEmpty) return 'No search results found.';
@@ -282,6 +300,15 @@ class ChatNotifier extends Notifier<List<Message>> {
         final result = await client.explain(
           projectId: projectId!,
           topic: topic,
+          contextLevel: cmd.flagValue('level') ?? 'file',
+          provider: cmd.flagValue('provider'),
+          model: cmd.flagValue('model'),
+          diagram: cmd.hasFlag('diagram'),
+          tree: cmd.hasFlag('tree'),
+          dependencies: cmd.hasFlag('dependencies'),
+          code: cmd.hasFlag('code'),
+          noLlm: cmd.hasFlag('no-llm'),
+          maxHops: _intFlag(cmd, 'max-hops', fallback: 8),
           cancelToken: cancelToken,
         );
         return result['explanation'] as String? ?? 'No explanation returned.';
@@ -395,6 +422,7 @@ class ChatNotifier extends Notifier<List<Message>> {
         final result = await client.explain(
           projectId: projectId!,
           topic: 'dependencies of $file',
+          dependencies: true,
           cancelToken: cancelToken,
         );
         return result['explanation'] as String? ?? 'No dependency details found.';
@@ -428,6 +456,12 @@ class ChatNotifier extends Notifier<List<Message>> {
         );
         return result['explanation'] as String? ?? 'No response from server.';
     }
+  }
+
+  int _intFlag(ParsedCommand cmd, String name, {required int fallback}) {
+    final value = cmd.flagValue(name);
+    if (value == null || value == 'true') return fallback;
+    return int.tryParse(value) ?? fallback;
   }
 
   String? _localReplyForUnsupportedMessage(String text) {

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/design/app_colors.dart';
 import '../../../core/design/app_text_styles.dart';
@@ -108,6 +109,42 @@ class RipMessage extends ConsumerWidget {
                   data: message.content,
                   styleSheet: _markdownStyle(),
                 ),
+              const SizedBox(height: 10),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _AssistantActionButton(
+                    icon: Icons.copy_rounded,
+                    tooltip: 'Copy',
+                    onTap: () {
+                      HapticFeedback.selectionClick();
+                      Clipboard.setData(ClipboardData(text: message.content));
+                    },
+                  ),
+                  const SizedBox(width: 6),
+                  _AssistantActionButton(
+                    icon: Icons.refresh_rounded,
+                    tooltip: 'Regenerate',
+                    onTap: () {
+                      HapticFeedback.selectionClick();
+                      ref
+                          .read(chatProvider.notifier)
+                          .regenerateFromAssistant(message.id);
+                    },
+                  ),
+                  const SizedBox(width: 6),
+                  _AssistantActionButton(
+                    icon: Icons.replay_rounded,
+                    tooltip: 'Resend prompt',
+                    onTap: () {
+                      HapticFeedback.selectionClick();
+                      ref
+                          .read(chatProvider.notifier)
+                          .regenerateFromAssistant(message.id);
+                    },
+                  ),
+                ],
+              ),
             ],
           ),
         ),
@@ -215,6 +252,38 @@ class RipMessage extends ConsumerWidget {
       tableHead: AppTextStyles.bodyMdBold,
       tableBody: AppTextStyles.bodyMd,
       tableBorder: TableBorder.all(color: Colors.white.withValues(alpha: 0.07)),
+    );
+  }
+}
+
+class _AssistantActionButton extends StatelessWidget {
+  const _AssistantActionButton({
+    required this.icon,
+    required this.tooltip,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tooltip,
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          width: 30,
+          height: 30,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: Colors.white.withValues(alpha: 0.055),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+          ),
+          child: Icon(icon, color: AppColors.textSecondary, size: 15),
+        ),
+      ),
     );
   }
 }

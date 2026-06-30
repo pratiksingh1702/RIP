@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/design/app_colors.dart';
+import '../../core/design/app_theme.dart';
 import '../providers/chat_provider.dart';
 import '../providers/connection_provider.dart';
 import '../providers/project_provider.dart';
@@ -57,6 +58,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     }
     if (shouldExpand != _composerExpanded) {
       setState(() => _composerExpanded = shouldExpand);
+    } else if (shouldExpand) {
+      setState(() {});
     }
   }
 
@@ -101,10 +104,16 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
   void _insertCommand(String command) {
     HapticFeedback.selectionClick();
-    _textController.text = '$command ';
-    _textController.selection = TextSelection.collapsed(
-      offset: _textController.text.length,
-    );
+    final next = command.contains('<') ? command : '$command ';
+    final start = next.indexOf('<');
+    final end = next.indexOf('>');
+    _textController.text = next;
+    if (start >= 0 && end > start) {
+      _textController.selection = TextSelection(baseOffset: start, extentOffset: end + 1);
+    } else {
+      _textController.selection = TextSelection.collapsed(offset: next.length);
+    }
+    setState(() => _composerExpanded = true);
     _focusNode.requestFocus();
   }
 
@@ -126,12 +135,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     return Scaffold(
       extendBodyBehindAppBar: true,
       drawer: const AppDrawer(),
-      backgroundColor: AppColors.background,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: Builder(
         builder: (context) {
           return Stack(
             children: [
-              const ColoredBox(color: AppColors.background),
+              ColoredBox(color: Theme.of(context).scaffoldBackgroundColor),
               Column(
                 children: [
                   Expanded(
@@ -141,7 +150,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                             controller: _scrollController,
                             keyboardDismissBehavior:
                                 ScrollViewKeyboardDismissBehavior.onDrag,
-                            padding: const EdgeInsets.fromLTRB(0, 116, 0, 184),
+                            padding: const EdgeInsets.fromLTRB(0, 96, 0, 184),
                             itemCount: messages.length,
                             itemBuilder: (context, index) {
                               return TweenAnimationBuilder<double>(
@@ -174,7 +183,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                 },
                 onSettingsTap: () {
                   HapticFeedback.selectionClick();
-                  context.go('/setup');
+                  context.push('/setup');
                 },
                 activeProjectName: activeProject.maybeWhen(
                   data: (project) => project?.projectName,
@@ -215,6 +224,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                   ),
                 ),
               ),
+              const _BottomComposerFade(),
               Align(
                 alignment: Alignment.bottomCenter,
                 child: _FloatingComposer(
@@ -255,44 +265,37 @@ class _FloatingHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final top = MediaQuery.paddingOf(context).top;
-    final height = lerpDouble(82, 66, progress)!;
-    final veilAlpha = lerpDouble(0.70, 0.94, progress)!;
-    final midFadeAlpha = lerpDouble(0.34, 0.62, progress)!;
-    final tailFadeAlpha = lerpDouble(0.08, 0.22, progress)!;
-    final blurSigma = lerpDouble(2, 10, progress)!;
+    final chrome = Theme.of(context).extension<ChatChromeTheme>() ??
+        const ChatChromeTheme.dark();
+    final height = lerpDouble(72, 60, progress)!;
+    final veilAlpha = lerpDouble(0.74, 0.96, progress)!;
+    final midFadeAlpha = lerpDouble(0.38, 0.66, progress)!;
+    final tailFadeAlpha = lerpDouble(0.06, 0.18, progress)!;
 
     return Positioned(
       top: 0,
       left: 0,
       right: 0,
       child: SizedBox(
-        height: top + height + 58,
+        height: top + height + 28,
         child: Stack(
           children: [
             Positioned.fill(
               child: IgnorePointer(
-                child: ClipRect(
-                  child: BackdropFilter(
-                    filter: ImageFilter.blur(
-                      sigmaX: blurSigma,
-                      sigmaY: blurSigma,
-                    ),
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
-                          stops: const [0, 0.43, 0.66, 0.84, 1],
-                          colors: [
-                            AppColors.background.withValues(alpha: veilAlpha),
-                            AppColors.background
-                                .withValues(alpha: veilAlpha * 0.94),
-                            AppColors.background.withValues(alpha: midFadeAlpha),
-                            AppColors.background.withValues(alpha: tailFadeAlpha),
-                            AppColors.background.withValues(alpha: 0),
-                          ],
-                        ),
-                      ),
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      stops: const [0, 0.48, 0.72, 0.90, 1],
+                      colors: [
+                        chrome.fadeColor.withValues(alpha: veilAlpha),
+                        chrome.fadeColor
+                            .withValues(alpha: veilAlpha * 0.96),
+                        chrome.fadeColor.withValues(alpha: midFadeAlpha),
+                        chrome.fadeColor.withValues(alpha: tailFadeAlpha),
+                        chrome.fadeColor.withValues(alpha: 0),
+                      ],
                     ),
                   ),
                 ),
@@ -365,6 +368,41 @@ class _FloatingHeader extends StatelessWidget {
   }
 }
 
+class _BottomComposerFade extends StatelessWidget {
+  const _BottomComposerFade();
+
+  @override
+  Widget build(BuildContext context) {
+    final bottom = MediaQuery.paddingOf(context).bottom;
+    final chrome = Theme.of(context).extension<ChatChromeTheme>() ??
+        const ChatChromeTheme.dark();
+    return Positioned(
+      left: 0,
+      right: 0,
+      bottom: 0,
+      height: bottom + chrome.bottomFadeHeight,
+      child: IgnorePointer(
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              stops: const [0, 0.28, 0.58, 0.82, 1],
+              colors: [
+                chrome.fadeColor.withValues(alpha: 0),
+                chrome.fadeColor.withValues(alpha: 0.16),
+                chrome.fadeColor.withValues(alpha: 0.48),
+                chrome.fadeColor.withValues(alpha: 0.78),
+                chrome.fadeColor.withValues(alpha: 0.96),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _FloatingComposer extends StatelessWidget {
   const _FloatingComposer({
     required this.controller,
@@ -390,6 +428,9 @@ class _FloatingComposer extends StatelessWidget {
   Widget build(BuildContext context) {
     final bottom = MediaQuery.paddingOf(context).bottom;
     final hasFocus = focusNode.hasFocus;
+    final chrome = Theme.of(context).extension<ChatChromeTheme>() ??
+        const ChatChromeTheme.dark();
+    final radius = expanded ? chrome.composerExpandedRadius : chrome.composerRadius;
 
     return Padding(
       padding: EdgeInsets.fromLTRB(18, 0, 18, bottom + 30),
@@ -397,25 +438,25 @@ class _FloatingComposer extends StatelessWidget {
         duration: const Duration(milliseconds: 260),
         curve: Curves.easeOutCubic,
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(expanded ? 26 : 28),
+          borderRadius: BorderRadius.circular(radius),
           border: Border.all(
             color: hasFocus
-                ? AppColors.primary.withValues(alpha: 0.56)
-                : Colors.white.withValues(alpha: 0.08),
+                ? chrome.focusBorderColor.withValues(alpha: 0.56)
+                : chrome.borderColor.withValues(alpha: 0.82),
           ),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.42),
+              color: chrome.shadowColor.withValues(alpha: 0.42),
               blurRadius: 36,
               offset: const Offset(0, 20),
             ),
           ],
         ),
         child: ClipRRect(
-          borderRadius: BorderRadius.circular(expanded ? 26 : 28),
+          borderRadius: BorderRadius.circular(radius),
           child: DecoratedBox(
             decoration: BoxDecoration(
-              color: AppColors.surface.withValues(alpha: 0.98),
+              color: chrome.composerSurface.withValues(alpha: 0.98),
             ),
             child: Padding(
               padding: const EdgeInsets.fromLTRB(12, 9, 12, 9),
@@ -451,9 +492,15 @@ class _FloatingComposer extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
                         _ComposerButton(
-                          icon: Icons.add_rounded,
-                          tooltip: 'Attach',
-                          onPressed: () {},
+                          label: '@',
+                          tooltip: 'Projects',
+                          onPressed: () {
+                            controller.text = '@';
+                            controller.selection = TextSelection.collapsed(
+                              offset: controller.text.length,
+                            );
+                            focusNode.requestFocus();
+                          },
                         ),
                         Expanded(
                           child: ConstrainedBox(
@@ -493,9 +540,15 @@ class _FloatingComposer extends StatelessWidget {
                           ),
                         ),
                         _ComposerButton(
-                          icon: Icons.graphic_eq_rounded,
-                          tooltip: 'Voice',
-                          onPressed: () {},
+                          label: '/',
+                          tooltip: 'Commands',
+                          onPressed: () {
+                            controller.text = '/';
+                            controller.selection = TextSelection.collapsed(
+                              offset: controller.text.length,
+                            );
+                            focusNode.requestFocus();
+                          },
                         ),
                         const SizedBox(width: 4),
                         isBusy
@@ -520,12 +573,14 @@ class _ComposerLoadingBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final chrome = Theme.of(context).extension<ChatChromeTheme>() ??
+        const ChatChromeTheme.dark();
     return ClipRRect(
       borderRadius: BorderRadius.circular(18),
       child: DecoratedBox(
         decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.055),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.075)),
+          color: chrome.suggestionSurface.withValues(alpha: 0.42),
+          border: Border.all(color: chrome.borderColor.withValues(alpha: 0.76)),
           borderRadius: BorderRadius.circular(18),
         ),
         child: Column(
@@ -571,7 +626,7 @@ class _ComposerLoadingBar extends StatelessWidget {
                       style: IconButton.styleFrom(
                         fixedSize: const Size(32, 32),
                         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                        backgroundColor: Colors.white.withValues(alpha: 0.06),
+                        backgroundColor: chrome.controlSurface,
                         shape: const CircleBorder(),
                       ),
                     ),
@@ -656,17 +711,19 @@ class _StopSendButton extends StatelessWidget {
 
 class _ComposerButton extends StatelessWidget {
   const _ComposerButton({
-    required this.icon,
+    required this.label,
     required this.tooltip,
     required this.onPressed,
   });
 
-  final IconData icon;
+  final String label;
   final String tooltip;
   final VoidCallback onPressed;
 
   @override
   Widget build(BuildContext context) {
+    final chrome = Theme.of(context).extension<ChatChromeTheme>() ??
+        const ChatChromeTheme.dark();
     return Tooltip(
       message: tooltip,
       child: IconButton(
@@ -674,10 +731,17 @@ class _ComposerButton extends StatelessWidget {
           HapticFeedback.selectionClick();
           onPressed();
         },
-        icon: Icon(icon, color: AppColors.textSecondary, size: 22),
+        icon: Text(
+          label,
+          style: const TextStyle(
+            color: AppColors.textPrimary,
+            fontSize: 18,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
         style: IconButton.styleFrom(
           fixedSize: const Size(42, 42),
-          backgroundColor: Colors.white.withValues(alpha: 0.05),
+          backgroundColor: chrome.controlSurface,
           shape: const CircleBorder(),
         ),
       ),
@@ -761,24 +825,60 @@ class _ComposerSuggestions extends ConsumerWidget {
       );
     }
 
-    final filter = text.startsWith('/') ? text.substring(1).toLowerCase() : '';
+    final slashBody = text.startsWith('/') ? text.substring(1) : '';
+    final commandToken = slashBody.split(RegExp(r'\s+')).first.toLowerCase();
+    final filter = slashBody.contains(RegExp(r'\s')) ? commandToken : slashBody.toLowerCase();
     final commands = CommandParser.getAvailableCommands()
         .where((command) =>
-            command['name'].toLowerCase().contains(filter) ||
-            command['description'].toLowerCase().contains(filter))
-        .take(6)
+            command['name'].toString().toLowerCase().contains(filter) ||
+            command['description'].toString().toLowerCase().contains(filter))
         .toList();
-    return _SuggestionList(
-      emptyText: 'No commands found',
+    Map<String, dynamic>? matchedCommand;
+    for (final command in CommandParser.getAvailableCommands()) {
+      if (_commandName(command) == commandToken) {
+        matchedCommand = command;
+        break;
+      }
+    }
+    final flags = (matchedCommand?['flags'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+    return Column(
+      mainAxisSize: MainAxisSize.min,
       children: [
-        for (final command in commands)
-          _SuggestionRow(
-            icon: Icons.terminal_rounded,
-            title: command['name'],
-            subtitle: command['description'],
-            onTap: () => onCommandSelected(command['name']),
+        _SuggestionList(
+          emptyText: 'No commands found',
+          children: [
+            for (final command in commands)
+              _SuggestionRow(
+                icon: Icons.terminal_rounded,
+                title: command['name'],
+                subtitle: command['description'],
+                onTap: () => onCommandSelected(command['name'].toString()),
+              ),
+          ],
+        ),
+        if (flags.isNotEmpty) ...[
+          const SizedBox(height: 10),
+          _FlagChips(
+            flags: flags,
+            onSelected: _insertFlag,
           ),
+        ],
       ],
+    );
+  }
+
+  String _commandName(Map<String, dynamic> command) {
+    return command['name'].toString().split(' ').first.replaceFirst('/', '').toLowerCase();
+  }
+
+  void _insertFlag(Map<String, dynamic> flag) {
+    HapticFeedback.selectionClick();
+    final name = flag['name'].toString();
+    final current = controller.text;
+    final next = current.endsWith(' ') ? '$current$name ' : '$current $name ';
+    controller.value = TextEditingValue(
+      text: next,
+      selection: TextSelection.collapsed(offset: next.length),
     );
   }
 
@@ -794,6 +894,73 @@ class _ComposerSuggestions extends ConsumerWidget {
   }
 }
 
+class _FlagChips extends StatelessWidget {
+  const _FlagChips({
+    required this.flags,
+    required this.onSelected,
+  });
+
+  final List<Map<String, dynamic>> flags;
+  final ValueChanged<Map<String, dynamic>> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    final chrome = Theme.of(context).extension<ChatChromeTheme>() ??
+        const ChatChromeTheme.dark();
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: [
+          for (final flag in flags)
+            Tooltip(
+              message: flag['description'].toString(),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(18),
+                onTap: () => onSelected(flag),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                  decoration: BoxDecoration(
+                    color: chrome.suggestionSurface.withValues(alpha: 0.72),
+                    borderRadius: BorderRadius.circular(18),
+                    border: Border.all(
+                      color: chrome.borderColor.withValues(alpha: 0.82),
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        flag['name'].toString(),
+                        style: const TextStyle(
+                          color: AppColors.textPrimary,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      if (flag['value'] != null) ...[
+                        const SizedBox(width: 5),
+                        Text(
+                          flag['value'].toString(),
+                          style: TextStyle(
+                            color: AppColors.textSecondary.withValues(alpha: 0.75),
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
 class _SuggestionHeader extends StatelessWidget {
   const _SuggestionHeader({
     required this.title,
@@ -805,6 +972,8 @@ class _SuggestionHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final chrome = Theme.of(context).extension<ChatChromeTheme>() ??
+        const ChatChromeTheme.dark();
     return Row(
       children: [
         Text(
@@ -825,7 +994,7 @@ class _SuggestionHeader extends StatelessWidget {
             style: IconButton.styleFrom(
               fixedSize: const Size(32, 32),
               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              backgroundColor: Colors.white.withValues(alpha: 0.05),
+              backgroundColor: chrome.controlSurface,
               shape: const CircleBorder(),
             ),
           ),
@@ -880,8 +1049,10 @@ class _SuggestionRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final chrome = Theme.of(context).extension<ChatChromeTheme>() ??
+        const ChatChromeTheme.dark();
     return Material(
-      color: Colors.white.withValues(alpha: 0.055),
+      color: chrome.suggestionSurface.withValues(alpha: 0.54),
       borderRadius: BorderRadius.circular(16),
       child: InkWell(
         borderRadius: BorderRadius.circular(16),
@@ -932,6 +1103,7 @@ class _PremiumEmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     return Center(
       child: Padding(
         padding: const EdgeInsets.fromLTRB(28, 104, 28, 172),
@@ -943,7 +1115,7 @@ class _PremiumEmptyState extends StatelessWidget {
               height: 92,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: AppColors.surfaceVariant,
+                color: colorScheme.surfaceContainerHighest,
                 boxShadow: [
                   BoxShadow(
                     color: AppColors.primary.withValues(alpha: 0.28),
@@ -963,7 +1135,6 @@ class _PremiumEmptyState extends StatelessWidget {
               'What are we building today?',
               textAlign: TextAlign.center,
               style: TextStyle(
-                color: AppColors.textPrimary,
                 fontSize: 25,
                 height: 1.12,
                 fontWeight: FontWeight.w800,
@@ -974,7 +1145,7 @@ class _PremiumEmptyState extends StatelessWidget {
               'Ask about code, architecture, impact, dependencies, or the next change.',
               textAlign: TextAlign.center,
               style: TextStyle(
-                color: AppColors.textSecondary.withValues(alpha: 0.78),
+                color: colorScheme.onSurfaceVariant.withValues(alpha: 0.9),
                 fontSize: 14,
                 height: 1.45,
               ),
@@ -999,13 +1170,15 @@ class _GlassIconButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final chrome = Theme.of(context).extension<ChatChromeTheme>() ??
+        const ChatChromeTheme.dark();
     return Tooltip(
       message: tooltip,
       child: ClipOval(
         child: Material(
-          color: Colors.white.withValues(alpha: 0.08),
+          color: chrome.controlSurface,
           shape: CircleBorder(
-            side: BorderSide(color: Colors.white.withValues(alpha: 0.09)),
+            side: BorderSide(color: chrome.borderColor.withValues(alpha: 0.82)),
           ),
           child: InkWell(
             customBorder: const CircleBorder(),

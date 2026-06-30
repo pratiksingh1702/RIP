@@ -108,9 +108,19 @@ class ContextAssembler:
             if search_results:
                 ctx.found = True
                 ctx.important_entities = [
-                    {"name": r.name, "type": r.entity_type, "file_path": r.file_path}
+                    {
+                        "name": r.name,
+                        "type": r.entity_type,
+                        "file_path": r.file_path,
+                        "raw_code": r.raw_code,
+                        "line_start": r.line_start,
+                        "line_end": r.line_end,
+                    }
                     for r in search_results[:10]
                 ]
+                ctx.important_files = list(
+                    dict.fromkeys(r.file_path for r in search_results[:10] if r.file_path)
+                )
                 ctx.overview = f"Found {len(search_results)} relevant components for '{symbol}'."
                 ctx.context_str = self._format_search_context(symbol, search_results)
                 return ctx
@@ -136,6 +146,7 @@ class ContextAssembler:
             await self._build_semantic_context(ctx, entity, search_results)
         
         # Generate context string
+        await self._attach_imported_files(ctx, entity)
         ctx.context_str = self._format_context(ctx)
         ctx.suggestions = self._generate_suggestions(ctx)
         
@@ -498,6 +509,34 @@ class ContextAssembler:
         
         ctx.overview = f"`{entity.get('name')}` is a {entity.get('type', 'entity')} in the codebase."
 
+    async def _attach_imported_files(self, ctx: ExplainContext, entity: dict) -> None:
+        """Attach file-level imports for the primary entity's source file."""
+        file_path = entity.get("file_path")
+        fqn = entity.get("fqn")
+        if not file_path and not fqn:
+            return
+
+        query = """
+        OPTIONAL MATCH (source_file:File {path: $file_path, project_id: $project_id})
+        OPTIONAL MATCH (container:File {project_id: $project_id})-[:CONTAINS]->(e {fqn: $fqn, project_id: $project_id})
+        WITH coalesce(source_file, container) AS source
+        WHERE source IS NOT NULL
+        OPTIONAL MATCH (source)-[:IMPORTS]->(module:Module {project_id: $project_id})
+        OPTIONAL MATCH (module)-[:REPRESENTS]->(dep_file:File {project_id: $project_id})
+        WITH DISTINCT
+             coalesce(dep_file.path, module.name, module.module_key) AS target,
+             dep_file.path IS NULL AS is_external
+        WHERE target IS NOT NULL
+        RETURN target, is_external
+        ORDER BY is_external, target
+        LIMIT 100
+        """
+        rows = await self.graph_client.execute(
+            query,
+            {"file_path": file_path, "fqn": fqn, "project_id": self.project_id},
+        )
+        ctx.imported_files = [dict(row) for row in rows]
+
     # ========================================================================
     # CONTEXT FORMATTING
     # ========================================================================
@@ -566,6 +605,14 @@ class ContextAssembler:
             parts.append("### IMPORTANT FILES")
             for f in ctx.important_files[:5]:
                 parts.append(f"- `{f}`")
+            parts.append("")
+
+        if ctx.imported_files:
+            parts.append("### IMPORTED FILES")
+            for item in ctx.imported_files[:25]:
+                target = item.get("target", "")
+                kind = "external" if item.get("is_external") else "file"
+                parts.append(f"- `{target}` ({kind})")
             parts.append("")
         
         return "\n".join(parts)

@@ -1297,3 +1297,26 @@ Completed the production-grade transition of the Flutter mobile app from a local
 - [x] `flutter test` → **All tests passed** (exit 0)
 
 Checkpoint for Flutter production wiring: All surgical changes are in place. The app now connects to the real RIP backend via `RipClient`, parses structured API responses into typed `RipResponseBlock` objects via `ResponseParser`, renders rich block widgets (workflow trees, Mermaid diagrams, data tables, file lists, impact cards), and persists block data in the Drift `metadata` column. The dark design system (`ripDarkTheme` + `AppColors` + `AppTextStyles`) is enforced globally. `flutter analyze` exits 0 with no issues; the widget smoke test passes. Next steps: `flutter build apk --debug` and end-to-end connectivity test from a device against a live RIP server.
+
+## Explain CLI/API Parity and Flutter Command Flags
+
+- [x] Make `/explain` resolve the same indexed project scope as CLI by supporting `project_id` and `repo_path`
+- [x] Verify resolved project access before graph search and context assembly
+- [x] Replace API-only search shortcut with the CLI explain workflow: detect intent, hybrid search, `ContextAssembler.assemble_context()`, then optional LLM
+- [x] Add response metadata for resolved project id, project name, and project root
+- [x] Fix dependency intent parity by adding `ExplainIntent.DEPENDENCY`
+- [x] Add CLI-style explain flags to server request handling: `diagram`, `tree`, `dependencies`/`deps`, `no_llm`, `max_hops`, `provider`, `model`, and `context_level`
+- [x] Add `--code` support to CLI and server explain responses
+- [x] Make `--deps` output include imported file names and paths, not only relationship rows
+- [x] Attach imported file metadata to `ExplainContext` so CLI, API, and LLM prompt context use the same graph-backed source
+- [x] Add graph-only fallback output for `no_llm` and avoid prompt/LLM calls when it is set
+- [x] Include optional workflow tree, Mermaid diagram, dependency table, imported files, relevant code snippets, analysis summary, and suggestions in API markdown output
+- [x] Return structured `workflow_chain`, `dependency_graph`, `imported_files`, `important_files`, `important_entities`, `flags`, and `analysis_summary` in `/explain`
+- [x] Update Flutter command parser to parse CLI-like flags without mixing them into the query text
+- [x] Add Flutter composer flag chips for `/explain`, including `--deps`, `--code`, `--tree`, `--diagram`, `--no-llm`, `--max-hops`, `--provider`, `--model`, and `--level`
+- [x] Wire Flutter `RipClient.explain()` to send the explain flags to the server
+- [x] Wire `/search --limit` through Flutter command handling
+- [x] Keep `/dependencies <file>` routed through explain with dependency output enabled
+- [x] Add focused backend tests for repo path resolution, inaccessible project rejection, CLI-style graph flags, imported files, and relevant code output
+
+Checkpoint for explain parity: `/explain` now uses the same core project resolution, intent detection, hybrid search, and graph context assembly flow as `repo explain`. Server explain responses carry project debug metadata and can return CLI-style optional sections for workflow tree, Mermaid, dependency graph, imported files, and relevant indexed code. The Flutter chat field exposes those optional flags as chips and forwards parsed flags to the server instead of treating them as query text. Validation completed with `uv run pytest tests\unit\test_explain_project_resolution.py`, `uv run python -m py_compile core\llm\models.py core\llm\context_assembler.py server\routers\explain.py cli\commands\explain.py cli\main.py`, and `git diff --check`. Per request, Dart format, Flutter analyze, and other Flutter tooling were not run for this pass.

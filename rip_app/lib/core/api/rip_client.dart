@@ -246,6 +246,15 @@ class RipClient {
   Future<Map<String, dynamic>> explain({
     required String projectId,
     required String topic,
+    String contextLevel = 'file',
+    String? provider,
+    String? model,
+    bool diagram = false,
+    bool tree = false,
+    bool dependencies = false,
+    bool code = false,
+    bool noLlm = false,
+    int maxHops = 8,
     CancelToken? cancelToken,
   }) async {
     try {
@@ -253,6 +262,15 @@ class RipClient {
       final response = await _dio.post('/explain', data: {
         'query': topic,
         'project_id': projectId,
+        'context_level': contextLevel,
+        if (provider != null && provider.trim().isNotEmpty) 'provider': provider,
+        if (model != null && model.trim().isNotEmpty) 'model': model,
+        'diagram': diagram,
+        'tree': tree,
+        'dependencies': dependencies,
+        'code': code,
+        'no_llm': noLlm,
+        'max_hops': maxHops,
       }, cancelToken: cancelToken);
       final data = response.data as Map<String, dynamic>;
       final result = data['data'] as Map<String, dynamic>? ?? {};
