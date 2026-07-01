@@ -448,6 +448,49 @@
   @media (prefers-reduced-motion: reduce){
     *{ animation-duration:0.01ms !important; animation-iteration-count:1 !important; transition-duration:0.01ms !important; scroll-behavior:auto !important; }
   }
+  .install-box{
+    display:flex; align-items:center; justify-content:space-between;
+    background:#161622;
+    border:1px solid var(--line);
+    border-radius:10px;
+    padding:12px 16px;
+    gap:16px;
+    margin-top:12px;
+  }
+  .install-box code{
+    font-family:var(--mono);
+    font-size:14px;
+    color:var(--text);
+    background:none;
+    padding:0;
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    flex:1;
+  }
+  .copy-btn{
+    font-family:var(--mono);
+    font-size:12.5px;
+    font-weight:600;
+    padding:6px 12px;
+    background:rgba(0,212,255,0.1);
+    border:1px solid var(--cyan-dim);
+    border-radius:6px;
+    color:var(--cyan);
+    cursor:pointer;
+    transition:all .2s ease;
+    white-space:nowrap;
+    user-select:none;
+  }
+  .copy-btn:hover{
+    background:rgba(0,212,255,0.18);
+    border-color:var(--cyan);
+  }
+  .copy-btn.copied{
+    background:rgba(76,175,80,0.15);
+    border-color:#4CAF50;
+    color:#66bb6a;
+  }
 </style>
 </head>
 <body>
@@ -475,15 +518,14 @@
   <div class="hero-vignette"></div>
 
   <div class="hero-content">
-    <span class="eyebrow">v1.0 · local-first · Neo4j + Qdrant</span>
-    <h1>Your codebase,<br><span class="accent">as a graph</span> <span class="grey">your agents</span><br>can actually query.</h1>
+    <span class="eyebrow">v1.0 · zero Docker by default</span>
+    <h1>Your codebase,<br><span class="accent">as a graph</span> <span class="grey">you and your agents</span><br>can actually query.</h1>
     <p class="hero-sub">
-      RIP parses any repository into a knowledge graph with Tree-sitter, indexes it with Neo4j and Qdrant,
-      and gives AI coding agents <code>trace</code>, <code>impact</code>, and <code>explain</code> — instead of grep.
+      RIP parses any repository into a knowledge graph with Tree-sitter. Works <b>offline</b> and <b>no Docker required</b> — Neo4j, Qdrant are optional for team/server use.
     </p>
     <div class="hero-actions">
-      <a class="btn btn-primary" href="https://github.com/pratiksingh1702/RIP/releases/latest" target="_blank">
-        ↓ Download APK
+      <a class="btn btn-primary" href="#download">
+        🚀 Get Started
       </a>
       <a class="btn btn-ghost" href="https://github.com/pratiksingh1702/RIP" target="_blank">
         ⌥ View Source
@@ -500,11 +542,64 @@
   <div class="scroll-hint"><span>SCROLL</span><span class="scroll-line"></span></div>
 </section>
 
+<!-- ============ DOWNLOAD & GET STARTED ============ -->
+<section id="download">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <span class="section-tag">// 01 — Get Started</span>
+      <h2>Three steps from zero → zero Docker.</h2>
+    </div>
+
+    <div class="feat-grid reveal" style="margin-bottom:48px;">
+      <div class="feat-card">
+        <div class="feat-icon">1</div>
+        <h3>Install RIP</h3>
+        <p>Install via pip in one command:</p>
+        <div class="install-box">
+          <code id="pip-install-cmd">pip install repo-intelligence==0.1.0</code>
+          <button class="copy-btn" id="copy-btn" onclick="copyCommand()">Copy</button>
+        </div>
+        <span class="feat-tag">python 3.11+ required</span>
+      </div>
+      <div class="feat-card">
+        <div class="feat-icon">2</div>
+        <h3>Init your repo</h3>
+        <p>Open a terminal, cd to your repository, and run <code>repo init .</code></p>
+        <span class="feat-tag">no config · no setup</span>
+      </div>
+      <div class="feat-card">
+        <div class="feat-icon">3</div>
+        <h3>Index & Ask</h3>
+        <p><code>repo index .</code> then start tracing functions! That's it!</p>
+        <span class="feat-tag">local-first by default</span>
+      </div>
+    </div>
+
+    <div class="flow-strip reveal">
+      <div class="flow-step">
+        <span class="fnum">LOCAL</span>
+        <h4>Local Mode</h4>
+        <p>No Docker, no servers, or network required. Works 100% offline.</p>
+      </div>
+      <div class="flow-step">
+        <span class="fnum">AUTO</span>
+        <h4>Auto Mode</h4>
+        <p>Probes for Neo4j/Qdrant/Postgres; uses server providers if available.</p>
+      </div>
+      <div class="flow-step">
+        <span class="fnum">SERVER</span>
+        <h4>Server Mode</h4>
+        <p>Use all features: REST API, Flutter, Context Gateway, shared indexes.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
 <!-- ============ WHAT IT DOES ============ -->
 <section id="what">
   <div class="wrap">
     <div class="section-head reveal">
-      <span class="section-tag">// 01 — Platform</span>
+      <span class="section-tag">// 02 — Platform</span>
       <h2>Not a chatbot wrapper.<br>An understanding engine.</h2>
       <p>Every query is answered from a real graph traversal or vector search — not an LLM guessing at file contents. The model only narrates what the graph already proved.</p>
     </div>
@@ -961,6 +1056,71 @@ function typeOut(el, text, speed){
   });
 }
 function wait(ms){ return new Promise(r => setTimeout(r, ms)); }
+
+/* ============================================================
+   COPY TO CLIPBOARD for Install Command
+============================================================ */
+async function copyCommand() {
+  const cmdElement = document.getElementById('pip-install-cmd');
+  const copyBtn = document.getElementById('copy-btn');
+  const cmdText = cmdElement.textContent;
+  
+  try {
+    await navigator.clipboard.writeText(cmdText);
+    copyBtn.textContent = 'Copied!';
+    copyBtn.classList.add('copied');
+    
+    setTimeout(() => {
+      copyBtn.textContent = 'Copy';
+      copyBtn.classList.remove('copied');
+    }, 2000);
+  } catch (err) {
+    // Fallback for older browsers
+    const textArea = document.createElement('textarea');
+    textArea.value = cmdText;
+    document.body.appendChild(textArea);
+    textArea.select();
+    document.execCommand('copy');
+    document.body.removeChild(textArea);
+    
+    copyBtn.textContent = 'Copied!';
+    copyBtn.classList.add('copied');
+    
+    setTimeout(() => {
+      copyBtn.textContent = 'Copy';
+      copyBtn.classList.remove('copied');
+    }, 2000);
+  }
+}
+
+/* ============================================================
+   OS DETECTION for Download Button
+============================================================ */
+function getOS() {
+  const userAgent = window.navigator.userAgent.toLowerCase();
+  if (userAgent.includes('win')) return 'Windows';
+  if (userAgent.includes('mac')) return 'macOS';
+  if (userAgent.includes('linux')) return 'Linux';
+  return 'Other';
+}
+
+function updateDownloadButton() {
+  const os = getOS();
+  const btn = document.getElementById('download-btn');
+
+  const downloadUrls = {
+    Windows: 'https://github.com/pratiksingh1702/RIP/releases/latest',
+    macOS: 'https://github.com/pratiksingh1702/RIP/releases/latest',
+    Linux: 'https://github.com/pratiksingh1702/RIP/releases/latest',
+    Other: 'https://github.com/pratiksingh1702/RIP/releases/latest'
+  };
+
+  btn.textContent = `⬇️ Download for ${os}`;
+  btn.href = downloadUrls[os];
+}
+
+// Run on page load
+updateDownloadButton();
 
 /* ============================================================
    THREE.JS — Hero knowledge-graph visualization

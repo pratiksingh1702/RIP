@@ -4,6 +4,34 @@
 
 Repository Intelligence Platform (RIP) turns software repositories into structured knowledge graphs, semantic indexes, and agent-ready context packages.
 
+## Installation
+
+Install RIP via pip:
+
+```bash
+pip install repo-intelligence==0.1.0
+```
+
+## Quick Start
+
+1. Initialize your repository:
+   ```bash
+   cd your-repository
+   repo init --project-name "My Project"
+   ```
+
+2. Index your code:
+   ```bash
+   repo index
+   ```
+
+3. Start exploring:
+   ```bash
+   repo search "authentication"
+   repo trace main
+   repo explain "how login works" --no-llm --tree
+   ```
+
 RIP is infrastructure for repository understanding. It parses source code with Tree-sitter, writes architectural relationships into Neo4j, indexes compact semantic payloads in Qdrant, and exposes the result through a CLI, FastAPI service, MCP servers, a Context Gateway, and a VS Code extension.
 
 It is not a chatbot over files. The LLM, when used, is the final explanation step after static analysis, graph traversal, retrieval, reranking, and context assembly have already reduced the repository to grounded evidence.
@@ -570,6 +598,34 @@ uv run repo index --help
 ```
 
 ## Setup And Startup
+
+### Runtime Modes
+
+RIP supports `auto`, `server`, and `local` runtime modes behind the same CLI and MCP command surface.
+
+- `--mode local` uses local providers and stores graph/search/SQLite metadata under `.repo-intel/local/`.
+- `--mode server` requires Neo4j, Qdrant, PostgreSQL, and Redis from the root Docker stack.
+- `--mode auto` prefers server providers when they are healthy and falls back to local providers otherwise.
+
+Local mode is for single-user CLI, MCP, and VS Code subprocess workflows:
+
+```powershell
+uv run repo doctor . --mode local
+uv run repo index . --mode local
+uv run repo search "authentication flow" --mode local
+uv run repo explain UserService --mode local --no-llm --tree --deps
+uv run repo delete --mode local --yes
+```
+
+Server mode remains required for REST API, Flutter, Context Gateway, WebSockets, remote Git indexing, shared indexes, and concurrent-user workflows:
+
+```powershell
+docker compose up -d
+uv run repo serve --mode server
+uv run repo doctor . --mode server
+```
+
+Switching modes is explicit and non-destructive. Local and server indexes are separate storage backends, so re-run `repo index` in the mode you want to query. `repo doctor` reports selected providers, capabilities, root `.venv` status, and the local storage path.
 
 RIP has two startup paths. Use the bootstrap scripts when the environment still needs dependency sync or migrations. Use the runtime scripts when the virtual environments already exist and you just want to run the local platform.
 

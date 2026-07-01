@@ -18,12 +18,17 @@ console = Console()
 def metrics(
     module: str | None = None,
     top_risk: int | None = None,
+    mode: str = "auto",
 ) -> None:
     """Show coupling, cohesion, instability, and risk metrics."""
-    asyncio.run(_metrics(module=module, top_risk=top_risk))
+    asyncio.run(_metrics(module=module, top_risk=top_risk, mode=mode))
 
 
-async def _metrics(module: str | None, top_risk: int | None) -> None:
+async def _metrics(module: str | None, top_risk: int | None, mode: str = "auto") -> None:
+    if mode in {"local", "auto"}:
+        handled = await _metrics_runtime(module=module, top_risk=top_risk, mode=mode)
+        if handled:
+            return
     settings = get_settings()
     client = Neo4jClient(settings.neo4j_uri, settings.neo4j_user, settings.neo4j_password)
     try:
@@ -107,3 +112,44 @@ async def _metrics(module: str | None, top_risk: int | None) -> None:
             console.print(table)
     finally:
         await client.close()
+
+
+async def _metrics_runtime(module: str | None, top_risk: int | None, mode: str) -> bool:
+    from pathlib import Path
+
+    from core.engine import ContextEngine
+    from core.projects import resolve_project_id
+    from core.runtime.resolver import StorageResolver
+
+    env = await StorageResolver(Path.cwd(), mode=mode).resolve()
+    if mode == "auto" and env.mode.value != "local":
+        await env.graph.close()
+        await env.vector.close()
+        await env.metadata.close()
+        return False
+    try:
+        counts = await ContextEngine(env).metrics(resolve_project_id(None))
+
+        table = Table(title="Local Repository Metrics Summary")
+        table.add_column("Module", style="cyan")
+        table.add_column("Ca", justify="right")
+        table.add_column("Ce", justify="right")
+        table.add_column("Instability", justify="right")
+        items = sorted(counts.items())
+        if module:
+            items = [(name, value) for name, value in items if module.lower() in name.lower()]
+        if top_risk is not None:
+            items = sorted(items, key=lambda item: item[1]["in"] + item[1]["out"], reverse=True)[
+                :top_risk
+            ]
+        for name, value in items:
+            ca = value["in"]
+            ce = value["out"]
+            instability = ce / (ca + ce) if (ca + ce) else 0.0
+            table.add_row(name, str(ca), str(ce), f"{instability:.4f}")
+        console.print(table)
+        return True
+    finally:
+        await env.graph.close()
+        await env.vector.close()
+        await env.metadata.close()

@@ -1,7 +1,7 @@
 [project]
 name = "repo-intelligence"
 version = "0.1.0"
-description = "Repository Intelligence Platform"
+description = "Repository Intelligence Platform (RIP) - Your codebase as a graph"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
@@ -50,12 +50,16 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 include = ["cli*", "core*", "server*", "mcp*", "gateway*"]
+exclude = ["*.tests", "*.tests.*", "tests.*", "tests", "gateway.tests", "gateway.tests.*"]
 
 [dependency-groups]
 dev = [
-    "pytest>=8.2.0",
-    "pytest-asyncio>=0.23.0",
-    "ruff>=0.5.0",
+  "pytest>=8.2.0",
+  "pytest-asyncio>=0.23.0",
+  "ruff>=0.5.0",
+  "pyinstaller>=6.0.0",
+  "build>=1.5.0",
+  "twine>=6.2.0",
 ]
 
 [tool.ruff]

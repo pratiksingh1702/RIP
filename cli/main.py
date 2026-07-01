@@ -101,6 +101,7 @@ def index(
         bool,
         typer.Option("-v", "--verbose", help="Show detailed runtime logs"),
     ] = False,
+    mode: Annotated[str, typer.Option("--mode", help="Runtime mode: auto, server, or local")] = "auto",
 ) -> None:
     from cli.commands.index import index as index_command
 
@@ -111,6 +112,7 @@ def index(
         smart=smart,
         languages=languages,
         verbose=verbose,
+        mode=mode,
     )
 
 
@@ -201,6 +203,7 @@ def trace(
         bool,
         typer.Option("-v", "--verbose", help="Show detailed runtime logs and save a full log file"),
     ] = False,
+    mode: Annotated[str, typer.Option("--mode", help="Runtime mode: auto, server, or local")] = "auto",
 ) -> None:
     from cli.commands.trace import trace as trace_command
 
@@ -213,6 +216,7 @@ def trace(
             "output_format": output_format,
             "project": project,
             "explain": explain,
+            "mode": mode,
         },
         action=lambda: trace_command(
             entry_point,
@@ -220,6 +224,7 @@ def trace(
             output_format=output_format,
             explain=explain,
             project=project,
+            mode=mode,
         ),
     )
 
@@ -233,14 +238,15 @@ def impact(
         bool,
         typer.Option("-v", "--verbose", help="Show detailed runtime logs and save a full log file"),
     ] = False,
+    mode: Annotated[str, typer.Option("--mode", help="Runtime mode: auto, server, or local")] = "auto",
 ) -> None:
     from cli.commands.impact import impact as impact_command
 
     _run_command(
         "impact",
         verbose=verbose,
-        params={"symbol": symbol, "output_format": output_format, "project": project},
-        action=lambda: impact_command(symbol, output_format=output_format, project=project),
+        params={"symbol": symbol, "output_format": output_format, "project": project, "mode": mode},
+        action=lambda: impact_command(symbol, output_format=output_format, project=project, mode=mode),
     )
 
 
@@ -254,6 +260,7 @@ def dependencies(
         bool,
         typer.Option("-v", "--verbose", help="Show detailed runtime logs and save a full log file"),
     ] = False,
+    mode: Annotated[str, typer.Option("--mode", help="Runtime mode: auto, server, or local")] = "auto",
 ) -> None:
     from cli.commands.dependencies import dependencies as dependencies_command
 
@@ -265,9 +272,10 @@ def dependencies(
             "output_format": output_format,
             "project": project,
             "limit": limit,
+            "mode": mode,
         },
         action=lambda: dependencies_command(
-            target, output_format=output_format, project=project, limit=limit
+            target, output_format=output_format, project=project, limit=limit, mode=mode
         ),
     )
 
@@ -322,6 +330,7 @@ def explain(
         bool,
         typer.Option("-v", "--verbose", help="Show detailed runtime logs and save a full log file"),
     ] = False,
+    mode: Annotated[str, typer.Option("--mode", help="Runtime mode: auto, server, or local")] = "auto",
 ) -> None:
     from cli.commands.explain import explain as explain_command
 
@@ -340,6 +349,7 @@ def explain(
             "code": code,
             "no_llm": no_llm,
             "max_hops": max_hops,
+            "mode": mode,
         },
         action=lambda: explain_command(
             symbol=symbol,
@@ -353,6 +363,7 @@ def explain(
             code=code,
             no_llm=no_llm,
             max_hops=max_hops,
+            mode=mode,
         ),
     )
 
@@ -371,6 +382,7 @@ def search(
         bool,
         typer.Option("-v", "--verbose", help="Show detailed runtime logs and save a full log file"),
     ] = False,
+    mode: Annotated[str, typer.Option("--mode", help="Runtime mode: auto, server, or local")] = "auto",
 ) -> None:
     from cli.commands.search import search as search_command
 
@@ -384,6 +396,7 @@ def search(
             "service": service,
             "entity_type": entity_type,
             "project": project,
+            "mode": mode,
         },
         action=lambda: search_command(
             query,
@@ -392,6 +405,7 @@ def search(
             service=service,
             entity_type=entity_type,
             project=project,
+            mode=mode,
         ),
     )
 
@@ -439,20 +453,22 @@ def dead_code(
         bool,
         typer.Option("-v", "--verbose", help="Show detailed runtime logs and save a full log file"),
     ] = False,
+    mode: Annotated[str, typer.Option("--mode", help="Runtime mode: auto, server, or local")] = "auto",
 ) -> None:
     from cli.commands.dead_code import dead_code as dead_code_command
 
     _run_command(
         "dead-code",
         verbose=verbose,
-        params={"entity_type": entity_type, "output_format": output_format},
-        action=lambda: dead_code_command(entity_type=entity_type, output_format=output_format),
+        params={"entity_type": entity_type, "output_format": output_format, "mode": mode},
+        action=lambda: dead_code_command(entity_type=entity_type, output_format=output_format, mode=mode),
     )
 
 
 @app.command("onboard")
 def onboard(
     output: Annotated[Path | None, typer.Option("--output", help="Save to file")] = None,
+    mode: Annotated[str, typer.Option("--mode", help="Runtime mode: auto, server, or local")] = "auto",
     verbose: Annotated[
         bool,
         typer.Option("-v", "--verbose", help="Show detailed runtime logs and save a full log file"),
@@ -463,8 +479,8 @@ def onboard(
     _run_command(
         "onboard",
         verbose=verbose,
-        params={"output": output},
-        action=lambda: onboard_command(output=output),
+        params={"output": output, "mode": mode},
+        action=lambda: onboard_command(output=output, mode=mode),
     )
 
 
@@ -475,14 +491,35 @@ def architecture(
         bool,
         typer.Option("-v", "--verbose", help="Show detailed runtime logs and save a full log file"),
     ] = False,
+    mode: Annotated[str, typer.Option("--mode", help="Runtime mode: auto, server, or local")] = "auto",
 ) -> None:
     from cli.commands.architecture import architecture as architecture_command
 
     _run_command(
         "architecture",
         verbose=verbose,
-        params={"output_format": output_format},
-        action=lambda: architecture_command(output_format=output_format),
+        params={"output_format": output_format, "mode": mode},
+        action=lambda: architecture_command(output_format=output_format, mode=mode),
+    )
+
+
+@app.command("doctor")
+def doctor(
+    repo_path: Annotated[Path, typer.Argument(help="Repository path to diagnose")] = Path("."),
+    mode: Annotated[str, typer.Option("--mode", help="Runtime mode: auto, server, or local")] = "auto",
+    verbose: Annotated[
+        bool,
+        typer.Option("-v", "--verbose", help="Show detailed runtime logs and save a full log file"),
+    ] = False,
+) -> None:
+    from cli.commands.doctor import doctor as doctor_command
+
+    _run_command(
+        "doctor",
+        verbose=verbose,
+        log_root=repo_path,
+        params={"repo_path": repo_path, "mode": mode},
+        action=lambda: doctor_command(repo_path=repo_path, mode=mode),
     )
 
 
@@ -493,6 +530,7 @@ def metrics(
         typer.Option("--module", help="Metrics for a specific module"),
     ] = None,
     top_risk: Annotated[int | None, typer.Option("--top-risk", help="Top risk modules")] = None,
+    mode: Annotated[str, typer.Option("--mode", help="Runtime mode: auto, server, or local")] = "auto",
     verbose: Annotated[
         bool,
         typer.Option("-v", "--verbose", help="Show detailed runtime logs and save a full log file"),
@@ -503,8 +541,8 @@ def metrics(
     _run_command(
         "metrics",
         verbose=verbose,
-        params={"module": module, "top_risk": top_risk},
-        action=lambda: metrics_command(module=module, top_risk=top_risk),
+        params={"module": module, "top_risk": top_risk, "mode": mode},
+        action=lambda: metrics_command(module=module, top_risk=top_risk, mode=mode),
     )
 
 
@@ -513,6 +551,7 @@ def serve(
     host: Annotated[str | None, typer.Option("--host", help="Host to bind")] = None,
     port: Annotated[int | None, typer.Option("--port", help="Port to bind")] = None,
     reload: Annotated[bool, typer.Option("--reload", help="Reload on code changes")] = False,
+    mode: Annotated[str, typer.Option("--mode", help="Runtime mode: auto, server, or local")] = "server",
     verbose: Annotated[
         bool,
         typer.Option("-v", "--verbose", help="Show detailed runtime logs and save a full log file"),
@@ -523,8 +562,8 @@ def serve(
     _run_command(
         "serve",
         verbose=verbose,
-        params={"host": host, "port": port, "reload": reload},
-        action=lambda: serve_command(host=host, port=port, reload=reload),
+        params={"host": host, "port": port, "reload": reload, "mode": mode},
+        action=lambda: serve_command(host=host, port=port, reload=reload, mode=mode),
     )
 
 
@@ -572,6 +611,7 @@ def delete(
         bool,
         typer.Option("--storage/--no-storage", help="Reset RIP storage metadata tables"),
     ] = True,
+    mode: Annotated[str, typer.Option("--mode", help="Runtime mode: server or local")] = "server",
     verbose: Annotated[
         bool,
         typer.Option("-v", "--verbose", help="Show detailed runtime logs and save a full log file"),
@@ -588,9 +628,10 @@ def delete(
             "neo4j": neo4j,
             "qdrant": qdrant,
             "storage": storage,
+            "mode": mode,
         },
         action=lambda: delete_command(
-            project=project, yes=yes, neo4j=neo4j, qdrant=qdrant, storage=storage
+            project=project, yes=yes, neo4j=neo4j, qdrant=qdrant, storage=storage, mode=mode
         ),
     )
 

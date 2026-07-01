@@ -35,4 +35,6 @@ async def health(request: Request) -> dict[str, object]:
         "status": "ready",
         "neo4j": status["neo4j_available"],
         "qdrant": status["qdrant_available"],
+        "mode": status.get("mode", "server"),
+        "capabilities": status.get("capabilities", []),
     }

@@ -25,6 +25,7 @@ def search(
     service: str | None = None,
     entity_type: str | None = None,
     project: str | None = None,
+    mode: str = "auto",
 ) -> None:
     asyncio.run(
         _search(
@@ -34,6 +35,7 @@ def search(
             service=service,
             entity_type=entity_type,
             project=project,
+            mode=mode,
         )
     )
 
@@ -45,7 +47,21 @@ async def _search(
     service: str | None,
     entity_type: str | None,
     project: str | None,
+    mode: str = "auto",
 ) -> None:
+    if mode in {"local", "auto"}:
+        handled = await _search_runtime(
+            query=query,
+            limit=limit,
+            language=language,
+            service=service,
+            entity_type=entity_type,
+            project=project,
+            mode=mode,
+        )
+        if handled:
+            return
+
     settings = get_settings()
     project_id = resolve_project_id(project)
     qdrant_client = QdrantClientWrapper(
@@ -108,3 +124,56 @@ async def _search(
     finally:
         await qdrant_client.close()
         await graph_client.close()
+
+
+async def _search_runtime(
+    query: str,
+    limit: int,
+    language: str | None,
+    service: str | None,
+    entity_type: str | None,
+    project: str | None,
+    mode: str,
+) -> bool:
+    from pathlib import Path
+
+    from core.engine import ContextEngine
+    from core.projects import resolve_project_id
+    from core.runtime.resolver import StorageResolver
+
+    env = await StorageResolver(Path.cwd(), mode=mode).resolve()
+    if mode == "auto" and env.mode.value != "local":
+        await env.graph.close()
+        await env.vector.close()
+        await env.metadata.close()
+        return False
+    try:
+        engine = ContextEngine(env)
+        filters = {
+            "language": language,
+            "service": service,
+            "entity_type": entity_type,
+            "project_id": resolve_project_id(project),
+        }
+        results = await engine.search(
+            query,
+            project_id=resolve_project_id(project),
+            limit=limit,
+            filters=filters,
+        )
+        if not results:
+            console.print("[yellow]No local matches found.[/yellow]")
+            return True
+        table = Table(title=f"Local Search Results for: {query}")
+        table.add_column("FQN", style="cyan", no_wrap=True)
+        table.add_column("Type", style="magenta")
+        table.add_column("File Path", style="green")
+        table.add_column("Score", style="yellow", justify="right")
+        for item in results:
+            table.add_row(item.entity_id, item.entity_type, item.file_path, f"{item.score:.4f}")
+        console.print(table)
+        return True
+    finally:
+        await env.graph.close()
+        await env.vector.close()
+        await env.metadata.close()

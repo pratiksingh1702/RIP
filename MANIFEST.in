@@ -1,0 +1,6 @@
+exclude *.jpg *.jpeg *.png *.mp4
+exclude *.md !README.md
+exclude hi.html new.html index.txt issues.txt
+exclude gateway/tests/ tests/
+exclude .venv/ .repo-intel/ dist/ build/ *.egg-info/
+exclude .git/ .gitignore

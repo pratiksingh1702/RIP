@@ -12,6 +12,8 @@ class FakeRuntime:
         return {
             "neo4j_available": True,
             "qdrant_available": False,
+            "mode": "server",
+            "capabilities": ["REST_API"],
         }
 
 
@@ -24,4 +26,6 @@ async def test_health_reports_runtime_readiness() -> None:
         "status": "ready",
         "neo4j": True,
         "qdrant": False,
+        "mode": "server",
+        "capabilities": ["REST_API"],
     }

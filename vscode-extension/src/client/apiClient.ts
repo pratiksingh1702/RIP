@@ -1,3 +1,11 @@
+export interface HealthStatus {
+  status: string;
+  neo4j: boolean;
+  qdrant: boolean;
+  mode?: string;
+  capabilities?: string[];
+}
+
 export class ApiClient {
   private readonly baseUrl: string;
 
@@ -25,10 +33,25 @@ export class ApiClient {
 
   async isHealthy(): Promise<boolean> {
     try {
-      await this.request("/health");
+      await this.getHealth();
       return true;
     } catch {
       return false;
+    }
+  }
+
+  async getHealth(): Promise<HealthStatus> {
+    return this.request<HealthStatus>("/health");
+  }
+
+  async assertServerMode(): Promise<void> {
+    const health = await this.getHealth();
+    const capabilities = health.capabilities ?? [];
+    if (!capabilities.includes("REST_API") || health.mode === "local") {
+      throw new Error(
+        "RIP HTTP features require server mode. Start Neo4j, Qdrant, and PostgreSQL with " +
+          "`docker compose up -d`, then run `repo serve`. CLI features can still use local mode."
+      );
     }
   }
 

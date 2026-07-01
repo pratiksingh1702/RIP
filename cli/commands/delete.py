@@ -30,6 +30,7 @@ def delete(
     neo4j: bool = True,
     qdrant: bool = True,
     storage: bool = True,
+    mode: str = "server",
 ) -> None:
     """Clear RIP data stores."""
     if not any((neo4j, qdrant, storage)):
@@ -45,15 +46,49 @@ def delete(
             console.print("[yellow]Delete cancelled.[/yellow]")
             return
 
-    results = asyncio.run(
-        _delete_all(
-            project_id=project,
-            clear_neo4j=neo4j,
-            clear_qdrant=qdrant,
-            clear_storage=storage,
+    if mode == "local":
+        results = asyncio.run(_delete_local(project_id=project))
+    else:
+        results = asyncio.run(
+            _delete_all(
+                project_id=project,
+                clear_neo4j=neo4j,
+                clear_qdrant=qdrant,
+                clear_storage=storage,
+            )
         )
-    )
     _print_results(results)
+
+
+async def _delete_local(project_id: str | None = None) -> list[tuple[str, str, str]]:
+    from pathlib import Path
+
+    from core.runtime.resolver import StorageResolver
+
+    env = await StorageResolver(Path.cwd(), mode="local").resolve()
+    try:
+        if project_id is None:
+            projects = await env.metadata.list_projects()
+            ids = [project.id for project in projects]
+        else:
+            ids = [project_id]
+        graph_deleted = 0
+        vector_deleted = 0
+        storage_deleted = 0
+        for item in ids:
+            graph_deleted += await env.graph.delete_project(item)
+            vector_deleted += await env.vector.delete_project(item)
+            if await env.metadata.delete_project(item):
+                storage_deleted += 1
+        return [
+            ("Local graph", "cleared", f"Deleted {graph_deleted} nodes."),
+            ("Local vectors", "cleared", f"Deleted {vector_deleted} search payloads."),
+            ("Local metadata", "cleared", f"Deleted {storage_deleted} project rows."),
+        ]
+    finally:
+        await env.graph.close()
+        await env.vector.close()
+        await env.metadata.close()
 
 
 async def _delete_all(

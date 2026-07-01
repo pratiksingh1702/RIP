@@ -3,12 +3,38 @@
 from __future__ import annotations
 
 import uvicorn
+from rich.console import Console
 
+from core.runtime.capabilities import Capability
+from core.runtime.resolver import StorageResolver
 from server.config import get_settings
 
+console = Console()
 
-def serve(host: str | None = None, port: int | None = None, reload: bool = False) -> None:
+def serve(
+    host: str | None = None,
+    port: int | None = None,
+    reload: bool = False,
+    mode: str = "server",
+) -> None:
     settings = get_settings()
+    if mode != "server":
+        import asyncio
+        from pathlib import Path
+
+        env = asyncio.run(StorageResolver(Path.cwd(), mode=mode).resolve())
+        try:
+            if not env.has(Capability.REST_API):
+                console.print(
+                    "[yellow]REST API requires server mode with Neo4j, "
+                    "Qdrant, and PostgreSQL.[/yellow]"
+                )
+                console.print("[yellow]Start server storage with: docker compose up -d[/yellow]")
+                return
+        finally:
+            asyncio.run(env.graph.close())
+            asyncio.run(env.vector.close())
+            asyncio.run(env.metadata.close())
     uvicorn.run(
         "server.app:app",
         host=host or settings.rip_server_host,

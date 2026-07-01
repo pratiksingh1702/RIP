@@ -69,6 +69,7 @@ export class ExecutionEngine {
     if (!(await apiClient.isHealthy())) {
       await this.serverManager.startServer();
     }
+    await apiClient.assertServerMode();
 
     const query = String(intent.parameters.query || intent.target || '');
     const projectId = readActiveProjectId(workspaceRoot);

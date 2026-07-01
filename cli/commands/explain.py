@@ -51,6 +51,7 @@ def explain(
     code: bool = False,            # NEW: Show relevant code snippets
     no_llm: bool = False,          # NEW: Skip LLM, just show graph
     max_hops: int = 8,             # NEW: Max hops for workflow trace
+    mode: str = "auto",
 ) -> None:
     """Explain a code symbol with architecture-aware analysis.
     
@@ -80,6 +81,7 @@ def explain(
             code=code,
             no_llm=no_llm,
             max_hops=max_hops,
+            mode=mode,
         )
     )
 
@@ -96,7 +98,22 @@ async def _explain(
     code: bool = False,
     no_llm: bool = False,
     max_hops: int = 8,
+    mode: str = "auto",
 ) -> None:
+    if mode in {"local", "auto"}:
+        handled = await _explain_runtime(
+            symbol=symbol,
+            project=project,
+            diagram=diagram,
+            tree_view=tree_view,
+            dependencies=dependencies,
+            code=code,
+            no_llm=no_llm,
+            max_hops=max_hops,
+            mode=mode,
+        )
+        if handled:
+            return
     settings = get_settings()
     project_id = resolve_project_id(project)
     client = Neo4jClient(settings.neo4j_uri, settings.neo4j_user, settings.neo4j_password)
@@ -176,6 +193,88 @@ async def _explain(
     finally:
         await qdrant_client.close()
         await client.close()
+
+
+async def _explain_runtime(
+    symbol: str,
+    project: str | None,
+    diagram: bool,
+    tree_view: bool,
+    dependencies: bool,
+    code: bool,
+    no_llm: bool,
+    max_hops: int,
+    mode: str,
+) -> bool:
+    from pathlib import Path
+
+    from core.engine import ContextEngine
+    from core.projects import resolve_project_id
+    from core.runtime.resolver import StorageResolver
+
+    env = await StorageResolver(Path.cwd(), mode=mode).resolve()
+    if mode == "auto" and env.mode.value != "local":
+        await env.graph.close()
+        await env.vector.close()
+        await env.metadata.close()
+        return False
+
+    try:
+        project_id = resolve_project_id(project)
+        engine = ContextEngine(env)
+        _safe_print(f"[yellow]Analyzing locally: '{symbol}'...[/yellow]")
+        results = await engine.search(symbol, project_id=project_id, limit=10)
+        trace = await engine.trace(symbol, project_id=project_id, depth=max_hops)
+        dep_rows = await engine.dependencies(symbol, project_id=project_id)
+
+        ctx = ExplainContext(
+            query=symbol,
+            found=bool(results or trace.hops or dep_rows),
+            context_str="Local runtime graph/search analysis.",
+            overview="Local runtime graph/search analysis.",
+            important_files=sorted({item.file_path for item in results if item.file_path}),
+            important_entities=[
+                {
+                    "name": item.name,
+                    "type": item.entity_type,
+                    "file_path": item.file_path,
+                    "raw_code": item.raw_code,
+                }
+                for item in results
+            ],
+            workflow_chain=[
+                {
+                    "from": hop.from_symbol,
+                    "to": hop.to_symbol,
+                    "relationship": hop.relationship_type,
+                }
+                for hop in trace.hops
+            ],
+            dependency_graph={
+                symbol: [(edge.target, edge.relationship_type) for edge in dep_rows[:20]]
+            },
+        )
+        if not ctx.found:
+            console.print(f"[yellow]No local graph/search context found for {symbol}.[/yellow]")
+            return True
+        if diagram or tree_view:
+            _show_workflow_diagram(ctx, diagram=diagram, tree_view=tree_view)
+        if dependencies:
+            _show_dependency_table(ctx)
+        if code:
+            _show_code_snippets(ctx)
+        _show_info_panel(ctx)
+        if no_llm or env.mode.value == "local":
+            _safe_print(
+                "[dim]-> Local mode shows graph/search evidence. "
+                "LLM generation is skipped.[/dim]"
+            )
+            _show_fallback_context(ctx)
+        return True
+    finally:
+        await env.graph.close()
+        await env.vector.close()
+        await env.metadata.close()
 
 
 def _show_workflow_diagram(ctx: ExplainContext, diagram: bool = False, tree_view: bool = False):

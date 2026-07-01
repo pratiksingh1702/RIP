@@ -23,16 +23,23 @@ def dependencies(
     output_format: str = "text",
     project: str | None = None,
     limit: int = 25,
+    mode: str = "auto",
 ) -> None:
     """Show file-level imports, dependencies, and contained symbols."""
-    result = asyncio.run(_dependencies(target, project=project, limit=limit))
+    result = asyncio.run(_dependencies(target, project=project, limit=limit, mode=mode))
     if output_format == "json":
         print_json(result)
         return
     _print_dependency_view(result, limit=limit)
 
 
-async def _dependencies(target: str, project: str | None = None, limit: int = 25) -> dict:
+async def _dependencies(
+    target: str, project: str | None = None, limit: int = 25, mode: str = "auto"
+) -> dict:
+    if mode in {"local", "auto"}:
+        local_result = await _dependencies_runtime(target, project=project, limit=limit, mode=mode)
+        if local_result is not None:
+            return local_result
     settings = get_settings()
     client = Neo4jClient(settings.neo4j_uri, settings.neo4j_user, settings.neo4j_password)
     try:
@@ -46,6 +53,41 @@ async def _dependencies(target: str, project: str | None = None, limit: int = 25
         await client.close()
 
 
+async def _dependencies_runtime(
+    target: str, project: str | None, limit: int, mode: str
+) -> dict | None:
+    from core.engine import ContextEngine
+    from core.runtime.resolver import StorageResolver
+
+    env = await StorageResolver(Path.cwd(), mode=mode).resolve()
+    if mode == "auto" and env.mode.value != "local":
+        await env.graph.close()
+        await env.vector.close()
+        await env.metadata.close()
+        return None
+    try:
+        project_id = resolve_project_id(project)
+        rows = await ContextEngine(env).dependencies(target, project_id)
+        return {
+            "target": target,
+            "matched_file": {"path": target},
+            "imported_by": [],
+            "depends_on": [
+                {
+                    "target": edge.target,
+                    "is_external": False,
+                    "relationship_type": edge.relationship_type,
+                }
+                for edge in rows[:limit]
+            ],
+            "contains": [],
+        }
+    finally:
+        await env.graph.close()
+        await env.vector.close()
+        await env.metadata.close()
+
+
 def _display_path(path: str | None) -> str:
     if not path:
         return ""
@@ -57,7 +99,9 @@ def _symbol_kind(row: dict) -> str:
     return labels[-1] if labels else "Symbol"
 
 
-def _add_rows(tree: Tree, rows: list[dict], key: str, limit: int, suffix_key: str | None = None) -> None:
+def _add_rows(
+    tree: Tree, rows: list[dict], key: str, limit: int, suffix_key: str | None = None
+) -> None:
     shown = rows[:limit]
     for row in shown:
         label = _display_path(str(row.get(key) or ""))

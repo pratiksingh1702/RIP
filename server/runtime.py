@@ -5,6 +5,7 @@ from __future__ import annotations
 import time
 
 from core.graph.client import Neo4jClient
+from core.runtime.capabilities import SERVER_CAPABILITIES
 from core.search.client import QdrantClientWrapper
 from core.search.embedder import EmbeddingPipeline, embedding_dimension
 from core.search.reranker import CrossEncoderReranker
@@ -47,4 +48,9 @@ class ServerRuntime:
             "reranker_model_loaded": self.reranker._model is not None,
             "neo4j_available": self.neo4j._is_available,
             "qdrant_available": self.qdrant._is_available,
+            "mode": "server",
+            "graph_provider": "Neo4jProvider",
+            "vector_provider": "QdrantProvider",
+            "metadata_provider": "PostgresProvider",
+            "capabilities": sorted(cap.name for cap in SERVER_CAPABILITIES),
         }

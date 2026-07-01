@@ -68,6 +68,7 @@ TOOLS: dict[str, dict[str, Any]] = {
             "incremental": prop("boolean", "Index only changed files instead of a full index.", False),
             "languages": prop("string", "Comma-separated languages to restrict indexing."),
             "verbose": prop("boolean", "Show detailed runtime logs and write .repo-intel/logs output.", False),
+            "mode": prop("string", "Runtime mode: auto, server, or local.", "auto"),
             "allow_long_running": prop(
                 "boolean",
                 "Allow long-running index modes such as --watch.",
@@ -83,6 +84,7 @@ TOOLS: dict[str, dict[str, Any]] = {
             "format": prop("string", "Output format: text or json.", "text"),
             "project": prop("string", "Project id override."),
             "explain": prop("boolean", "Generate an explanation for the call path.", False),
+            "mode": prop("string", "Runtime mode: auto, server, or local.", "auto"),
         },
     },
     "repo_impact": {
@@ -91,6 +93,7 @@ TOOLS: dict[str, dict[str, Any]] = {
             "symbol": prop("string", "Symbol or file to analyze."),
             "format": prop("string", "Output format: text or json.", "text"),
             "project": prop("string", "Project id override."),
+            "mode": prop("string", "Runtime mode: auto, server, or local.", "auto"),
         },
     },
     "repo_explain": {
@@ -112,6 +115,7 @@ TOOLS: dict[str, dict[str, Any]] = {
             "deps": prop("boolean", "Show dependency table.", False),
             "no_llm": prop("boolean", "Skip LLM generation and show graph analysis only.", True),
             "max_hops": prop("integer", "Maximum workflow trace hops.", 8),
+            "mode": prop("string", "Runtime mode: auto, server, or local.", "auto"),
         },
     },
     "repo_search": {
@@ -123,6 +127,7 @@ TOOLS: dict[str, dict[str, Any]] = {
             "service": prop("string", "Filter results to a specific service."),
             "entity_type": prop("string", "Filter by entity type, e.g. function, class, widget."),
             "project": prop("string", "Project id override."),
+            "mode": prop("string", "Runtime mode: auto, server, or local.", "auto"),
         },
     },
     "repo_projects": {
@@ -141,18 +146,21 @@ TOOLS: dict[str, dict[str, Any]] = {
         "parameters": {
             "type": prop("string", "Entity type to check: functions, classes, or all.", "all"),
             "format": prop("string", "Output format: text or json.", "text"),
+            "mode": prop("string", "Runtime mode: auto, server, or local.", "auto"),
         },
     },
     "repo_onboard": {
         "description": "Generate a repository onboarding guide from indexed architecture data.",
         "parameters": {
             "output": prop("string", "Optional file path to save the guide."),
+            "mode": prop("string", "Runtime mode: auto, server, or local.", "auto"),
         },
     },
     "repo_architecture": {
         "description": "Visualize repository architecture as Mermaid or JSON.",
         "parameters": {
             "format": prop("string", "Output format: mermaid or json.", "mermaid"),
+            "mode": prop("string", "Runtime mode: auto, server, or local.", "auto"),
         },
     },
     "repo_metrics": {
@@ -160,6 +168,7 @@ TOOLS: dict[str, dict[str, Any]] = {
         "parameters": {
             "module": prop("string", "Specific module/file to inspect."),
             "top_risk": prop("integer", "Show the top N high-risk modules."),
+            "mode": prop("string", "Runtime mode: auto, server, or local.", "auto"),
         },
     },
     "repo_serve": {
@@ -172,6 +181,7 @@ TOOLS: dict[str, dict[str, Any]] = {
             "port": prop("integer", "Port to bind.", 8000),
             "reload": prop("boolean", "Enable auto-reload for development.", False),
             "background": prop("boolean", "Start as a background process and return PID.", True),
+            "mode": prop("string", "Runtime mode: server or local.", "server"),
         },
     },
     "repo_status": {
@@ -191,6 +201,7 @@ TOOLS: dict[str, dict[str, Any]] = {
             "neo4j": prop("boolean", "Clear Neo4j graph data.", True),
             "qdrant": prop("boolean", "Delete Qdrant vector collection/points.", True),
             "storage": prop("boolean", "Reset RIP metadata tables/rows.", True),
+            "mode": prop("string", "Runtime mode: server or local.", "server"),
         },
     },
     "repo_config": {
@@ -243,7 +254,12 @@ async def _serve_tool(parameters: dict[str, Any]) -> str:
         import cli.commands.serve as serve_module
 
         return await _run_captured(
-            lambda: serve_module.serve(host=host, port=port, reload=reload)
+            lambda: serve_module.serve(
+                host=host,
+                port=port,
+                reload=reload,
+                mode=str(_value(parameters, "mode", default="server")),
+            )
         )
 
     args = [
@@ -327,6 +343,7 @@ async def handle_tool_call(tool_name: str, parameters: dict[str, Any]) -> str:
                 incremental=bool(_value(parameters, "incremental", default=False)),
                 languages=_value(parameters, "languages"),
                 verbose=bool(_value(parameters, "verbose", default=False)),
+                mode=str(_value(parameters, "mode", default="auto")),
             ),
             [mod],
         )
@@ -341,6 +358,7 @@ async def handle_tool_call(tool_name: str, parameters: dict[str, Any]) -> str:
                 output_format=str(_value(parameters, "format", "output_format", default="text")),
                 explain=bool(_value(parameters, "explain", default=False)),
                 project=_value(parameters, "project"),
+                mode=str(_value(parameters, "mode", default="auto")),
             )
         )
 
@@ -352,6 +370,7 @@ async def handle_tool_call(tool_name: str, parameters: dict[str, Any]) -> str:
                 symbol=str(_value(parameters, "symbol", default="")),
                 output_format=str(_value(parameters, "format", "output_format", default="text")),
                 project=_value(parameters, "project"),
+                mode=str(_value(parameters, "mode", default="auto")),
             )
         )
 
@@ -370,6 +389,7 @@ async def handle_tool_call(tool_name: str, parameters: dict[str, Any]) -> str:
                 dependencies=bool(_value(parameters, "deps", "dependencies", default=False)),
                 no_llm=bool(_value(parameters, "no_llm", default=True)),
                 max_hops=int(_value(parameters, "max_hops", default=8)),
+                mode=str(_value(parameters, "mode", default="auto")),
             ),
             [mod],
         )
@@ -385,6 +405,7 @@ async def handle_tool_call(tool_name: str, parameters: dict[str, Any]) -> str:
                 service=_value(parameters, "service"),
                 entity_type=_value(parameters, "entity_type"),
                 project=_value(parameters, "project"),
+                mode=str(_value(parameters, "mode", default="auto")),
             ),
             [mod],
         )
@@ -412,6 +433,7 @@ async def handle_tool_call(tool_name: str, parameters: dict[str, Any]) -> str:
             lambda: mod.dead_code(
                 entity_type=str(_value(parameters, "type", "entity_type", default="all")),
                 output_format=str(_value(parameters, "format", "output_format", default="text")),
+                mode=str(_value(parameters, "mode", default="auto")),
             ),
             [mod],
         )
@@ -421,7 +443,10 @@ async def handle_tool_call(tool_name: str, parameters: dict[str, Any]) -> str:
 
         output = _value(parameters, "output")
         return await run(
-            lambda: mod.onboard(output=Path(str(output)) if output else None),
+            lambda: mod.onboard(
+                output=Path(str(output)) if output else None,
+                mode=str(_value(parameters, "mode", default="auto")),
+            ),
             [mod],
         )
 
@@ -431,6 +456,7 @@ async def handle_tool_call(tool_name: str, parameters: dict[str, Any]) -> str:
         return await run(
             lambda: mod.architecture(
                 output_format=str(_value(parameters, "format", "output_format", default="mermaid")),
+                mode=str(_value(parameters, "mode", default="auto")),
             ),
             [mod],
         )
@@ -443,6 +469,7 @@ async def handle_tool_call(tool_name: str, parameters: dict[str, Any]) -> str:
             lambda: mod.metrics(
                 module=_value(parameters, "module"),
                 top_risk=int(top_risk) if top_risk is not None else None,
+                mode=str(_value(parameters, "mode", default="auto")),
             ),
             [mod],
         )
@@ -465,6 +492,7 @@ async def handle_tool_call(tool_name: str, parameters: dict[str, Any]) -> str:
                 neo4j=bool(_value(parameters, "neo4j", default=True)),
                 qdrant=bool(_value(parameters, "qdrant", default=True)),
                 storage=bool(_value(parameters, "storage", default=True)),
+                mode=str(_value(parameters, "mode", default="server")),
             ),
             [mod],
         )

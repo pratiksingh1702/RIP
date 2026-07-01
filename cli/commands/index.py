@@ -121,6 +121,7 @@ def index(
     smart: bool = False,
     languages: str | None = None,
     verbose: bool = False,
+    mode: str = "auto",
 ) -> None:
     if languages and "python" not in {item.strip() for item in languages.split(",")}:
         console.print("[yellow]Only Python parsing is implemented in Phase 1.[/yellow]")
@@ -139,7 +140,15 @@ def index(
         )
     started = time.perf_counter()
     try:
-        if watch:
+        if mode == "local" and (watch or incremental or smart):
+            console.print(
+                "[yellow]Local mode currently supports full indexing. "
+                "Watch/incremental/smart will use server mode until local incremental routing lands.[/yellow]"
+            )
+        if mode == "local" and not (watch or incremental or smart):
+            console.print(f"[cyan]Local index on {repo_path}...[/cyan]")
+            asyncio.run(_index_local(repo_path))
+        elif watch:
             console.print(f"[cyan]Watch mode on {repo_path}...[/cyan]")
             _watch_mode(repo_path, verbose=verbose)
         elif smart:
@@ -150,7 +159,7 @@ def index(
             asyncio.run(_incremental_index(repo_path, verbose=verbose))
         else:
             console.print(f"[cyan]Full index on {repo_path}...[/cyan]")
-            asyncio.run(_index(repo_path, verbose=verbose, log_path=log_path))
+            asyncio.run(_index_unified(repo_path, mode=mode, verbose=verbose, log_path=log_path))
         if log_path:
             logger.info("Command completed: repo index in %.3fs", time.perf_counter() - started)
             console.print(f"[dim]Full log saved: {log_path}[/dim]")
@@ -356,6 +365,66 @@ async def _index(
         raise
     finally:
         await client.close()
+
+
+async def _index_unified(
+    repo_path: Path,
+    mode: str = "auto",
+    verbose: bool = False,
+    log_path: Path | None = None,
+) -> None:
+    if mode == "server":
+        await _index(repo_path, verbose=verbose, log_path=log_path)
+        return
+    if mode == "auto":
+        from core.runtime.environment import RuntimeMode
+        from core.runtime.resolver import StorageResolver
+
+        env = await StorageResolver(repo_path, mode=RuntimeMode.AUTO).resolve()
+        if env.mode.value == "local":
+            console.print(f"[cyan]Storage: {env.description}[/cyan]")
+            await _run_local_index(repo_path, env)
+            await env.graph.close()
+            await env.vector.close()
+            await env.metadata.close()
+            return
+        await env.graph.close()
+        await env.vector.close()
+        await env.metadata.close()
+    await _index(repo_path, verbose=verbose, log_path=log_path)
+
+
+async def _index_local(repo_path: Path) -> None:
+    from core.runtime.environment import RuntimeMode
+    from core.runtime.resolver import StorageResolver
+
+    env = await StorageResolver(repo_path, mode=RuntimeMode.LOCAL).resolve()
+    try:
+        console.print(f"[cyan]Storage: {env.description}[/cyan]")
+        await _run_local_index(repo_path, env)
+    finally:
+        await env.graph.close()
+        await env.vector.close()
+        await env.metadata.close()
+
+
+async def _run_local_index(repo_path: Path, env) -> None:
+    from core.runtime.local_indexer import index_local
+
+    p = IndexProgress()
+    console.print("[yellow]Starting local index...[/yellow]")
+    result = await index_local(repo_path, env, progress=p)
+    console.print()
+    console.print(
+        Panel(
+            f"[green]OK {result.files_indexed} files indexed[/green]\n"
+            f"[green]OK {result.progress.entities_extracted} entities extracted[/green]\n"
+            f"[green]OK {result.progress.embeddings_generated} local search payloads stored[/green]",
+            title="[bold]Local Index Complete[/bold]",
+            border_style="green",
+        )
+    )
+    console.print(f"[dim]Local storage: {repo_path / '.repo-intel' / 'local'}[/dim]")
 
 
 # ============================================================================

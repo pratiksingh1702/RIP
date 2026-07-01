@@ -1320,3 +1320,123 @@ Checkpoint for Flutter production wiring: All surgical changes are in place. The
 - [x] Add focused backend tests for repo path resolution, inaccessible project rejection, CLI-style graph flags, imported files, and relevant code output
 
 Checkpoint for explain parity: `/explain` now uses the same core project resolution, intent detection, hybrid search, and graph context assembly flow as `repo explain`. Server explain responses carry project debug metadata and can return CLI-style optional sections for workflow tree, Mermaid, dependency graph, imported files, and relevant indexed code. The Flutter chat field exposes those optional flags as chips and forwards parsed flags to the server instead of treating them as query text. Validation completed with `uv run pytest tests\unit\test_explain_project_resolution.py`, `uv run python -m py_compile core\llm\models.py core\llm\context_assembler.py server\routers\explain.py cli\commands\explain.py cli\main.py`, and `git diff --check`. Per request, Dart format, Flutter analyze, and other Flutter tooling were not run for this pass.
+
+## User Distribution / Local Mode Runtime Migration
+
+Planning source: `User_distribution_plan.md`. This migration must stay non-breaking: current server-mode commands, REST API routes, MCP tools, VS Code behavior, Gateway behavior, and Flutter server expectations remain intact while local mode is added underneath. Use the existing RIP root `uv` environment and root `.venv`; do not run broad reinstall/bootstrap flows unless explicitly requested.
+
+### Phase 0 - Baseline Audit and Safety Rails
+- [x] Confirm current command surfaces in `cli/main.py` and document which commands must remain server-only.
+- [x] Map direct backend dependencies in `cli/commands/index.py`, query command modules, `core/indexer/pipeline.py`, `server/runtime.py`, server routers, and MCP tools.
+- [x] Confirm `core/storage/` existing PostgreSQL role so new interfaces/providers are added without replacing ORM storage.
+- [x] Run baseline compile/static checks using the root uv environment.
+- [x] Checkpoint: baseline behavior and migration safety boundaries recorded before implementation changes.
+
+### Phase 1 - Capabilities, Interfaces, and Registry
+- [x] Add `core/runtime/capabilities.py` with the initial `Capability` enum and helper methods.
+- [x] Add `core/storage/interfaces/graph_store.py`, `vector_store.py`, and `metadata_store.py`.
+- [x] Add `core/storage/registry.py` with provider base classes, priority ordering, and resolution helpers.
+- [x] Add focused tests for capability composition and provider ordering.
+- [x] Checkpoint: abstractions exist without routing current commands through them.
+
+### Phase 2 - Server Providers Wrapping Existing Code
+- [x] Add `core/storage/providers/neo4j_provider.py` wrapping current `Neo4jClient` and graph query/build behavior.
+- [x] Add `core/storage/providers/qdrant_provider.py` wrapping current `QdrantClientWrapper` and `SearchIndexer` behavior.
+- [x] Add `core/storage/providers/postgres_provider.py` wrapping current SQLAlchemy storage/project helpers.
+- [x] Preserve existing `core/graph`, `core/search`, and `core/storage/database.py` APIs.
+- [x] Add provider wrapper tests using fakes/mocks where Docker is not required.
+- [x] Checkpoint: server providers expose the new interfaces while old server mode remains unchanged.
+
+### Phase 3 - Local Providers
+- [x] Add `NetworkXProvider` for local graph traversal, dependencies, architecture, impact, unused-code lookup, and project-scoped bulk writes.
+- [x] Add local vector provider with FAISS when available and NumPy/SciPy fallback for Windows-safe operation.
+- [x] Add `SQLiteProvider` under `.repo-intel/local/` for projects, file hashes, and optional embedding cache metadata.
+- [x] Update `pyproject.toml` only for dependencies required by the implemented local providers.
+- [x] Add Docker-free tests for local graph, vector, metadata, project isolation, and delete behavior.
+- [x] Checkpoint: local providers can be tested independently without Neo4j, Qdrant, PostgreSQL, or Redis.
+
+### Phase 4 - Runtime Environment, Resolver, and Doctor
+- [x] Add `core/runtime/environment.py` to hold active graph/vector/metadata providers and computed capabilities.
+- [x] Add `core/runtime/resolver.py` supporting `auto`, `server`, and `local` modes with short, non-writing probes.
+- [x] Add `core/runtime/doctor.py` and a `repo doctor` CLI command.
+- [x] Extend runtime/health reporting with provider names and capabilities while preserving existing health semantics.
+- [x] Add tests for explicit local mode, explicit server mode failure, auto fallback, and doctor output.
+- [x] Checkpoint: users can see exactly which runtime RIP selected and why.
+
+### Phase 5 - Provider-Aware Indexing
+- [x] Add provider-aware indexing that reuses existing parser discovery/parsing logic from `core/indexer/pipeline.py`.
+- [x] Preserve the current Neo4j/Qdrant indexing path until provider-aware parity is validated.
+- [x] Add `--mode auto|server|local` to `repo index`, defaulting to `auto`.
+- [x] Ensure `repo index . --mode server` preserves current full-stack behavior.
+- [x] Ensure `repo index . --mode local` indexes a fixture without Docker.
+- [x] Checkpoint: indexing is the first real end-to-end local mode path.
+
+### Phase 6 - Engine and Domain Services
+- [x] Add `core/engine/orchestrator.py` as a thin route-to-service layer.
+- [x] Add `core/engine/intent.py` or reuse existing explain intent logic through a stable service API.
+- [x] Add service modules for search, explain, trace, impact, architecture, metrics, onboard, dependencies, and dead-code.
+- [x] Wrap current query modules and analysis engines before attempting deeper rewrites.
+- [x] Add service tests using fake graph/vector/metadata stores.
+- [x] Checkpoint: business workflows can run against provider interfaces instead of direct clients.
+
+### Phase 7 - CLI and MCP Runtime Routing
+- [x] Route one low-risk CLI query command through `RuntimeEnvironment` and services, then expand command by command.
+- [x] Route `repo search`, `repo explain --no-llm`, `repo trace`, `repo impact`, `repo architecture`, `repo metrics`, `repo dependencies`, `repo dead-code`, and `repo onboard` through runtime services where capabilities permit.
+- [x] Route MCP tools through the same runtime resolver/services.
+- [x] Preserve current flags, output shape, and project resolution behavior.
+- [x] Add local-mode query command smoke tests after local indexing.
+- [x] Checkpoint: CLI and MCP can query local indexes without Docker.
+
+### Phase 8 - Server, Flutter, VS Code, and Gateway Capability Handling
+- [x] Update `repo serve` and `server/runtime.py` to require server-mode capabilities before creating server-only resources.
+- [x] Return clear server-mode upgrade guidance when REST, WebSocket, Flutter, Gateway, or remote Git capabilities are unavailable.
+- [x] Add server health capability details for Flutter and other clients.
+- [x] Update VS Code API-backed paths to surface server-mode guidance while preserving CLI subprocess local mode.
+- [x] Keep Gateway server-mode only and preserve existing root `.venv` plus `gateway/.venv` runtime launcher assumptions.
+- [x] Checkpoint: server-only surfaces fail gracefully in local-only environments.
+
+### Phase 9 - Persistence, Switching, and Cleanup
+- [x] Persist SQLite metadata and chosen local vector artifacts under `.repo-intel/local/`.
+- [x] Add guidance and code paths for switching between local and server backends.
+- [x] Add `repo delete` support for local providers and project-scoped cleanup.
+- [x] Add tests for index, process restart, local query, delete, and re-index.
+- [x] Checkpoint: local mode survives normal user restarts and cleanup workflows.
+
+### Phase 10 - Documentation and Release Hardening
+- [x] Update `README.md`, `cli.md`, `docs/architecture.md`, and relevant Gateway/Flutter notes.
+- [x] Document `repo doctor`, `--mode`, `.repo-intel/local/`, local/server tradeoffs, and troubleshooting.
+- [ ] Run focused unit tests, static checks, and manual local/server smoke checks through the root uv environment.
+- [x] Confirm no current command names, flags, or API routes were removed.
+- [ ] Checkpoint: local mode is documented, validated, and ready for implementation handoff/release.
+
+Checkpoint for user distribution planning: Combined the three architecture inputs into `User_distribution_plan.md` after reviewing the current RIP code layout. The accepted architecture uses `core/runtime` rather than `core/distribution`, capability sets rather than one-off feature gates, a thin `core/engine` orchestrator, domain services, and pluggable storage providers under the existing `core/storage` package. The implementation tracker above is intentionally unchecked and should be completed phase by phase using the existing root `uv` and `.venv` environment.
+
+## One-Click Install & Distribution (From Website)
+
+### Phase 0 - Pip Installation (Completed)
+- [x] Updated `pyproject.toml` to configure package for pip install
+- [x] Added Installation and Quick Start sections to `README.md` with `pip install repo-intelligence==0.1.0`
+- [x] Updated `web/index.html` to show pip install instructions instead of just installer downloads
+- [x] Verified `uv run repo --help` works correctly
+- [x] Created `MANIFEST.in` to exclude non-essential files from package
+
+### Phase 1 - Build System Setup
+- [x] Create build scripts for standalone executables using `pyinstaller`/`uvx`
+  - [ ] Windows `.exe` with installer
+  - [ ] macOS `.app`/`.dmg`
+  - [ ] Linux `.AppImage`/`.deb`
+- [x] Configure executable bundling to include all dependencies (no external Python/uv/Docker required)
+- [x] Add `core/utils/paths.py` for bundled path handling
+
+### Phase 2 - Installer Features
+- [ ] Add PATH environment variable setup during installation
+- [ ] Add Start menu/desktop shortcuts during install
+- [ ] Test end-to-end install flow (download → install → run `repo init`)
+- [ ] Test post-install CLI commands in local mode
+
+### Phase 3 - Website Integration (ripdev.netlify.app)
+- [x] Update `web/index.html` with:
+  - [x] Add JavaScript OS auto-detection
+  - [x] Add prominent "Download RIP" section
+  - [x] Add simple 1-2-3 getting started guide on website
+- [ ] Host built installers on Netlify or your chosen hosting

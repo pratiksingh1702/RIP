@@ -6,6 +6,36 @@ This is a comprehensive guide to all RIP (Repository Intelligence Platform) CLI 
 ## Verbose Logs
 Every CLI command accepts `-v` / `--verbose`. When enabled, RIP prints detailed runtime logs and writes the full command log to `.repo-intel/logs/<command>-YYYYMMDD-HHMMSS.log` under the command's target repository when one is provided, otherwise under the current working directory.
 
+## Runtime Modes
+
+Runtime-aware commands accept `--mode auto|server|local`.
+
+- `auto`: prefer server providers when Neo4j, Qdrant, and PostgreSQL are healthy; otherwise use local providers.
+- `server`: require the full Docker-backed server stack.
+- `local`: use `.repo-intel/local/` for graph, search payloads, and SQLite metadata.
+
+Useful local-mode commands:
+
+```powershell
+uv run repo doctor . --mode local
+uv run repo index . --mode local
+uv run repo search "payment service" --mode local
+uv run repo trace PaymentService --mode local
+uv run repo explain PaymentService --mode local --no-llm --tree --deps
+uv run repo metrics --mode local
+uv run repo onboard --mode local
+uv run repo delete --mode local --yes
+```
+
+Server-only capabilities include `repo serve`, Flutter, Context Gateway, WebSockets, remote Git indexing, shared indexes, and concurrent-user access. Start them with:
+
+```powershell
+docker compose up -d
+uv run repo serve --mode server
+```
+
+`repo doctor` prints selected providers, active capabilities, whether the root `.venv` is active, and the local storage path.
+
 ## Table of Contents
 - [repo init](#repo-init)
 - [repo index](#repo-index)
