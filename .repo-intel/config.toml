@@ -1,8 +1,18 @@
 [project]
-name = "RIP"
+name = "RIP Test"
 root = "C:/Users/Dell/Downloads/RIP"
-languages = ["python", "java", "typescript"]
-exclude = ["node_modules", "__pycache__", "*.min.js", "vendor/", "dist/"]
+languages = [
+    "python",
+    "java",
+    "typescript",
+]
+exclude = [
+    "node_modules",
+    "__pycache__",
+    "*.min.js",
+    "vendor/",
+    "dist/",
+]
 
 [indexing]
 incremental = true
@@ -19,8 +29,6 @@ max_trace_depth = 15
 qdrant_host = "localhost"
 qdrant_port = 6333
 embedding_model = "all-MiniLM-L6-v2"
-# For higher quality at the cost of slower startup and larger downloads:
-# embedding_model = "BAAI/bge-m3"
 top_k = 20
 
 [storage]
@@ -31,23 +39,18 @@ use_sqlite = false
 [llm]
 primary_provider = "google"
 primary_model = "gemini-2.5-flash"
-fallback_providers = ["openrouter"]
+fallback_providers = [
+    "openrouter",
+]
 timeout = 60
 max_tokens = 1500
 temperature = 0.2
 retry_count = 3
 stream = false
 ollama_host = "http://localhost:11434"
-# openai_api_key = "your-openai-api-key"
-# openai_base_url = ""
 openrouter_api_key = "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"
 openrouter_base_url = "https://openrouter.ai/api/v1"
-# anthropic_api_key = "your-anthropic-api-key"
 google_api_key = ""
-# groq_api_key = "your-groq-api-key"
-# azure_api_key = "your-azure-api-key"
-# azure_endpoint = "your-azure-endpoint"
-# azure_api_version = "2024-02-15-preview"
 max_context_tokens = 6000
 explain_by_default = false
 
@@ -55,3 +58,8 @@ explain_by_default = false
 host = "127.0.0.1"
 port = 8000
 auto_start = true
+
+[isolation]
+enabled = true
+qdrant_strategy = "payload_filter"
+require_project_filter = true

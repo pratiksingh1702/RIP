@@ -451,17 +451,34 @@ repo delete --yes --no-storage
 ---
 
 ## repo config
-Show or modify configuration settings.
+View and edit RIP configuration.
 
 ### Usage
 ```powershell
-repo config [-v|--verbose]
+repo config [repo_path] [--get <key>] [--set <key=value>] [--edit] [-v|--verbose]
 ```
 
 ### Arguments & Options
+- **repo_path**: Path to the repository (default: `.`)
+- **--get <key>**: Get a specific configuration value (e.g., `llm.primary_provider`)
+- **--set <key=value>**: Set a configuration value (e.g., `llm.primary_provider=openai`)
+- **--edit, -e**: Open the configuration file in your default editor
 - **-v, --verbose**: Show detailed runtime logs and write a full log file to `.repo-intel/logs/`
 
-*Note: This command is not yet implemented.*
+### Examples
+```powershell
+# Show all configuration
+repo config
+
+# Get a specific value
+repo config --get llm.primary_provider
+
+# Set a value
+repo config --set llm.primary_provider=openai
+
+# Open config in editor
+repo config --edit
+```
 
 ---
 

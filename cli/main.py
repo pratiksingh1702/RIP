@@ -2,7 +2,7 @@
 
 import asyncio
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Optional
 
 import typer
 
@@ -638,16 +638,35 @@ def delete(
 
 @app.command("config")
 def config(
-    verbose: Annotated[
-        bool,
-        typer.Option("-v", "--verbose", help="Show detailed runtime logs and save a full log file"),
-    ] = False,
+    repo_path: Annotated[Path, typer.Argument(help="Repository path to configure")] = Path("."),
+    get_key: Annotated[Optional[str], typer.Option("--get", help="Get a specific configuration value")] = None,
+    set_key: Annotated[Optional[str], typer.Option("--set", help="Set a configuration value (key=value)")] = None,
+    edit: Annotated[bool, typer.Option("--edit", "-e", help="Open config file in editor")] = False,
+    verbose: Annotated[bool, typer.Option("-v", "--verbose", help="Show detailed output")] = False,
 ) -> None:
+    """
+    View and edit RIP configuration.
+    
+    Examples:
+        repo config                    # Show all configuration
+        repo config --get llm.primary_provider
+        repo config --set llm.primary_provider=openai
+        repo config --edit            # Open in editor
+    """
+    from cli.commands.config import config as _config_command
+    
     _run_command(
         "config",
         verbose=verbose,
-        params={},
-        action=lambda: print_not_implemented("repo config"),
+        log_root=repo_path,
+        params={"repo_path": repo_path, "get_key": get_key, "set_key": set_key, "edit": edit},
+        action=lambda: _config_command(
+            repo_path=repo_path,
+            get_key=get_key,
+            set_key=set_key,
+            edit=edit,
+            verbose=verbose
+        ),
     )
 
 

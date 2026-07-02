@@ -506,7 +506,7 @@
     <a href="#git-index">Git Index</a>
     <a href="#stats">Stats</a>
     <a href="#community">Community</a>
-    <a href="https://github.com/pratiksingh1702/RIP" target="_blank">Docs</a>
+    <a href="doc.html">Documentation</a>
   </div>
   <a class="nav-cta" href="https://github.com/pratiksingh1702/RIP" target="_blank">View on GitHub →</a>
   <button class="nav-toggle" aria-label="Menu"><span></span><span></span><span></span></button>
@@ -897,7 +897,7 @@
       <h5>Developers</h5>
       <a href="https://github.com/pratiksingh1702/RIP" target="_blank">GitHub</a>
       <a href="https://github.com/pratiksingh1702/RIP/blob/main/cli.md" target="_blank">CLI Reference</a>
-      <a href="https://github.com/pratiksingh1702/RIP/blob/main/docs" target="_blank">Docs</a>
+      <a href="doc.html">Documentation</a>
     </div>
     <div class="footer-col">
       <h5>Community</h5>
@@ -913,7 +913,6 @@
   </div>
 </footer>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
 /* ============================================================
    NAV — scroll state + mobile toggle
@@ -1107,6 +1106,7 @@ function getOS() {
 function updateDownloadButton() {
   const os = getOS();
   const btn = document.getElementById('download-btn');
+  if (!btn) return;
 
   const downloadUrls = {
     Windows: 'https://github.com/pratiksingh1702/RIP/releases/latest',
@@ -1126,8 +1126,14 @@ updateDownloadButton();
    THREE.JS — Hero knowledge-graph visualization
    Nodes = code entities, edges = relationships, slow breathing drift
 ============================================================ */
-(function(){
+function initRipGraph(){
   const canvas = document.getElementById('graph-canvas');
+  if (canvas?.dataset.graphStarted === 'true') return;
+  if (!canvas || !window.THREE) {
+    console.warn('RIP graph canvas skipped: Three.js or canvas is unavailable.');
+    return;
+  }
+  canvas.dataset.graphStarted = 'true';
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(55, window.innerWidth/window.innerHeight, 0.1, 1000);
   camera.position.set(0, 0, 34);
@@ -1249,8 +1255,9 @@ updateDownloadButton();
     camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
   });
-})();
+}
 </script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js" async onload="initRipGraph()" onerror="console.warn('RIP graph canvas skipped: Three.js failed to load.');"></script>
 
 </body>
 </html>

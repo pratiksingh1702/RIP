@@ -32,6 +32,56 @@ pip install repo-intelligence==0.1.0
    repo explain "how login works" --no-llm --tree
    ```
 
+## Local Mode (No Docker Required)
+By default, RIP runs in **Auto Mode**: it checks if Neo4j, Qdrant, and PostgreSQL are running and uses them if available; otherwise, it falls back to **Local Mode**.
+
+To explicitly use Local Mode (no Docker, no servers, works completely offline):
+
+```bash
+repo index --mode local
+```
+
+### Local Mode Features
+- No Docker or external servers required
+- Stores all data in `.repo-intel/local/ (per project)
+- All CLI commands work exactly the same
+- No network required (unless you use LLM features)
+
+### Available Commands in Local Mode
+All CLI commands work in Local Mode:
+- `repo init`
+- `repo index`
+- `repo search`
+- `repo trace`
+- `repo impact`
+- `repo explain` (use `--no-llm` for graph-only analysis)
+- `repo dependencies`
+- `repo architecture`
+- `repo metrics`
+- `repo onboard`
+- `repo dead-code`
+- `repo doctor`
+- `repo delete`
+- `repo projects`
+- `repo use`
+
+### Checking Your Environment
+Run `repo doctor` to see what mode you're in and which providers are active:
+```bash
+repo doctor
+```
+
+### Switching Between Modes
+- **Auto Mode** (default):
+  ```bash
+  repo index --mode auto
+  ```
+- **Server Mode** (requires Docker):
+  ```bash
+  docker compose up -d
+  repo index --mode server
+  ```
+
 RIP is infrastructure for repository understanding. It parses source code with Tree-sitter, writes architectural relationships into Neo4j, indexes compact semantic payloads in Qdrant, and exposes the result through a CLI, FastAPI service, MCP servers, a Context Gateway, and a VS Code extension.
 
 It is not a chatbot over files. The LLM, when used, is the final explanation step after static analysis, graph traversal, retrieval, reranking, and context assembly have already reduced the repository to grounded evidence.

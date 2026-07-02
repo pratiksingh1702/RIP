@@ -1,0 +1,1431 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RIP Docs - Repository Intelligence Platform</title>
+  <meta name="description" content="Production documentation for RIP: CLI, API, Context Gateway, VS Code, Flutter, MCP, projects, API keys, and architecture.">
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0a0a0f;
+      --panel: #101018;
+      --panel-2: #151622;
+      --panel-3: #0d0e15;
+      --line: rgba(255,255,255,0.09);
+      --line-strong: rgba(255,255,255,0.16);
+      --cyan: #00d4ff;
+      --cyan-dim: rgba(0,212,255,0.16);
+      --green: #5ff2a0;
+      --amber: #f8c66d;
+      --rose: #ff6d8f;
+      --text: #f5f6f8;
+      --muted: #a4aabb;
+      --faint: #686f82;
+      --mono: "JetBrains Mono", Consolas, ui-monospace, monospace;
+      --sans: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      background:
+        radial-gradient(circle at 62% -8%, rgba(0,212,255,0.12), transparent 34rem),
+        linear-gradient(rgba(255,255,255,0.018) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,0.018) 1px, transparent 1px),
+        var(--bg);
+      background-size: auto, 64px 64px, 64px 64px;
+      color: var(--text);
+      font-family: var(--sans);
+      -webkit-font-smoothing: antialiased;
+    }
+
+    a { color: inherit; text-decoration: none; }
+    code, pre { font-family: var(--mono); }
+    ::selection { background: var(--cyan); color: #031014; }
+
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 40;
+      display: grid;
+      grid-template-columns: auto minmax(220px, 560px) auto;
+      align-items: center;
+      gap: 20px;
+      min-height: 66px;
+      padding: 12px clamp(18px, 3vw, 34px);
+      border-bottom: 1px solid var(--line);
+      background: rgba(10,10,15,0.86);
+      backdrop-filter: blur(18px) saturate(140%);
+    }
+
+    .brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      min-width: max-content;
+      font-family: var(--mono);
+      font-size: 15px;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+    }
+
+    .brand-mark {
+      width: 30px;
+      height: 30px;
+      display: grid;
+      place-items: center;
+      border: 1px solid rgba(0,212,255,0.44);
+      border-radius: 8px;
+      color: var(--cyan);
+      box-shadow: 0 0 24px rgba(0,212,255,0.18);
+    }
+
+    .search {
+      position: relative;
+      width: 100%;
+    }
+
+    .search input {
+      width: 100%;
+      height: 42px;
+      padding: 0 42px 0 42px;
+      border: 1px solid var(--line-strong);
+      border-radius: 9px;
+      background: rgba(255,255,255,0.045);
+      color: var(--text);
+      outline: none;
+      font: 500 14px var(--sans);
+    }
+
+    .search input:focus {
+      border-color: rgba(0,212,255,0.55);
+      box-shadow: 0 0 0 3px rgba(0,212,255,0.09);
+    }
+
+    .search::before {
+      content: "/";
+      position: absolute;
+      left: 14px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--cyan);
+      font: 800 15px var(--mono);
+    }
+
+    .kbd {
+      position: absolute;
+      right: 10px;
+      top: 50%;
+      transform: translateY(-50%);
+      padding: 3px 6px;
+      border: 1px solid var(--line);
+      border-radius: 5px;
+      color: var(--faint);
+      font: 700 10px var(--mono);
+    }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 10px;
+      min-width: max-content;
+    }
+
+    .stars {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      height: 36px;
+      padding: 0 11px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      color: var(--muted);
+      background: rgba(255,255,255,0.03);
+      font: 700 12px var(--mono);
+    }
+
+    .star-btn {
+      display: inline-flex;
+      align-items: center;
+      height: 36px;
+      padding: 0 13px;
+      border: 1px solid rgba(0,212,255,0.42);
+      border-radius: 8px;
+      color: #031014;
+      background: var(--cyan);
+      font: 800 12px var(--mono);
+    }
+
+    .menu-btn {
+      display: none;
+      width: 38px;
+      height: 38px;
+      border: 1px solid var(--line-strong);
+      border-radius: 8px;
+      background: rgba(255,255,255,0.04);
+      color: var(--text);
+      font: 800 18px var(--mono);
+    }
+
+    .shell {
+      display: grid;
+      grid-template-columns: 306px minmax(0, 1fr);
+      max-width: 1540px;
+      margin: 0 auto;
+    }
+
+    .sidebar {
+      position: sticky;
+      top: 66px;
+      height: calc(100vh - 66px);
+      padding: 22px 18px 32px;
+      border-right: 1px solid var(--line);
+      background: rgba(10,10,15,0.72);
+      overflow-y: auto;
+    }
+
+    .sidebar details {
+      border-bottom: 1px solid rgba(255,255,255,0.055);
+      padding: 7px 0;
+    }
+
+    .sidebar summary {
+      list-style: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 9px 8px;
+      color: var(--text);
+      border-radius: 7px;
+      font-size: 13px;
+      font-weight: 800;
+      letter-spacing: 0.01em;
+    }
+
+    .sidebar summary::-webkit-details-marker { display: none; }
+    .sidebar summary::after {
+      content: "+";
+      color: var(--faint);
+      font: 800 14px var(--mono);
+    }
+    .sidebar details[open] summary::after { content: "-"; color: var(--cyan); }
+    .sidebar summary:hover { background: rgba(255,255,255,0.04); }
+
+    .nav-group {
+      padding: 4px 0 8px 12px;
+    }
+
+    .nav-group a {
+      display: block;
+      padding: 6px 8px 6px 12px;
+      border-left: 1px solid rgba(255,255,255,0.08);
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.35;
+    }
+
+    .nav-group a:hover,
+    .nav-group a.active {
+      color: var(--cyan);
+      border-left-color: var(--cyan);
+      background: linear-gradient(90deg, rgba(0,212,255,0.08), transparent);
+    }
+
+    .content {
+      min-width: 0;
+      padding: 58px clamp(22px, 5vw, 82px) 96px;
+    }
+
+    .hero {
+      max-width: 960px;
+      padding-bottom: 44px;
+      margin-bottom: 24px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 18px;
+      color: var(--cyan);
+      font: 800 12px var(--mono);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .eyebrow::before {
+      content: "";
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--cyan);
+      box-shadow: 0 0 16px rgba(0,212,255,0.75);
+    }
+
+    h1 {
+      margin: 0;
+      max-width: 980px;
+      font-size: clamp(44px, 6vw, 82px);
+      line-height: 0.98;
+      letter-spacing: -0.045em;
+      font-weight: 800;
+    }
+
+    .hero p {
+      max-width: 820px;
+      margin: 24px 0 0;
+      color: var(--muted);
+      font-size: 18px;
+      line-height: 1.72;
+    }
+
+    .hero-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-top: 28px;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 42px;
+      padding: 0 15px;
+      border: 1px solid var(--line-strong);
+      border-radius: 8px;
+      background: rgba(255,255,255,0.035);
+      color: var(--text);
+      font: 800 12px var(--mono);
+    }
+
+    .btn.primary {
+      border-color: transparent;
+      background: var(--cyan);
+      color: #031014;
+    }
+
+    .doc-page {
+      position: relative;
+      padding: 46px 0;
+      border-bottom: 1px solid var(--line);
+      scroll-margin-top: 88px;
+    }
+
+    .doc-page[hidden] { display: none; }
+
+    .section-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 24px;
+      margin-bottom: 18px;
+    }
+
+    h2 {
+      margin: 0;
+      font-size: clamp(28px, 3.5vw, 44px);
+      line-height: 1.08;
+      letter-spacing: -0.035em;
+    }
+
+    h3 {
+      margin: 30px 0 10px;
+      font-size: 20px;
+      letter-spacing: -0.015em;
+    }
+
+    h4 {
+      margin: 20px 0 8px;
+      font: 800 14px var(--mono);
+      color: var(--text);
+    }
+
+    .anchor-link {
+      color: var(--faint);
+      opacity: 0;
+      transition: opacity 0.15s ease, color 0.15s ease;
+    }
+
+    h2:hover .anchor-link,
+    h3:hover .anchor-link { opacity: 1; }
+    .anchor-link:hover { color: var(--cyan); }
+
+    .edit-link {
+      flex-shrink: 0;
+      color: var(--faint);
+      font: 700 12px var(--mono);
+    }
+
+    .edit-link:hover { color: var(--cyan); }
+
+    p, li {
+      color: var(--muted);
+      font-size: 15.5px;
+      line-height: 1.72;
+    }
+
+    .lead {
+      max-width: 880px;
+      color: var(--muted);
+      font-size: 17px;
+      line-height: 1.72;
+    }
+
+    ul, ol { padding-left: 22px; margin: 12px 0 0; }
+
+    code {
+      padding: 2px 6px;
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 5px;
+      background: rgba(255,255,255,0.055);
+      color: var(--text);
+      font-size: 0.9em;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 16px;
+      margin-top: 22px;
+    }
+
+    .grid.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+
+    .card {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: rgba(16,16,24,0.84);
+      padding: 22px;
+    }
+
+    .card h3 {
+      margin-top: 0;
+      color: var(--text);
+      font-size: 18px;
+    }
+
+    .card p:last-child { margin-bottom: 0; }
+
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      min-height: 26px;
+      padding: 0 9px;
+      border: 1px solid rgba(0,212,255,0.25);
+      border-radius: 999px;
+      color: var(--cyan);
+      background: rgba(0,212,255,0.06);
+      font: 800 11px var(--mono);
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      margin-bottom: 12px;
+    }
+
+    .callout {
+      margin-top: 18px;
+      padding: 18px;
+      border: 1px solid rgba(0,212,255,0.26);
+      border-radius: 10px;
+      background: rgba(0,212,255,0.065);
+      color: var(--muted);
+      line-height: 1.68;
+    }
+
+    .callout strong { color: var(--text); }
+    .callout.warn {
+      border-color: rgba(248,198,109,0.32);
+      background: rgba(248,198,109,0.07);
+    }
+
+    .steps {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 1px;
+      margin-top: 22px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: var(--line);
+      overflow: hidden;
+    }
+
+    .step {
+      padding: 18px;
+      background: var(--panel);
+    }
+
+    .step b {
+      display: block;
+      margin-bottom: 8px;
+      color: var(--text);
+      font: 800 12px var(--mono);
+    }
+
+    .step span {
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 18px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      overflow: hidden;
+      background: var(--panel-3);
+      display: block;
+      overflow-x: auto;
+    }
+
+    thead, tbody, tr {
+      display: table;
+      width: 100%;
+      table-layout: fixed;
+    }
+
+    th, td {
+      padding: 14px;
+      border-bottom: 1px solid var(--line);
+      color: var(--muted);
+      text-align: left;
+      vertical-align: top;
+      font-size: 14px;
+      line-height: 1.55;
+    }
+
+    th {
+      background: var(--panel-2);
+      color: var(--text);
+      font: 800 11px var(--mono);
+      letter-spacing: 0.07em;
+      text-transform: uppercase;
+    }
+
+    tr:last-child td { border-bottom: 0; }
+
+    .method {
+      display: inline-flex;
+      min-width: 54px;
+      justify-content: center;
+      padding: 3px 7px;
+      border-radius: 5px;
+      color: #041014;
+      background: var(--green);
+      font: 900 11px var(--mono);
+    }
+
+    .method.post { background: var(--cyan); }
+    .method.delete { background: var(--rose); color: #fff; }
+
+    pre {
+      position: relative;
+      margin: 16px 0 0;
+      padding: 42px 18px 18px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: #06070b;
+      color: #dce7f4;
+      overflow-x: auto;
+      line-height: 1.7;
+      font-size: 13px;
+      tab-size: 2;
+    }
+
+    pre::before {
+      content: attr(data-lang);
+      position: absolute;
+      top: 12px;
+      left: 14px;
+      color: var(--faint);
+      font: 800 10px var(--mono);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    pre code {
+      padding: 0;
+      border: 0;
+      background: transparent;
+      color: inherit;
+      white-space: pre;
+    }
+
+    .copy-code {
+      position: absolute;
+      top: 9px;
+      right: 9px;
+      min-height: 26px;
+      padding: 0 9px;
+      border: 1px solid var(--line-strong);
+      border-radius: 6px;
+      background: rgba(255,255,255,0.04);
+      color: var(--muted);
+      cursor: pointer;
+      font: 800 10px var(--mono);
+    }
+
+    .copy-code:hover { color: var(--cyan); border-color: rgba(0,212,255,0.4); }
+
+    .token.comment { color: #667085; }
+    .token.string { color: #9ff2c5; }
+    .token.keyword { color: #00d4ff; }
+    .token.flag { color: #f8c66d; }
+    .token.method { color: #5ff2a0; }
+    .token.path { color: #c8d3ff; }
+
+    .command-list {
+      display: grid;
+      gap: 14px;
+      margin-top: 22px;
+    }
+
+    .command-card {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: rgba(16,16,24,0.82);
+      padding: 20px;
+    }
+
+    .command-card h3 {
+      margin-top: 0;
+      font-family: var(--mono);
+      font-size: 19px;
+    }
+
+    .option-grid {
+      display: grid;
+      grid-template-columns: minmax(170px, 0.3fr) minmax(0, 1fr);
+      gap: 1px;
+      margin-top: 14px;
+      border: 1px solid var(--line);
+      border-radius: 9px;
+      background: var(--line);
+      overflow: hidden;
+    }
+
+    .option-grid div {
+      padding: 11px 13px;
+      background: var(--panel-3);
+      color: var(--muted);
+      font-size: 13.5px;
+      line-height: 1.55;
+    }
+
+    .option-grid div:nth-child(odd) {
+      color: var(--text);
+      font: 700 12px var(--mono);
+    }
+
+    .empty-state {
+      display: none;
+      margin: 42px 0;
+      padding: 24px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      color: var(--muted);
+      background: rgba(255,255,255,0.03);
+    }
+
+    .empty-state.visible { display: block; }
+
+    footer {
+      padding: 36px 0 0;
+      color: var(--faint);
+      font: 700 12px var(--mono);
+    }
+
+    @media (max-width: 1120px) {
+      .topbar { grid-template-columns: auto 1fr auto; }
+      .menu-btn { display: inline-grid; place-items: center; }
+      .shell { grid-template-columns: 1fr; }
+      .sidebar {
+        position: fixed;
+        inset: 66px auto 0 0;
+        width: min(86vw, 330px);
+        z-index: 35;
+        transform: translateX(-105%);
+        transition: transform 0.2s ease;
+        border-right-color: var(--line-strong);
+      }
+      body.sidebar-open .sidebar { transform: translateX(0); }
+      body.sidebar-open::after {
+        content: "";
+        position: fixed;
+        inset: 66px 0 0;
+        z-index: 34;
+        background: rgba(0,0,0,0.42);
+      }
+      .content { padding-top: 46px; }
+      .grid.three, .steps { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+
+    @media (max-width: 720px) {
+      .topbar {
+        grid-template-columns: auto 1fr auto;
+        gap: 10px;
+        padding: 10px 14px;
+      }
+      .brand span:last-child { display: none; }
+      .stars { display: none; }
+      .star-btn { display: none; }
+      .content { padding: 36px 18px 72px; }
+      .section-head { display: block; }
+      .edit-link { display: inline-block; margin-top: 10px; }
+      .grid, .grid.three, .steps { grid-template-columns: 1fr; }
+      .option-grid { grid-template-columns: 1fr; }
+      thead, tbody, tr { min-width: 760px; }
+      pre { font-size: 12px; }
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <button class="menu-btn" id="menuButton" aria-label="Open documentation menu">☰</button>
+    <a class="brand" href="index.html" aria-label="RIP home">
+      <span class="brand-mark">&lt;/&gt;</span>
+      <span>RIP Docs</span>
+    </a>
+    <label class="search" aria-label="Search documentation">
+      <input id="docSearch" type="search" placeholder="Search docs, commands, API routes..." autocomplete="off">
+      <span class="kbd">/</span>
+    </label>
+    <div class="header-actions">
+      <span class="stars" id="starCount">★ Stars</span>
+      <a class="star-btn" href="https://github.com/pratiksingh1702/RIP" target="_blank" rel="noreferrer">Star on GitHub</a>
+    </div>
+  </header>
+
+  <div class="shell">
+    <aside class="sidebar" id="sidebar" aria-label="Documentation navigation">
+      <details open>
+        <summary>Getting Started</summary>
+        <div class="nav-group">
+          <a href="#overview">Overview</a>
+          <a href="#quickstart">Quickstart</a>
+          <a href="#installation">Installation paths</a>
+          <a href="#runtime-modes">Runtime modes</a>
+          <a href="#configuration">Configuration</a>
+        </div>
+      </details>
+      <details open>
+        <summary>CLI Reference</summary>
+        <div class="nav-group">
+          <a href="#cli-overview">CLI overview</a>
+          <a href="#cli-indexing">Indexing commands</a>
+          <a href="#cli-analysis">Analysis commands</a>
+          <a href="#cli-projects">Projects and API keys</a>
+          <a href="#cli-server">Server and maintenance</a>
+          <a href="#gateway-cli">Gateway commands</a>
+        </div>
+      </details>
+      <details>
+        <summary>API Reference</summary>
+        <div class="nav-group">
+          <a href="#api-auth">Authentication</a>
+          <a href="#api-rip">RIP REST API</a>
+          <a href="#api-projects">Projects API</a>
+          <a href="#api-keys">API key management</a>
+          <a href="#api-gateway">Gateway API</a>
+        </div>
+      </details>
+      <details>
+        <summary>Architecture</summary>
+        <div class="nav-group">
+          <a href="#architecture">System architecture</a>
+          <a href="#indexing-pipeline">Indexing pipeline</a>
+          <a href="#storage">Storage providers</a>
+          <a href="#project-isolation">Project isolation</a>
+        </div>
+      </details>
+      <details>
+        <summary>Context Gateway</summary>
+        <div class="nav-group">
+          <a href="#gateway-overview">Gateway overview</a>
+          <a href="#gateway-setup">Gateway setup</a>
+          <a href="#gateway-sources">Gateway sources</a>
+          <a href="#gateway-operations">Gateway operations</a>
+        </div>
+      </details>
+      <details>
+        <summary>VS Code</summary>
+        <div class="nav-group">
+          <a href="#vscode">VS Code extension</a>
+          <a href="#vscode-workflows">Editor workflows</a>
+        </div>
+      </details>
+      <details>
+        <summary>Flutter App</summary>
+        <div class="nav-group">
+          <a href="#flutter">Flutter app</a>
+          <a href="#flutter-commands">Mobile commands</a>
+        </div>
+      </details>
+      <details>
+        <summary>MCP Integration</summary>
+        <div class="nav-group">
+          <a href="#mcp">MCP overview</a>
+          <a href="#mcp-rip">RIP MCP</a>
+          <a href="#mcp-gateway">Gateway MCP</a>
+        </div>
+      </details>
+    </aside>
+
+    <main class="content" id="content">
+      <section class="hero doc-page" id="overview" data-title="Overview Repository Intelligence Platform knowledge graph semantic index AI context">
+        <span class="eyebrow">Repository Intelligence Platform</span>
+        <h1>Production docs for codebase intelligence.</h1>
+        <p>RIP turns repositories into queryable knowledge graphs, semantic indexes, architecture maps, and AI-ready context packages. Use it from the CLI, REST API, Context Gateway, Flutter app, VS Code, and MCP-aware coding agents.</p>
+        <div class="hero-actions">
+          <a class="btn primary" href="#quickstart">Start quickstart</a>
+          <a class="btn" href="#cli-overview">Browse CLI</a>
+          <a class="btn" href="#api-rip">Open API reference</a>
+        </div>
+      </section>
+
+      <div class="empty-state" id="emptyState">No documentation sections match your search.</div>
+
+      <section class="doc-page" id="quickstart" data-title="Quickstart install init index search trace impact explain architecture onboard">
+        <div class="section-head">
+          <h2>Quickstart <a class="anchor-link" href="#quickstart">#</a></h2>
+          <a class="edit-link" href="https://github.com/pratiksingh1702/RIP/edit/main/workflow.md" target="_blank" rel="noreferrer">Edit this page</a>
+        </div>
+        <p class="lead">The core loop is intentionally short: install the CLI, initialize a repository, index it, then ask questions. Indexing creates the graph and vector data used by every analysis command.</p>
+        <div class="steps">
+          <div class="step"><b>01 Install</b><span>Install `repo` through pip, a standalone installer, or source checkout.</span></div>
+          <div class="step"><b>02 Init</b><span>Create `.repo-intel/config.toml` and record project settings.</span></div>
+          <div class="step"><b>03 Index</b><span>Parse files, extract entities and relationships, and build search data.</span></div>
+          <div class="step"><b>04 Query</b><span>Use search, trace, impact, dependencies, explain, metrics, and architecture.</span></div>
+          <div class="step"><b>05 Integrate</b><span>Connect API, Flutter, Gateway, VS Code, or MCP agents.</span></div>
+        </div>
+        <pre data-lang="powershell"><code>pip install repo-intelligence==0.1.0
+
+cd path\to\your\project
+repo init --project-name "My Awesome Project"
+repo index -v
+
+repo search "authentication flow"
+repo trace UserService --depth 8
+repo impact UserService
+repo explain "how login works" --diagram --tree --deps
+repo architecture
+repo onboard --output ONBOARDING.md</code></pre>
+        <div class="callout"><strong>What `repo index` does:</strong> discovers source files, parses Tree-sitter entities, extracts calls/imports/ownership/inheritance, writes graph data, generates semantic embeddings, and stores project-scoped metadata.</div>
+      </section>
+
+      <section class="doc-page" id="installation" data-title="Installation PyPI standalone installer VS Code Flutter source uv sync">
+        <div class="section-head">
+          <h2>Installation paths <a class="anchor-link" href="#installation">#</a></h2>
+          <a class="edit-link" href="https://github.com/pratiksingh1702/RIP/edit/main/workflow.md" target="_blank" rel="noreferrer">Edit this page</a>
+        </div>
+        <div class="grid">
+          <article class="card"><span class="chip">PyPI</span><h3>Developer CLI</h3><p>Fastest path for engineers who already have Python. Install with pip and verify with `repo --help`.</p></article>
+          <article class="card"><span class="chip">Installer</span><h3>Zero configuration</h3><p>Use OS-specific installers when users do not want to manage Python, venvs, or dependencies directly.</p></article>
+          <article class="card"><span class="chip">Source</span><h3>Contributor setup</h3><p>Clone the repository, install dependencies with `uv sync`, and start Docker only when server mode is needed.</p></article>
+          <article class="card"><span class="chip">Apps</span><h3>VS Code and Flutter</h3><p>Use editor and mobile surfaces after the RIP server is reachable and API keys are configured.</p></article>
+        </div>
+        <pre data-lang="bash"><code># Contributor setup
+git clone https://github.com/pratiksingh1702/RIP.git
+cd RIP
+uv sync
+docker compose up -d
+uv run repo --help</code></pre>
+      </section>
+
+      <section class="doc-page" id="runtime-modes" data-title="Runtime modes auto local server docker offline REST Flutter Gateway WebSockets remote Git">
+        <div class="section-head">
+          <h2>Runtime modes <a class="anchor-link" href="#runtime-modes">#</a></h2>
+          <a class="edit-link" href="https://github.com/pratiksingh1702/RIP/edit/main/cli.md" target="_blank" rel="noreferrer">Edit this page</a>
+        </div>
+        <p class="lead">Runtime-aware commands accept `--mode auto|server|local`. Local mode is for offline single-developer analysis. Server mode is required for REST, Flutter, Gateway, WebSockets, remote Git indexing, shared indexes, and concurrent users.</p>
+        <table>
+          <thead><tr><th>Capability</th><th>Local mode</th><th>Server mode</th></tr></thead>
+          <tbody>
+            <tr><td>Storage</td><td>`.repo-intel/local/` SQLite, graph JSON, vector JSON</td><td>Neo4j, Qdrant, Postgres, Redis</td></tr>
+            <tr><td>Offline</td><td>Yes</td><td>No</td></tr>
+            <tr><td>CLI and MCP</td><td>Supported</td><td>Supported</td></tr>
+            <tr><td>REST, Flutter, Gateway</td><td>Unavailable</td><td>Available</td></tr>
+            <tr><td>Remote Git indexing</td><td>Unavailable</td><td>Available</td></tr>
+          </tbody>
+        </table>
+        <pre data-lang="powershell"><code>repo doctor . --mode local
+repo index . --mode local
+repo explain PaymentService --mode local --no-llm --tree --deps
+
+docker compose up -d
+uv run repo serve --mode server --host 0.0.0.0 --port 8000</code></pre>
+      </section>
+
+      <section class="doc-page" id="configuration" data-title="Configuration config toml environment variables LLM providers Neo4j Qdrant Postgres Redis">
+        <div class="section-head">
+          <h2>Configuration <a class="anchor-link" href="#configuration">#</a></h2>
+          <a class="edit-link" href="https://github.com/pratiksingh1702/RIP/edit/main/workflow.md" target="_blank" rel="noreferrer">Edit this page</a>
+        </div>
+        <p class="lead">Configuration priority is command-line options first, environment variables second, and `.repo-intel/config.toml` third. Local mode works with no server config; server mode needs service URLs and credentials.</p>
+        <pre data-lang="toml"><code>[graph]
+neo4j_uri = "bolt://localhost:7687"
+neo4j_user = "neo4j"
+neo4j_password = "your-password"
+
+[search]
+qdrant_host = "localhost"
+qdrant_port = 6333
+embedding_model = "BAAI/bge-small-en-v1.5"
+
+[storage]
+postgres_url = "postgresql+asyncpg://user:pass@localhost:5433/db"
+redis_url = "redis://localhost:6379"
+
+[llm]
+primary_provider = "ollama"
+primary_model = "qwen2.5-coder:7b"
+ollama_host = "http://localhost:11434"</code></pre>
+        <pre data-lang="bash"><code>repo config
+repo config --get llm.primary_provider
+repo config --set llm.primary_provider=openai
+repo explain "how auth works" --no-llm --tree --deps</code></pre>
+      </section>
+
+      <section class="doc-page" id="cli-overview" data-title="CLI overview verbose logs commands mode flags">
+        <div class="section-head">
+          <h2>CLI overview <a class="anchor-link" href="#cli-overview">#</a></h2>
+          <a class="edit-link" href="https://github.com/pratiksingh1702/RIP/edit/main/cli.md" target="_blank" rel="noreferrer">Edit this page</a>
+        </div>
+        <p class="lead">Every `repo` command accepts `-v` / `--verbose`. Verbose mode prints detailed runtime logs and writes `.repo-intel/logs/&lt;command&gt;-YYYYMMDD-HHMMSS.log` when a target repository is available.</p>
+        <div class="grid three">
+          <article class="card"><h3>Indexing</h3><p>`repo init`, `repo index`, `repo status`, and `repo git-index` create and inspect indexed repository data.</p></article>
+          <article class="card"><h3>Analysis</h3><p>`repo search`, `trace`, `impact`, `dependencies`, `explain`, `architecture`, `metrics`, `dead-code`, and `onboard` answer codebase questions.</p></article>
+          <article class="card"><h3>Operations</h3><p>`repo serve`, `projects`, `use`, `delete`, `config`, `api-keys`, and `doctor` manage runtime, projects, auth, and diagnostics.</p></article>
+        </div>
+      </section>
+
+      <section class="doc-page" id="cli-indexing" data-title="CLI indexing repo init repo index repo status repo git-index remote git subdir branch folder-name project-name">
+        <div class="section-head">
+          <h2>Indexing commands <a class="anchor-link" href="#cli-indexing">#</a></h2>
+          <a class="edit-link" href="https://github.com/pratiksingh1702/RIP/edit/main/cli.md" target="_blank" rel="noreferrer">Edit this page</a>
+        </div>
+        <div class="command-list">
+          <article class="command-card">
+            <h3>repo init</h3>
+            <p>Initialize `.repo-intel/` configuration for a repository and set project isolation defaults.</p>
+            <pre data-lang="powershell"><code>repo init [repo_path] --project-name billing-api
+repo init C:\path\to\project --project-name flutter-app --qdrant-strategy payload_filter</code></pre>
+            <div class="option-grid"><div>--project-name</div><div>Human-readable project name.</div><div>--isolation</div><div>Enable project isolation filters. Default is enabled.</div><div>--qdrant-strategy</div><div>`payload_filter` or `collection_per_project`.</div></div>
+          </article>
+          <article class="command-card">
+            <h3>repo index</h3>
+            <p>Build or refresh graph and semantic indexes for a repository.</p>
+            <pre data-lang="powershell"><code>repo index . -v
+repo index --incremental
+repo index --smart
+repo index --watch
+repo index C:\path\to\project --languages python,typescript</code></pre>
+            <div class="option-grid"><div>--smart</div><div>Index git-changed, staged, untracked, and deleted source files.</div><div>--incremental</div><div>Index changed files instead of full rebuild.</div><div>--languages</div><div>Comma-separated language filter.</div><div>--watch</div><div>Watch files and re-index automatically.</div></div>
+          </article>
+          <article class="command-card">
+            <h3>repo status</h3>
+            <p>Check whether a repository is initialized and indexed.</p>
+            <pre data-lang="powershell"><code>repo status
+repo status C:\path\to\project</code></pre>
+          </article>
+          <article class="command-card">
+            <h3>repo git-index</h3>
+            <p>Server-mode remote Git indexing. Use `--subdir lib` to index only a Flutter app's `lib` folder rather than the whole repository.</p>
+            <pre data-lang="bash"><code>repo git-index https://github.com/pratiksingh1702/flutter_music_app.git \
+  --folder-name flutter_music_app_lib \
+  --project-name flutter_music_app_lib \
+  --subdir lib \
+  --branch main</code></pre>
+          </article>
+        </div>
+      </section>
+
+      <section class="doc-page" id="cli-analysis" data-title="CLI analysis repo search trace impact dependencies explain dead-code onboard architecture metrics">
+        <div class="section-head">
+          <h2>Analysis commands <a class="anchor-link" href="#cli-analysis">#</a></h2>
+          <a class="edit-link" href="https://github.com/pratiksingh1702/RIP/edit/main/cli.md" target="_blank" rel="noreferrer">Edit this page</a>
+        </div>
+        <div class="command-list">
+          <article class="command-card"><h3>repo search</h3><p>Semantic search for code by behavior or concept.</p><pre data-lang="powershell"><code>repo search "database queries" --language python --limit 50
+repo search "login flow" --project 3f2f-project-id</code></pre></article>
+          <article class="command-card"><h3>repo trace</h3><p>Trace call graph paths from an entry point.</p><pre data-lang="powershell"><code>repo trace main --depth 20 --format json
+repo trace BaseParser --explain</code></pre></article>
+          <article class="command-card"><h3>repo impact</h3><p>Find downstream files and symbols that may be affected by a change.</p><pre data-lang="powershell"><code>repo impact PythonParser
+repo impact core/parser/base.py --format json</code></pre></article>
+          <article class="command-card"><h3>repo dependencies</h3><p>Inspect file-level importers, imports, contained symbols, and dependency graph.</p><pre data-lang="powershell"><code>repo dependencies type_provider.dart
+repo dependencies auth_service.dart --project 3f2f-project-id --limit 50</code></pre></article>
+          <article class="command-card"><h3>repo explain</h3><p>Explain architecture with graph context, diagrams, tree views, dependency tables, and optional LLM narration.</p><pre data-lang="powershell"><code>repo explain "how login works" --diagram --tree --deps
+repo explain "how auth works" --no-llm --tree --deps
+repo explain PythonParser --provider google --model gemini-2.5-flash</code></pre></article>
+          <article class="command-card"><h3>repo architecture / metrics / onboard / dead-code</h3><p>Generate system diagrams, risk metrics, onboarding guides, and unused-code candidates.</p><pre data-lang="powershell"><code>repo architecture --format mermaid
+repo metrics --module core.parser --top-risk 10
+repo onboard --output ONBOARDING.md
+repo dead-code --type functions --format json</code></pre></article>
+        </div>
+      </section>
+
+      <section class="doc-page" id="cli-projects" data-title="CLI projects api keys repo projects repo use repo api-keys access all open projects project scoped">
+        <div class="section-head">
+          <h2>Projects and API keys <a class="anchor-link" href="#cli-projects">#</a></h2>
+          <a class="edit-link" href="https://github.com/pratiksingh1702/RIP/edit/main/cli.md" target="_blank" rel="noreferrer">Edit this page</a>
+        </div>
+        <p class="lead">Projects isolate graph and vector results. API keys protect server access and can be used by Flutter, REST clients, and integrations.</p>
+        <div class="grid">
+          <article class="card">
+            <h3>Project selection</h3>
+            <pre data-lang="powershell"><code>repo projects
+repo use 3f2f-project-id
+repo use 3f2f-project-id --repo-path C:\path\to\project
+repo search "something" --project 3f2f-project-id</code></pre>
+          </article>
+          <article class="card">
+            <h3>API key management</h3>
+            <pre data-lang="powershell"><code>repo api-keys list
+repo api-keys create "Flutter App" --description "For mobile app" --expires-in 365
+repo api-keys revoke 2</code></pre>
+          </article>
+        </div>
+        <div class="callout"><strong>Project access:</strong> server requests use `Authorization: Bearer &lt;api-key&gt;`. The server can expose open projects to valid keys and still enforce project-scoped operations where required.</div>
+      </section>
+
+      <section class="doc-page" id="cli-server" data-title="CLI server maintenance repo serve delete config doctor runtime status">
+        <div class="section-head">
+          <h2>Server and maintenance <a class="anchor-link" href="#cli-server">#</a></h2>
+          <a class="edit-link" href="https://github.com/pratiksingh1702/RIP/edit/main/cli.md" target="_blank" rel="noreferrer">Edit this page</a>
+        </div>
+        <div class="command-list">
+          <article class="command-card"><h3>repo serve</h3><p>Start the RIP API server for REST, Flutter, Gateway, WebSockets, remote Git indexing, and shared indexes.</p><pre data-lang="powershell"><code>docker compose up -d
+repo serve --host 0.0.0.0 --port 8080
+uv run repo serve --mode server --host 0.0.0.0 --port 8000</code></pre></article>
+          <article class="command-card"><h3>repo delete</h3><p>Clear indexed data. Prefer `--project` for targeted cleanup.</p><pre data-lang="powershell"><code>repo delete --project d93fcec0-9811-538a-be5c-fc5be577ec5a --yes
+repo delete --yes --no-storage
+repo delete --mode local --yes</code></pre></article>
+          <article class="command-card"><h3>repo config / doctor</h3><p>Inspect config and diagnose provider selection.</p><pre data-lang="powershell"><code>repo config --get llm.primary_provider
+repo config --set llm.primary_provider=openai
+repo doctor . --mode local
+repo doctor . --mode server</code></pre></article>
+        </div>
+      </section>
+
+      <section class="doc-page" id="gateway-cli" data-title="Gateway commands gateway start status sources list enable disable mcp config mcp-server">
+        <div class="section-head">
+          <h2>Gateway commands <a class="anchor-link" href="#gateway-cli">#</a></h2>
+          <a class="edit-link" href="https://github.com/pratiksingh1702/RIP/edit/main/gateway/gateway/cli/main.py" target="_blank" rel="noreferrer">Edit this page</a>
+        </div>
+        <p class="lead">The Context Gateway has its own `gateway` CLI. It starts the Gateway HTTP server, reports source health, manages source toggles, and prints MCP configuration for agents.</p>
+        <pre data-lang="powershell"><code>cd gateway
+uv run gateway start
+uv run gateway status
+uv run gateway sources list
+uv run gateway sources enable github
+uv run gateway sources disable jira
+uv run gateway mcp config
+uv run gateway mcp-server</code></pre>
+        <div class="option-grid"><div>gateway start</div><div>Starts the Gateway FastAPI server using configured host, port, and debug values.</div><div>gateway status</div><div>Prints host, port, version, debug state, and source availability.</div><div>gateway sources</div><div>Lists, enables, or disables configured data sources for the process.</div><div>gateway mcp config</div><div>Prints an MCP server configuration block for agents.</div><div>gateway mcp-server</div><div>Runs the Gateway MCP stdio server.</div></div>
+      </section>
+
+      <section class="doc-page" id="api-auth" data-title="API authentication bearer token server auth api keys">
+        <div class="section-head">
+          <h2>Authentication <a class="anchor-link" href="#api-auth">#</a></h2>
+          <a class="edit-link" href="https://github.com/pratiksingh1702/RIP/edit/main/server/middleware/auth.py" target="_blank" rel="noreferrer">Edit this page</a>
+        </div>
+        <p class="lead">RIP server routes are protected with bearer tokens. Create API keys from the CLI or API, then pass them in the `Authorization` header.</p>
+        <pre data-lang="http"><code>Authorization: Bearer rip_xxxxxxxxxxxxxxxxxxxxx</code></pre>
+      </section>
+
+      <section class="doc-page" id="api-rip" data-title="RIP REST API index search trace impact explain architecture metrics onboard dead-code runtime git">
+        <div class="section-head">
+          <h2>RIP REST API <a class="anchor-link" href="#api-rip">#</a></h2>
+          <a class="edit-link" href="https://github.com/pratiksingh1702/RIP/tree/main/server/routers" target="_blank" rel="noreferrer">Edit this page</a>
+        </div>
+        <p class="lead">The RIP API mirrors the core CLI surfaces for apps and integrations. Responses are wrapped in the server envelope where applicable.</p>
+        <table>
+          <thead><tr><th>Method</th><th>Endpoint</th><th>Purpose</th></tr></thead>
+          <tbody>
+            <tr><td><span class="method post">POST</span></td><td><code>/index</code></td><td>Start indexing for a repository path.</td></tr>
+            <tr><td><span class="method">GET</span></td><td><code>/index/status</code></td><td>Read index status.</td></tr>
+            <tr><td><span class="method">GET</span></td><td><code>/search</code></td><td>Semantic code search.</td></tr>
+            <tr><td><span class="method">GET</span></td><td><code>/trace/{symbol}</code></td><td>Trace call graph paths.</td></tr>
+            <tr><td><span class="method">GET</span></td><td><code>/impact/{symbol}</code></td><td>Analyze downstream impact.</td></tr>
+            <tr><td><span class="method post">POST</span></td><td><code>/explain</code></td><td>Generate graph-backed explanations.</td></tr>
+            <tr><td><span class="method">GET</span></td><td><code>/architecture</code></td><td>Return architecture diagram or structure.</td></tr>
+            <tr><td><span class="method">GET</span></td><td><code>/metrics</code></td><td>Return complexity, coupling, and risk metrics.</td></tr>
+            <tr><td><span class="method">GET</span></td><td><code>/dead-code</code></td><td>Find unused functions/classes.</td></tr>
+            <tr><td><span class="method post">POST</span></td><td><code>/git/index</code></td><td>Start remote Git indexing.</td></tr>
+            <tr><td><span class="method">GET</span></td><td><code>/git/status/{job_id}</code></td><td>Read remote Git indexing job status.</td></tr>
+            <tr><td><span class="method">GET</span></td><td><code>/runtime/status</code></td><td>Inspect runtime provider state.</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section class="doc-page" id="api-projects" data-title="Projects API list get delete project open projects metadata root branch languages">
+        <div class="section-head">
+          <h2>Projects API <a class="anchor-link" href="#api-projects">#</a></h2>
+          <a class="edit-link" href="https://github.com/pratiksingh1702/RIP/edit/main/server/routers/projects.py" target="_blank" rel="noreferrer">Edit this page</a>
+        </div>
+        <p class="lead">Project endpoints expose indexed repositories and metadata to server-mode clients such as Flutter, dashboards, and integrations.</p>
+        <table>
+          <thead><tr><th>Method</th><th>Endpoint</th><th>Purpose</th></tr></thead>
+          <tbody>
+            <tr><td><span class="method">GET</span></td><td><code>/projects/</code></td><td>List projects visible to the authenticated key.</td></tr>
+            <tr><td><span class="method">GET</span></td><td><code>/projects/{project_id}</code></td><td>Read one project's metadata.</td></tr>
+            <tr><td><span class="method delete">DELETE</span></td><td><code>/projects/{project_id}</code></td><td>Delete a project and associated indexed metadata.</td></tr>
+          </tbody>
+        </table>
+        <pre data-lang="bash"><code>curl -H "Authorization: Bearer $RIP_API_KEY" http://127.0.0.1:8000/projects/</code></pre>
+      </section>
+
+      <section class="doc-page" id="api-keys" data-title="API key management create list revoke expires project_id prefix">
+        <div class="section-head">
+          <h2>API key management <a class="anchor-link" href="#api-keys">#</a></h2>
+          <a class="edit-link" href="https://github.com/pratiksingh1702/RIP/edit/main/server/routers/api_keys.py" target="_blank" rel="noreferrer">Edit this page</a>
+        </div>
+        <table>
+          <thead><tr><th>Method</th><th>Endpoint</th><th>Purpose</th></tr></thead>
+          <tbody>
+            <tr><td><span class="method post">POST</span></td><td><code>/api-keys</code></td><td>Create a new API key and return plaintext once.</td></tr>
+            <tr><td><span class="method">GET</span></td><td><code>/api-keys</code></td><td>List key metadata: id, name, prefix, active state, expiry, last used, project id.</td></tr>
+            <tr><td><span class="method delete">DELETE</span></td><td><code>/api-keys/{api_key_id}</code></td><td>Revoke an API key.</td></tr>
+          </tbody>
+        </table>
+        <pre data-lang="bash"><code>curl -X POST http://127.0.0.1:8000/api-keys \
+  -H "Authorization: Bearer $RIP_ADMIN_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Flutter App","description":"Mobile access","expires_in":365}'</code></pre>
+      </section>
+
+      <section class="doc-page" id="api-gateway" data-title="Gateway API health context validate sessions sources metrics">
+        <div class="section-head">
+          <h2>Gateway API <a class="anchor-link" href="#api-gateway">#</a></h2>
+          <a class="edit-link" href="https://github.com/pratiksingh1702/RIP/edit/main/gateway/docs/api.md" target="_blank" rel="noreferrer">Edit this page</a>
+        </div>
+        <table>
+          <thead><tr><th>Method</th><th>Endpoint</th><th>Purpose</th></tr></thead>
+          <tbody>
+            <tr><td><span class="method">GET</span></td><td><code>/</code>, <code>/health</code></td><td>Gateway health and source status.</td></tr>
+            <tr><td><span class="method post">POST</span></td><td><code>/api/context</code></td><td>Return a ranked context package for an agent task.</td></tr>
+            <tr><td><span class="method post">POST</span></td><td><code>/api/validate</code></td><td>Validate a proposed code change.</td></tr>
+            <tr><td><span class="method">GET</span></td><td><code>/api/sessions</code>, <code>/api/sessions/{id}</code></td><td>List or fetch Gateway memory sessions.</td></tr>
+            <tr><td><span class="method">GET</span></td><td><code>/api/sources</code></td><td>List sources such as RIP, GitHub, Jira, and Slack.</td></tr>
+            <tr><td><span class="method post">POST</span></td><td><code>/api/sources/{source}/enable</code></td><td>Enable a source for the Gateway process.</td></tr>
+            <tr><td><span class="method post">POST</span></td><td><code>/api/sources/{source}/disable</code></td><td>Disable a source for the Gateway process.</td></tr>
+            <tr><td><span class="method">GET</span></td><td><code>/api/metrics</code></td><td>Return basic Gateway metrics.</td></tr>
+          </tbody>
+        </table>
+        <pre data-lang="json"><code>{
+  "task": "Add audit logging to login",
+  "token_budget": 6000,
+  "sources": ["rip", "github"]
+}</code></pre>
+      </section>
+
+      <section class="doc-page" id="architecture" data-title="Architecture user interfaces core engine storage parser indexer graph search LLM services">
+        <div class="section-head">
+          <h2>System architecture <a class="anchor-link" href="#architecture">#</a></h2>
+          <a class="edit-link" href="https://github.com/pratiksingh1702/RIP/edit/main/workflow.md" target="_blank" rel="noreferrer">Edit this page</a>
+        </div>
+        <div class="grid three">
+          <article class="card"><span class="chip">Interfaces</span><h3>Human and agent surfaces</h3><p>CLI, FastAPI, VS Code, Flutter, MCP, and Gateway all sit above the same indexed knowledge layer.</p></article>
+          <article class="card"><span class="chip">Core</span><h3>Understanding engine</h3><p>Parser, indexer, graph, search, analysis, LLM narration, and service orchestration turn code into queryable facts.</p></article>
+          <article class="card"><span class="chip">Storage</span><h3>Local and server providers</h3><p>Local mode uses files and SQLite. Server mode uses Neo4j, Qdrant, Postgres, and Redis.</p></article>
+        </div>
+      </section>
+
+      <section class="doc-page" id="indexing-pipeline" data-title="Indexing pipeline discover parse tree-sitter extract graph embeddings vectors">
+        <div class="section-head">
+          <h2>Indexing pipeline <a class="anchor-link" href="#indexing-pipeline">#</a></h2>
+          <a class="edit-link" href="https://github.com/pratiksingh1702/RIP/tree/main/core/indexer" target="_blank" rel="noreferrer">Edit this page</a>
+        </div>
+        <div class="steps">
+          <div class="step"><b>Discover</b><span>Walk source files and respect ignore rules.</span></div>
+          <div class="step"><b>Parse</b><span>Use Tree-sitter language parsers.</span></div>
+          <div class="step"><b>Extract</b><span>Build entities and relationships.</span></div>
+          <div class="step"><b>Persist</b><span>Write graph, vector, and metadata stores.</span></div>
+          <div class="step"><b>Serve</b><span>Expose results through CLI, API, MCP, and apps.</span></div>
+        </div>
+      </section>
+
+      <section class="doc-page" id="storage" data-title="Storage providers local sqlite graph json vectors Neo4j Qdrant Postgres Redis">
+        <div class="section-head">
+          <h2>Storage providers <a class="anchor-link" href="#storage">#</a></h2>
+          <a class="edit-link" href="https://github.com/pratiksingh1702/RIP/tree/main/core/storage" target="_blank" rel="noreferrer">Edit this page</a>
+        </div>
+        <table>
+          <thead><tr><th>Store</th><th>Local mode</th><th>Server mode</th></tr></thead>
+          <tbody>
+            <tr><td>Metadata</td><td>SQLite in `.repo-intel/local/`</td><td>Postgres</td></tr>
+            <tr><td>Graph</td><td>NetworkX graph JSON</td><td>Neo4j</td></tr>
+            <tr><td>Vectors</td><td>Local vector JSON payloads</td><td>Qdrant</td></tr>
+            <tr><td>Gateway/cache</td><td>Not available</td><td>Redis-backed services</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section class="doc-page" id="project-isolation" data-title="Project isolation project id vector filters active project public projects API key scope">
+        <div class="section-head">
+          <h2>Project isolation <a class="anchor-link" href="#project-isolation">#</a></h2>
+          <a class="edit-link" href="https://github.com/pratiksingh1702/RIP/edit/main/core/projects.py" target="_blank" rel="noreferrer">Edit this page</a>
+        </div>
+        <p class="lead">Every indexed repository has a project identity. Graph nodes and vector payloads carry project IDs so search, trace, impact, explain, and API clients can stay scoped to the intended codebase.</p>
+      </section>
+
+      <section class="doc-page" id="gateway-overview" data-title="Context Gateway overview classify plan retrieve rank compress permissions sessions">
+        <div class="section-head">
+          <h2>Gateway overview <a class="anchor-link" href="#gateway-overview">#</a></h2>
+          <a class="edit-link" href="https://github.com/pratiksingh1702/RIP/edit/main/gateway/readme.md" target="_blank" rel="noreferrer">Edit this page</a>
+        </div>
+        <p class="lead">The Context Gateway is server-mode only. It classifies the agent task, plans source retrieval, executes sources in parallel, ranks and compresses results, checks permissions, manages sessions, and returns a context package.</p>
+      </section>
+
+      <section class="doc-page" id="gateway-setup" data-title="Gateway setup uv pip install alembic migrations gateway start mcp config">
+        <div class="section-head">
+          <h2>Gateway setup <a class="anchor-link" href="#gateway-setup">#</a></h2>
+          <a class="edit-link" href="https://github.com/pratiksingh1702/RIP/edit/main/gateway/docs/setup.md" target="_blank" rel="noreferrer">Edit this page</a>
+        </div>
+        <pre data-lang="bash"><code>cd gateway
+uv pip install -e .
+cp .env.example .env
+uv run alembic upgrade head
+uv run gateway start
+uv run gateway mcp config</code></pre>
+      </section>
+
+      <section class="doc-page" id="gateway-sources" data-title="Gateway sources RIP GitHub Jira Slack enable disable token source health">
+        <div class="section-head">
+          <h2>Gateway sources <a class="anchor-link" href="#gateway-sources">#</a></h2>
+          <a class="edit-link" href="https://github.com/pratiksingh1702/RIP/edit/main/gateway/docs/api.md" target="_blank" rel="noreferrer">Edit this page</a>
+        </div>
+        <table>
+          <thead><tr><th>Source</th><th>Default</th><th>Notes</th></tr></thead>
+          <tbody>
+            <tr><td>rip</td><td>Always enabled</td><td>Core repository intelligence source.</td></tr>
+            <tr><td>github</td><td>Optional</td><td>Requires `GATEWAY_GITHUB_MCP_ENABLED` and token/config.</td></tr>
+            <tr><td>jira</td><td>Optional</td><td>Requires Jira URL/token and optional project key.</td></tr>
+            <tr><td>slack</td><td>Optional</td><td>Requires Slack token/config.</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section class="doc-page" id="gateway-operations" data-title="Gateway operations health token budget circuit breaker source timeout logs">
+        <div class="section-head">
+          <h2>Gateway operations <a class="anchor-link" href="#gateway-operations">#</a></h2>
+          <a class="edit-link" href="https://github.com/pratiksingh1702/RIP/edit/main/gateway/docs/operations.md" target="_blank" rel="noreferrer">Edit this page</a>
+        </div>
+        <pre data-lang="powershell"><code>docker compose up -d
+.\.venv\Scripts\repo.exe serve --mode server
+.\gateway\.venv\Scripts\gateway.exe start
+
+curl http://127.0.0.1:8001/health
+gateway status</code></pre>
+        <div class="callout warn"><strong>Operational knobs:</strong> use `GATEWAY_SOURCE_TIMEOUT_SECONDS`, `GATEWAY_DEFAULT_MAX_TOKENS`, `GATEWAY_CIRCUIT_BREAKER_THRESHOLD`, and `GATEWAY_CIRCUIT_BREAKER_RESET_SECONDS` to tune retrieval behavior.</div>
+      </section>
+
+      <section class="doc-page" id="vscode" data-title="VS Code extension chat panel explain trace architecture metrics index status">
+        <div class="section-head">
+          <h2>VS Code extension <a class="anchor-link" href="#vscode">#</a></h2>
+          <a class="edit-link" href="https://github.com/pratiksingh1702/RIP/edit/main/workflow.md" target="_blank" rel="noreferrer">Edit this page</a>
+        </div>
+        <p class="lead">The VS Code extension is the editor-first interface. It exposes RIP Chat, context menu actions, architecture visualization, metrics, and index status monitoring.</p>
+      </section>
+
+      <section class="doc-page" id="vscode-workflows" data-title="VS Code workflows index project explain authentication trace service">
+        <div class="section-head">
+          <h2>Editor workflows <a class="anchor-link" href="#vscode-workflows">#</a></h2>
+          <a class="edit-link" href="https://github.com/pratiksingh1702/RIP/edit/main/workflow.md" target="_blank" rel="noreferrer">Edit this page</a>
+        </div>
+        <pre data-lang="text"><code>Index this project
+Explain how authentication works
+Show architecture diagram
+Trace UserService</code></pre>
+      </section>
+
+      <section class="doc-page" id="flutter" data-title="Flutter app mobile server URL API key project switching chat indexing status">
+        <div class="section-head">
+          <h2>Flutter app <a class="anchor-link" href="#flutter">#</a></h2>
+          <a class="edit-link" href="https://github.com/pratiksingh1702/RIP/edit/main/workflow.md" target="_blank" rel="noreferrer">Edit this page</a>
+        </div>
+        <p class="lead">The Flutter app connects to a server-mode RIP backend. Use `repo serve --host 0.0.0.0` so the phone can reach the server over the local network, then provide the API key in the app setup flow.</p>
+      </section>
+
+      <section class="doc-page" id="flutter-commands" data-title="Flutter commands slash index at projects project list remote git websocket progress">
+        <div class="section-head">
+          <h2>Mobile commands <a class="anchor-link" href="#flutter-commands">#</a></h2>
+          <a class="edit-link" href="https://github.com/pratiksingh1702/RIP/edit/main/workflow.md" target="_blank" rel="noreferrer">Edit this page</a>
+        </div>
+        <p>The app mirrors server-backed workflows. Project surfaces use project metadata, and remote Git indexing can be triggered with the same `subdir` semantics as the CLI.</p>
+        <pre data-lang="text"><code>/index https://github.com/pratiksingh1702/flutter_music_app.git --folder flutter_music_app_lib --project-name flutter_music_app_lib --subdir lib --branch main
+@ project-list</code></pre>
+      </section>
+
+      <section class="doc-page" id="mcp" data-title="MCP integration agents Codex Cursor Claude context gateway repo tools">
+        <div class="section-head">
+          <h2>MCP overview <a class="anchor-link" href="#mcp">#</a></h2>
+          <a class="edit-link" href="https://github.com/pratiksingh1702/RIP/tree/main/mcp" target="_blank" rel="noreferrer">Edit this page</a>
+        </div>
+        <p class="lead">RIP supports MCP so coding agents can ask for context, search, trace, impact, explain, and validation without guessing from raw files alone.</p>
+      </section>
+
+      <section class="doc-page" id="mcp-rip" data-title="RIP MCP repo_init repo_index repo_trace repo_impact repo_explain repo_search projects">
+        <div class="section-head">
+          <h2>RIP MCP <a class="anchor-link" href="#mcp-rip">#</a></h2>
+          <a class="edit-link" href="https://github.com/pratiksingh1702/RIP/edit/main/mcp/server.py" target="_blank" rel="noreferrer">Edit this page</a>
+        </div>
+        <p>RIP MCP mirrors the documented CLI surface, including init, index, trace, impact, explain, search, projects, use, dead-code, onboard, architecture, metrics, serve, status, delete, and config tools.</p>
+      </section>
+
+      <section class="doc-page" id="mcp-gateway" data-title="Gateway MCP context-gateway mcp config mcp-server get_context validate_change search_codebase">
+        <div class="section-head">
+          <h2>Gateway MCP <a class="anchor-link" href="#mcp-gateway">#</a></h2>
+          <a class="edit-link" href="https://github.com/pratiksingh1702/RIP/edit/main/gateway/docs/mcp-connection.md" target="_blank" rel="noreferrer">Edit this page</a>
+        </div>
+        <pre data-lang="json"><code>{
+  "mcpServers": {
+    "context-gateway": {
+      "command": "gateway",
+      "args": ["mcp-server"],
+      "env": {
+        "GATEWAY_RIP_MCP_CWD": "."
+      }
+    }
+  }
+}</code></pre>
+      </section>
+
+      <footer>
+        RIP docs are generated from `workflow.md`, `cli.md`, `gateway/docs/*`, and the live router surfaces. <a href="index.html">Return to product page</a>.
+      </footer>
+    </main>
+  </div>
+
+  <script>
+    const menuButton = document.getElementById('menuButton');
+    const searchInput = document.getElementById('docSearch');
+    const pages = Array.from(document.querySelectorAll('.doc-page'));
+    const navLinks = Array.from(document.querySelectorAll('.nav-group a'));
+    const emptyState = document.getElementById('emptyState');
+
+    menuButton.addEventListener('click', () => {
+      document.body.classList.toggle('sidebar-open');
+    });
+
+    document.addEventListener('click', (event) => {
+      if (document.body.classList.contains('sidebar-open') &&
+          !event.target.closest('#sidebar') &&
+          !event.target.closest('#menuButton')) {
+        document.body.classList.remove('sidebar-open');
+      }
+    });
+
+    document.addEventListener('keydown', (event) => {
+      if (event.key === '/' && document.activeElement !== searchInput) {
+        event.preventDefault();
+        searchInput.focus();
+      }
+      if (event.key === 'Escape') {
+        searchInput.value = '';
+        filterDocs('');
+        document.body.classList.remove('sidebar-open');
+      }
+    });
+
+    searchInput.addEventListener('input', () => filterDocs(searchInput.value));
+
+    function filterDocs(query) {
+      const q = query.trim().toLowerCase();
+      let visible = 0;
+      pages.forEach((page) => {
+        const haystack = `${page.dataset.title || ''} ${page.innerText}`.toLowerCase();
+        const match = !q || haystack.includes(q);
+        page.hidden = !match;
+        if (match) visible++;
+      });
+      navLinks.forEach((link) => {
+        const target = document.querySelector(link.getAttribute('href'));
+        link.style.display = target && !target.hidden ? '' : 'none';
+      });
+      emptyState.classList.toggle('visible', visible === 0);
+    }
+
+    function htmlEscape(value) {
+      return value
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;');
+    }
+
+    function highlight(code, lang) {
+      let html = htmlEscape(code);
+      if (lang === 'json') {
+        html = html.replace(/(&quot;.*?&quot;|".*?")/g, '<span class="token string">$1</span>');
+      } else if (lang === 'http') {
+        html = html.replace(/^(GET|POST|DELETE|PUT|PATCH)/gm, '<span class="token method">$1</span>');
+      } else {
+        html = html
+          .replace(/(^|\s)(#.*)$/gm, '$1<span class="token comment">$2</span>')
+          .replace(/(--[a-zA-Z0-9-]+)/g, '<span class="token flag">$1</span>')
+          .replace(/\b(repo|uv|docker|gateway|curl|pip|git|cd|cp)\b/g, '<span class="token keyword">$1</span>')
+          .replace(/("[^"]*")/g, '<span class="token string">$1</span>');
+      }
+      return html;
+    }
+
+    document.querySelectorAll('pre').forEach((pre) => {
+      const code = pre.querySelector('code');
+      const raw = code.textContent;
+      const lang = (pre.dataset.lang || 'text').toLowerCase();
+      code.innerHTML = highlight(raw, lang);
+      const button = document.createElement('button');
+      button.className = 'copy-code';
+      button.type = 'button';
+      button.textContent = 'Copy';
+      button.addEventListener('click', async () => {
+        await navigator.clipboard.writeText(raw);
+        button.textContent = 'Copied';
+        setTimeout(() => { button.textContent = 'Copy'; }, 1400);
+      });
+      pre.appendChild(button);
+    });
+
+    document.querySelectorAll('.anchor-link').forEach((link) => {
+      link.addEventListener('click', async () => {
+        try {
+          await navigator.clipboard.writeText(location.origin + location.pathname + link.getAttribute('href'));
+        } catch (_) {}
+      });
+    });
+
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (!entry.isIntersecting) return;
+        navLinks.forEach((link) => {
+          link.classList.toggle('active', link.getAttribute('href') === `#${entry.target.id}`);
+        });
+      });
+    }, { rootMargin: '-25% 0px -65% 0px', threshold: 0.01 });
+    pages.forEach((page) => observer.observe(page));
+
+    async function loadStars() {
+      const starEl = document.getElementById('starCount');
+      try {
+        const res = await fetch('https://api.github.com/repos/pratiksingh1702/RIP', { headers: { 'Accept': 'application/vnd.github+json' } });
+        if (!res.ok) throw new Error('GitHub unavailable');
+        const data = await res.json();
+        const count = Number(data.stargazers_count || 0).toLocaleString();
+        starEl.textContent = `★ ${count}`;
+      } catch (_) {
+        starEl.textContent = '★ GitHub';
+      }
+    }
+    loadStars();
+  </script>
+</body>
+</html>
