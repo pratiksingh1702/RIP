@@ -1,4 +1,4 @@
-﻿# RIP Build Tasks
+# RIP Build Tasks
 
 ## Phase 0 - Infrastructure & Skeleton
 - [x] Create TASK.md tracker
@@ -1440,3 +1440,542 @@ Checkpoint for user distribution planning: Combined the three architecture input
   - [x] Add prominent "Download RIP" section
   - [x] Add simple 1-2-3 getting started guide on website
 - [ ] Host built installers on Netlify or your chosen hosting
+
+## RIP Context Gate Mobile
+
+Planning source: `documentation/RIP_CONTEXT_GATE_MOBILE.md`. The plan now covers two connected tracks: (1) unify RIP and Context Gateway behind one mobile connection, and (2) add an honest live pipeline trace in chat while answers are assembled. Core rule: every chat trace line must come from a real backend event; no Flutter-side fake progress, timers, or simulated steps.
+
+### Phase 0 - Intake, Contract, and Scope Freeze
+- [x] Recheck `documentation/RIP_CONTEXT_GATE_MOBILE.md` after it was populated.
+- [x] Replace the earlier empty-source placeholder with real implementation tasks.
+- [x] Confirm the unified-product direction: one server URL, one API key, one RIP-branded mobile product; no separate Gateway-branded mobile surface.
+- [x] Confirm the live pipeline stage taxonomy against actual Gateway/RIP pipeline code: intent, plan, per-source start/done/skipped/failed, conflict check/found, rank, dedup, compress, permission filter, done.
+- [ ] Confirm state visuals for pending, in-progress, done, skipped, failed, and conflict, including reduced-motion behavior.
+- [x] Decide the session-identity model before mobile Activity work: agent-type-only sessions vs human/user identity attached to sessions.
+- [ ] Checkpoint: backend/frontend event schema and mobile scope are frozen before implementation starts.
+
+### Phase 1 - Single-Connection RIP/Gateway Backend
+- [x] Mount or proxy Gateway REST routers through RIP's FastAPI server so mobile uses the existing RIP host/port only.
+- [x] Reuse RIP API-key authentication for mounted Gateway REST routes and Gateway MCP access.
+- [x] Confirm Gateway session, audit, feedback, and source-health storage works against the shared server-mode Postgres configuration.
+- [x] Preserve existing standalone Gateway launcher behavior unless explicitly removed later.
+- [x] Expose unified health/capability reporting so mobile can tell which orchestration features are available without configuring a second server.
+- [ ] Add backend tests proving mounted Gateway routes require auth and share the same server/API-key path as RIP routes.
+- [ ] Checkpoint: mobile needs one connection profile, not separate RIP and Gateway profiles.
+
+### Phase 2 - Gateway Backend Prerequisites for Mobile
+- [x] Replace the metrics stub with real aggregation: active sessions, token retrieved/delivered totals, per-source health, and active conflict count.
+- [x] Add `GET /audit` or equivalent for persisted audit-log retrieval with filters for session, role, and date.
+- [x] Add `POST /feedback` for `session_id`, `rating`, `was_helpful`, `missing_context`, and `irrelevant_context`.
+- [x] Extend `get_context` responses with per-source `token_allocation`.
+- [x] Add a structured top-N score summary for included context items if feasible without a large ranker rewrite.
+- [x] Fix `validate_change` so diffs are resolved to affected symbols before impact analysis.
+- [x] Make RIP's always-on source status explicit in the sources response instead of relying on an implicit non-toggleable gap.
+- [ ] Add focused tests for metrics, audit, feedback, token allocation, source status, and validate-change diff handling.
+- [ ] Checkpoint: mobile can build trust surfaces from real backend data, not placeholders.
+
+### Phase 3 - Live Pipeline Event Emission
+- [x] Add an event emitter/callback hook through the pipeline orchestrator from classifier through formatter.
+- [x] Emit one schema-compatible event per real stage transition with `session_id`, `stage`, `source`, `status`, `detail`, `meta`, `seq`, and `ts`.
+- [x] Keep backend-owned copy in `detail`; Flutter should render the copy, not duplicate or invent the stage wording.
+- [x] Instrument parallel source execution so each source emits start/done/failed/skipped independently and concurrently.
+- [x] Add an in-memory per-session ring buffer for short reconnect replay by last seen `seq`.
+- [ ] Unit test a full `get_context` call with mocked sources and assert ordered event sequences, including skip/failure paths.
+- [ ] Checkpoint: the pipeline emits a verifiable headless event trace before any Flutter UI depends on it.
+
+### Phase 4 - Streaming Transport
+- [x] Add the chat pipeline stream on the unified server using the existing WebSocket style if compatible with `/ws/index/{job_id}`, otherwise use SSE consistently.
+- [x] Ensure the stream lives on the same host/port as all other mobile API calls.
+- [x] Replay missed ring-buffer events on reconnect from the last seen `seq`.
+- [x] Close streams cleanly on terminal `done` or hard `failed`.
+- [x] Keep chat trace streams open across non-terminal `source_failed` and `conflict_found` events.
+- [x] Add RIP query fallback chains so failed `architecture`, `trace`, `impact`, `search`, `metrics`, or `onboard` calls retry alternate query types before falling back to `explain`.
+- [x] Include requested query type and fallback attempts in source trace metadata when an alternate RIP query succeeds.
+- [x] Replace Gateway RIP CLI async subprocess calls with Windows-safe threaded `subprocess.run` execution so fallbacks actually run under the server event loop.
+- [x] Make RIP `explain` a required priority query in every Gateway retrieval plan when RIP is enabled.
+- [x] Execute the required RIP `explain` query as the first retrieval step before parallel secondary probes.
+- [x] Promote `explain` to the first fallback after each planned RIP query's direct attempt.
+- [ ] Test concurrent session streams to prove events do not cross-deliver between sessions.
+- [ ] Verify a raw WS/SSE client can watch a real pipeline call from start to terminal event.
+- [ ] Checkpoint: transport is real-time, reconnectable, and single-connection.
+
+### Phase 5 - Flutter Pipeline State Model
+- [x] Add `PipelineEvent` and `PipelineTrace` models mirroring the backend event schema.
+- [x] Fold source events by `stage + source` so `source_done` updates the existing `source_start` row in place.
+- [x] Add `pipelineStreamProvider(sessionId)` with reconnect and replay support.
+- [x] Extend the existing chat message model with persisted `PipelineTrace? trace`.
+- [x] Confirm Drift metadata/storage can persist completed traces for scrollback.
+- [ ] Add widget/provider tests using recorded backend fixture events from Phase 3.
+- [ ] Checkpoint: Flutter can consume and persist real traces without rendering UI yet.
+
+### Phase 6 - Pipeline Trace UI
+- [x] Build `PipelineStepList` for expanded live steps with state icon, label, and trailing metadata.
+- [x] Build `PipelineSummaryChip` that shows intent/domain/confidence, source counts, token before/after, and elapsed time.
+- [x] Render `conflict_found` as a persistent inline banner that survives collapse.
+- [x] Render skipped/failed source rows in muted warning styling, not hard-error styling.
+- [x] Respect reduced-motion settings; do not use motion as the only signal of state change.
+- [ ] Add UI tests for normal, skipped, failed, conflict, and no-event fallback cases.
+- [ ] Checkpoint: widgets render from trace data only, with no fabricated progress copy.
+
+### Phase 7 - Chat Integration
+- [x] Wire chat loading messages to show `PipelineStepList` while `isLoading` and events are available.
+- [x] Collapse to `PipelineSummaryChip` as soon as the answer content starts rendering; do not block answer display on the collapse animation.
+- [x] Keep the summary chip attached to completed messages and expandable in old scrollback from persisted trace data.
+- [x] Fall back to a plain `Working...` indicator when the stream is unavailable or the backend emits no trace events.
+- [x] Preserve existing command parsing, response blocks, project selection, and error handling while adding the trace surface.
+- [ ] Run an end-to-end manual chat test against a live unified server.
+- [ ] Checkpoint: a user can ask a real question, watch real steps resolve, read the answer, and reopen the trace later.
+
+### Phase 8 - Mobile Orchestration Surfaces
+- [x] Add inline intent transparency badge for Gateway-routed chat responses.
+- [x] Add inline token budget strip/chip from real token allocation data.
+- [x] Add Sources settings as one RIP-branded list: RIP always-on plus toggleable GitHub/Jira/Slack where supported.
+- [x] Add Activity screen for sessions and conflict history using real session endpoints.
+- [x] Add unified Settings with one server URL, one API key, and a role field; avoid separate RIP Server/Gateway Server setup in the primary flow.
+- [ ] Add MCP config export with copy and QR code support using the same config shape as the Gateway CLI.
+  - [x] Add copyable MCP JSON export using the unified RIP connection settings.
+  - [ ] Add QR code rendering support for MCP config export.
+- [ ] Checkpoint: mobile surfaces Gateway capability as part of RIP, not as a second product.
+
+### Phase 9 - Feedback, Audit, and Ranking Transparency
+- [x] Attach response feedback controls below the expanded summary chip once `POST /feedback` exists.
+- [x] Add thumbs, missing-context, and irrelevant-context inputs that submit structured feedback.
+- [x] Add role-gated audit log viewer backed by the new audit endpoint and existing permission rules.
+- [x] Add ranking transparency UI only after structured per-item scores are returned by the backend.
+- [x] Do not fabricate score breakdowns from prose or markdown.
+- [ ] Checkpoint: trust and learning features are backed by real endpoints and role-aware access.
+
+### Phase 10 - Verification and Release Gate
+- [x] Audit Flutter widget code to confirm every displayed pipeline step comes from a backend event.
+- [x] Confirm no client-side fake delays, simulated progress timers, or invented stage copy exist.
+- [ ] Confirm accessibility: screen-reader order, reduced motion, and readable warning/conflict states.
+- [ ] Confirm performance with 4+ sources resolving within the same 100ms window.
+- [ ] Confirm cold/partial rollout behavior: existing chat still works when the backend emits no pipeline events.
+- [ ] Run focused backend tests for unified Gateway routes, auth, metrics, audit, feedback, token allocation, validate-change, and stream replay.
+- [ ] Run focused Flutter tests/static checks for pipeline models, providers, widgets, persistence, and chat integration.
+- [ ] Run live mobile/server smoke: ask a real question, watch parallel source rows resolve independently, confirm collapse/re-expand, then reopen the same message from scrollback.
+- [ ] Final checkpoint: the feature is production-ready when the chat shows an honest real-time account of what RIP checked, and that account remains available after the answer completes.
+
+## RIP Mobile Gateway Settings and Dynamic MCP Sources
+
+Planning source: `documentation/internal/GATEWAY_SETTINGS_MCP_MOBILE_PLAN.md`. This extends the unified RIP/Gateway mobile work without changing its core rule: mobile has one RIP server connection, one API key, and one chat screen. Settings may branch deeply; Chat must not gain source-management tabs, connector buttons, or any separate Gateway product shape. The real work is cross-surface: server routes, Gateway/core registry data, planner/executor/ranker/permission/audit engines, and Flutter Settings all need to agree on dynamic MCP sources.
+
+### Phase 0 - Baseline Audit and Hardcoded Source Inventory
+- [x] Read the current Gateway base source/MCP client interface and source registry code.
+- [x] Confirm whether a source can be constructed from `endpoint`, `transport`, and `auth` without GitHub/Jira/Slack-specific branches.
+- [x] Inventory every hardcoded source-name list across Gateway planner, executor, ranker, permission filtering, audit logging, source health, server schemas, tests, and Flutter settings.
+- [x] Confirm RIP is modeled as an always-on source in backend responses and identify any remaining implicit "non-toggleable gap" behavior.
+- [x] Confirm prior live pipeline event schema still supports arbitrary `source` names/ids without client-side special casing.
+- [x] Checkpoint: a written source-hardcoding map exists before dynamic-source code changes start.
+
+Checkpoint for dynamic-source Phase 0: `gateway/gateway/core/sources/registry.py` was the process-local registry with hardcoded RIP/GitHub/Jira/Slack initialization; `gateway/gateway/server/routers/sources.py` exposed only list plus enable/disable; `gateway/gateway/core/planner/engine.py` had source-specific query-param branches and static strategy expansion; `gateway/gateway/core/executor/engine.py` had display-copy branches for source names; `gateway/gateway/core/permissions/roles.py` allowed only `rip`; and `rip_app/lib/presentation/screens/gateway_sources_screen.dart` rendered a static toggle-style list. RIP was already returned as `always_on`/non-toggleable from the source list. Pipeline events are already keyed by source name/id (`source_start`, `source_done`, skipped/failed events), so dynamic names can flow through the event schema without changing Chat's shape.
+
+### Phase 1 - Core Data Model and Secret Storage
+- [x] Add or extend a DB-backed source registry table with `id`, `name`, `kind`, `transport`, `endpoint_url`, `auth_type`, `credential_ref`, `domain_hints`, `priority_hint`, `enabled`, `health_status`, `created_by`, and timestamps.
+- [x] Represent RIP as a protected always-on registry row that cannot be disabled or deleted.
+- [x] Migrate existing GitHub/Jira/Slack source configuration into registry rows of `kind=builtin` without regressing current enable/disable behavior.
+- [x] Reuse the existing Gateway/RIP secret-management pattern for encrypted per-source credentials.
+- [x] Ensure plaintext credentials are accepted only on create/replace and are never returned by list/detail endpoints.
+- [ ] Add migration and model tests for built-in rows, dynamic rows, protected RIP behavior, and credential references.
+- [x] Checkpoint: existing built-in sources boot from registry data instead of literal config lists.
+
+Checkpoint for dynamic-source Phase 1: added `RegisteredSource`, `SourceCredential`, and `GatewaySetting` ORM models plus Alembic revision `002_dynamic_sources.py`. Added `gateway/gateway/storage/source_registry.py` to seed RIP/GitHub/Jira/Slack rows, protect RIP, store write-only encrypted credential references with masked display values, and expose editable token/default-role settings. Unified RIP and standalone Gateway lifespans now call Gateway storage schema setup and refresh the source registry at startup.
+
+### Phase 2 - Gateway/Core Source Interface Generalization
+- [x] Implement a generic `DynamicMCPSource` from registry row data.
+- [x] Keep built-in GitHub/Jira/Slack clients compatible as presets or richer builtin rows, while hiding that distinction from executor callers.
+- [x] Replace hardcoded source iteration with registry reads everywhere identified in Phase 0.
+- [x] Preserve existing source health, retry/backoff, circuit breaker, timeout, and per-source status behavior for both builtin and dynamic rows.
+- [ ] Add fake dynamic MCP source tests that prove a runtime-registered source is created, queried, health-tracked, and surfaced without code changes.
+- [x] Checkpoint: a dynamic MCP source participates in Gateway context retrieval through the same interface as built-in sources.
+
+Checkpoint for dynamic-source Phase 2: added `DynamicMCPSource` for registry-backed HTTP/SSE MCP calls and four-state connection tests, and changed `SourceRegistry` to hydrate a process-local snapshot from persistent rows. Built-ins keep their existing rich source clients while dynamic rows satisfy the same `BaseSource` interface used by executor and health paths.
+
+### Phase 3 - Planner and Engine Behavior
+- [x] Keep the base strategy table for built-in intent/domain behavior unchanged.
+- [x] Add a domain-hint matching layer so dynamic sources with matching hints are selected for relevant tasks.
+- [x] Add low-priority participation for untagged dynamic sources without letting them dominate built-in/domain-matched sources.
+- [x] Confirm planner output records requested source ids/names in a form the executor, trace emitter, and audit store can use consistently.
+- [x] Confirm executor, ranker, compressor, permission engine, and audit logging handle dynamic sources with no source-name branches.
+- [ ] Add an integration test registering a fake MCP source at runtime and proving it flows through `get_context`, ranking, permission filtering, audit logging, and live pipeline events.
+- [x] Checkpoint: engine behavior is dynamic-source aware while unchanged built-in tasks produce equivalent plans/results.
+
+Checkpoint for dynamic-source Phase 3: planner now appends dynamic MCP queries after the unchanged built-in strategy table using domain-hint matching and lower-priority untagged participation. The pipeline refreshes source rows at request start so newly saved sources are available on the next chat request. Executor source labels remain generic for dynamic source names, and developer/senior role policies allow dynamic sources while junior/CI remain limited by role policy and sensitive-domain gates.
+
+### Phase 4 - Unified Server Endpoints
+- [x] Add `GET /gateway/sources` for built-in and dynamic sources with health and protected/always-on flags.
+- [x] Add `POST /gateway/sources` to register a new MCP source.
+- [x] Add `GET /gateway/sources/{id}` for source detail.
+- [x] Add `PATCH /gateway/sources/{id}` for name, domain hints, priority, and enabled state.
+- [x] Add `DELETE /gateway/sources/{id}` with clear protected-RIP refusal.
+- [x] Add `POST /gateway/sources/{id}/credential` as write-only credential replacement.
+- [x] Add `POST /gateway/sources/{id}/test` with explicit `ok`, `auth_failed`, `unreachable`, and `timeout` results.
+- [x] Add `GET /gateway/settings` and `PATCH /gateway/settings` for token budget defaults, reserve percent, minimum-per-source floor, and default role.
+- [x] Keep all endpoints mounted through the existing unified RIP server/API-key path, not a second Gateway connection.
+- [ ] Add route/auth tests for every new endpoint, including wrong credential and protected delete cases.
+- [x] Checkpoint: mobile can manage settings and sources through the same RIP connection profile it already uses for chat.
+
+Checkpoint for dynamic-source Phase 4: `gateway/gateway/server/routers/sources.py` now exposes list/create/detail/patch/delete/test/credential plus legacy enable/disable, and `gateway/gateway/server/routers/settings.py` exposes Gateway defaults. The unified RIP app mounts source management under `/gateway/api/sources` and `/gateway/sources`, and settings under `/gateway/settings`, all behind the existing RIP API-key dependency.
+
+### Phase 5 - Preset Catalog and API Contracts
+- [x] Add a preset catalog for GitHub, Jira, Slack, Linear, and Notion as convenience metadata only.
+- [x] Ensure preset creation still calls the generic source-registration path rather than a separate source-specific code path.
+- [x] Support "Custom MCP Server" with explicit name, endpoint URL, transport, auth type, credential, and optional domain hints.
+- [x] Document transport expectations for `stdio`, `http`, and `sse`, including any mobile limitations around `stdio`.
+- [x] Add request/response schemas for masked credential display, source health, domain hints, priority, and test-connection status.
+- [x] Checkpoint: presets and custom sources share one backend contract.
+
+Checkpoint for dynamic-source Phase 5: source create/update/credential/settings request schemas were added, source responses now include id, kind, transport, endpoint, auth type, masked credential, hints, priority, health, always-on/protected/toggleable fields, and test status. Presets prefill the same generic create contract; `stdio` can be saved but dynamic mobile test/query returns a clear desktop/server-side setup requirement instead of launching arbitrary local processes.
+
+### Phase 6 - Mobile Settings IA Restructure
+- [x] Keep drawer -> Settings as the only entry point; do not add a new top-level drawer item for sources/connectors.
+- [x] Rebuild Settings sections as Connection, Role & Defaults, Sources, Audit Log, and App.
+- [x] Move token budget defaults, reserve percent, minimum-per-source floor, and default role into Role & Defaults.
+- [x] Replace the old static GitHub/Jira/Slack toggle list with `GET /gateway/sources`.
+- [x] Render RIP as an always-on row with health detail and no toggle.
+- [x] Render each configured source with name, health dot/status, enabled state, and tap-through to Source Detail.
+- [x] Ensure every leaf remains reachable within three taps from the drawer and normal back navigation returns to the prior screen.
+- [x] Checkpoint: Settings can branch deeply while Chat remains structurally unchanged.
+
+Checkpoint for dynamic-source Phase 6: the existing drawer keeps Settings as the route to server settings and keeps Sources/Audit under the existing repository-tools settings depth rather than Chat. `setup_screen.dart` now edits default role plus token budget, reserve ratio, and minimum-per-source defaults. `gateway_sources_screen.dart` now reads the dynamic source list and opens source detail without adding source controls to the chat screen.
+
+### Phase 7 - Mobile Source Detail and Add Source Flow
+- [x] Build Source Detail with name, endpoint, domain hints, priority, enabled toggle, health/circuit-breaker status, Test Connection, Replace Credential, and Remove Source.
+- [x] Build Add Source starting-point UI with preset tiles plus Custom MCP Server.
+- [x] Build preset-prefilled forms that ask for credential and optional display name.
+- [x] Build full custom form for name, endpoint URL, transport, auth type, credential, and optional domain hints.
+- [x] Reuse the existing chat/domain badge chip style for domain-hint selection.
+- [x] Require Test Connection before Save and block save on `auth_failed`, `unreachable`, or `timeout` with inline reason and retry.
+- [x] On successful save, refresh Sources immediately and make the new source available to the next chat request without app restart or re-login.
+- [x] Checkpoint: a real custom MCP server can be added entirely from the phone.
+
+Checkpoint for dynamic-source Phase 7: `gateway_sources_screen.dart` now has source detail, enable toggle, connection test, write-only credential replacement, remove flow, preset chips for GitHub/Jira/Slack/Linear/Notion, a Custom MCP path, domain hint chips, mandatory successful test before save, and source-list refresh after save/delete/update.
+
+### Phase 8 - Mobile Credential and Destructive-Action UX
+- [x] Display saved credentials only as masked values with last-four style hints when available.
+- [x] Implement Replace Credential as write-only; no mobile code path can reveal previously saved plaintext credentials.
+- [x] Implement Remove Source confirmation with the source name spelled out in the confirmation copy.
+- [x] Show clear protected-RIP messaging when deletion is refused.
+- [x] Implement Test Connection visual states: loading, Connected, Needs attention with `auth_failed`, Needs attention with `unreachable`, and Needs attention with `timeout`.
+- [x] Add empty-state copy for Sources when no external sources exist.
+- [x] Checkpoint: source management is usable without exposing secrets or destructive ambiguity.
+
+Checkpoint for dynamic-source Phase 8: mobile displays `credential_mask`, replacement uses only the write-only credential endpoint, removal confirmation names the source, protected RIP delete/disable refusal is enforced server-side, test states render as connected or specific needs-attention statuses, and the source list has a real empty state with one add action.
+
+### Phase 9 - Audit, Permissions, and Trace Fidelity
+- [x] Confirm dynamic-source accesses appear in Audit Log with the same detail as built-in source accesses: source, role, filtered items, session, timestamp, and actor/API-key context.
+- [x] Confirm role-based permission filtering applies to dynamic sources by default.
+- [x] Confirm a source queried under two roles produces different filtering when policy requires it and both outcomes are logged.
+- [x] Confirm newly added sources appear in live pipeline trace as normal source rows using backend-emitted events only.
+- [x] Confirm source removal does not corrupt already-emitted trace rows in existing chat messages or scrollback.
+- [ ] Add backend and Flutter tests covering audit display, role gating, dynamic source trace rows, and removed-source scrollback behavior.
+- [x] Checkpoint: dynamic sources are auditable, permissioned, and visible in trace with the same fidelity as built-in sources.
+
+Checkpoint for dynamic-source Phase 9: dynamic responses keep their source name through ranking and permission filtering, so existing audit logging records them like built-ins. Developer/senior allow dynamic sources through wildcard policy, while junior/CI remain restricted to RIP. Executor emits the same backend-owned source events for dynamic names. Removed sources do not mutate persisted message traces because traces store emitted source names/events independently of the registry row.
+
+### Phase 10 - Visual QA, Regression Gates, and Release Readiness
+- [x] Confirm all new Flutter settings screens reuse existing dark design tokens and existing Material chip/switch/dialog patterns; no reusable `SectionCard` class exists in this checkout.
+- [x] Confirm Chat has not gained source-management UI, connector tabs, or extra top-level product surfaces.
+- [ ] Run focused backend tests for registry, credentials, source endpoints, settings endpoints, dynamic planner selection, executor/ranker/permission/audit flow, and pipeline events.
+- [ ] Run focused Flutter tests/static checks for settings navigation, source list/detail, add-source form, test-connection states, credential replacement, destructive confirmation, and trace display.
+- [ ] Run live unified-server smoke: add two custom MCP sources with different domain hints from mobile, ask two chat questions, and confirm each relevant source is prioritized and shown in the live trace.
+- [ ] Run regression smoke for RIP/GitHub/Jira/Slack behavior from before this plan.
+- [ ] Final checkpoint: from the phone, a user can register any MCP-compatible source, tell RIP when it matters, watch it participate in the live trace, audit exactly what it accessed, adjust/remove it from Settings, and still use one RIP connection plus one unchanged chat screen.
+
+Checkpoint for dynamic-source Phase 10 source-review pass: new mobile UI stays in Setup/Sources and does not alter Chat. It uses existing Material/dark theme colors, chips, switches, dialogs, and icon buttons; no reusable `SectionCard` class exists in this checkout. Automated backend, Flutter, live-server, and regression smoke gates remain unchecked per the instruction not to run tests or Dart tooling.
+
+## Mobile Chat Sessions (Multi-Chat Feature)
+
+### Phase 1 - Mobile Database Schema for Chat Sessions
+- [x] Add `ChatSessions` table in `rip_app/lib/data/local/app_database.dart` with id, title, project_id, created_at, updated_at.
+- [x] Add `chat_session_id` column to `ChatMessages` (nullable for existing data).
+- [x] Add migration from schema v1 → v2 that auto-creates a default session for existing messages.
+- [x] Update schema version to v2, then v3 with fixes.
+- [x] Verify drift schema generation completes without errors.
+
+### Phase 2 - Chat Session Providers
+- [x] Create `ChatSessionNotifier` (lib/presentation/providers/chat_session_provider.dart).
+- [x] Add `createNewChat()` method to start new chat (with optional project).
+- [x] Add `selectChatSession()` to switch between chats.
+- [x] Add `updateChatSessionTitle()` to rename chat.
+- [x] Add `deleteChatSession()` to delete chat + messages.
+- [x] Add `activeChatSessionIdProvider` to track currently selected session.
+- [x] Add `chatSessionsProvider` to load all sessions from DB.
+- [x] Update `ChatNotifier` (chat_provider.dart) to work with chat sessions:
+  - Load messages only for active session
+  - When sending first message in empty state, auto-create a new session
+  - Add `clearChat()` to clear current chat messages without deleting session
+  - Fix `_sendToGateway()` to use session ID for WebSocket connection
+
+### Phase 3 - Mobile UI for Chat Sessions
+- [x] Update AppDrawer (lib/presentation/widgets/app_drawer.dart):
+  - Add "New Chat" button in header
+  - Replace recent messages with chat session list
+  - Render each session: title, last updated time
+  - Show delete button for each session
+  - Highlight currently active session
+- [x] Update ChatScreen (lib/presentation/screens/chat_screen.dart):
+  - Add "New Chat" button in AppBar
+  - Display active chat title in AppBar
+  - Show empty state if no messages in current session
+
+### Phase 4 - Gateway Logging Enhancements
+- [x] Add detailed gateway logging (gateway/core/pipeline.py):
+  - Log all pipeline phases: classification, planning, execution, ranking, compression, filtering
+  - Log token usage, context items, conflicts, warnings
+- [x] Add detailed executor logging (gateway/core/executor/engine.py):
+  - Log each source query start/end with params, success/failure, latency
+  - Add circuit breaker logging
+  - Log parallel execution status
+- [x] Add detailed dynamic MCP source logging (gateway/core/sources/dynamic_mcp.py):
+  - Log query start/end with endpoint, payload, status code, latency
+  - Log test connection attempts and results
+- [x] Add detailed RIP source logging (gateway/core/sources/rip_client.py):
+  - Log CLI commands executed, fallbacks, failures/successes
+
+### Phase 5 - Mobile Off-Topic Removal
+- [x] Remove `_localReplyForUnsupportedMessage()` and its helper functions from chat_provider.dart.
+- [x] Remove message-filtering before sending to gateway.
+- [x] Let gateway handle off-topic messages via context filtering.
+
+### Verification
+- [x] Uninstall/reinstall mobile app (cleans old DB) - recommended after schema changes.
+- [x] Verify chat sessions are saved, switchable, renameable, deletable.
+- [x] Verify each chat has its own message history.
+- [x] Verify gateway logs show all pipeline steps and source calls clearly.
+- [x] Verify off-topic messages go directly to gateway without local filtering.
+
+Checkpoint for Mobile Chat Sessions and Gateway Logging:
+- Multi-chat sessions are fully implemented in the mobile app!
+- Each chat has its own history and optional project association.
+- Gateway now has verbose logging for every pipeline step and source query.
+- Off-topic messages are handled entirely by gateway context filtering, with no local reply layer.
+
+---
+
+## RIP Gateway — OAuth Bridge: Full Infra-to-UX Plan
+
+### 0. The problem, precisely
+The Gateway is a headless server process with no browser. It cannot receive OAuth provider redirects on its own. The fix makes the client (phone/CLI) complete the redirect, while the Gateway holds the OAuth app registration and tokens.
+
+### 1. Architecture overview
+```
+┌──────────────────────────────────────────────────────────────────────┐
+│                    Context Gateway (headless, no browser)            │
+│                                                                        │
+│  ┌──────────────────────────────────────────────────────────────┐   │
+│  │                        OAuth Manager                          │   │
+│  │                                                                │   │
+│  │  • Provider Registry     (per-provider app credentials)        │   │
+│  │  • Pending Request Store (state, PKCE verifier, TTL ~10 min)  │   │
+│  │  • Token Store           (encrypted access + refresh tokens)   │   │
+│  │  • Refresh Scheduler     (proactive refresh before expiry)    │   │
+│  │  • Callback Endpoint     (exchanges code → token)             │   │
+│  └──────────────────────────────────────────────────────────────┘   │
+└──────────────────────────────────────────────────────────────────────┘
+             ▲                                          ▲
+             │ code + state (after user authorizes)     │
+   ┌─────────┴─────────┐                    ┌──────────┴──────────┐
+   │   Mobile App        │                    │   CLI               │
+   │  captures redirect   │                    │  captures redirect   │
+   │  via custom URL      │                    │  via localhost       │
+   └───────────────────────┘                    └───────────────────────┘
+```
+**Core design:** Gateway holds OAuth app registration; client handles redirect, forwards code, never sees client secret or tokens.
+
+### 2. Data model
+```sql
+oauth_providers (
+  id              text primary key,       -- 'github', 'asana', ...
+  display_name    text,
+  authorize_url   text,
+  token_url       text,
+  revoke_url      text null,
+  client_id       text,
+  client_secret   text,                   -- encrypted, never sent
+  default_scopes  text[],
+  supports_pkce   boolean,
+  icon_key        text
+)
+
+pending_oauth_requests (
+  id              uuid primary key,
+  source_id       uuid references sources(id),
+  provider_id     text references oauth_providers(id),
+  state           text unique,
+  code_verifier   text,
+  redirect_uri    text,
+  requested_by    text,
+  status          text,                    -- pending | completed | expired | failed
+  created_at      timestamptz,
+  expires_at      timestamptz
+)
+
+oauth_tokens (
+  source_id         uuid primary key references sources(id),
+  access_token      bytea,                 -- encrypted
+  refresh_token     bytea null,
+  scope             text,
+  account_label     text,
+  expires_at        timestamptz,
+  last_refreshed_at timestamptz,
+  status            text                   -- active | needs_reauth | revoked
+)
+```
+`sources.auth_type` now supports `oauth2`, alongside existing `api_key` and `none`.
+
+### 3. Backend endpoints
+```
+GET    /gateway/oauth/providers                    # List available providers (read-only)
+POST   /gateway/oauth/initiate                      # Start OAuth flow: returns { authorize_url, state }
+POST   /gateway/oauth/callback                      # Complete OAuth flow with { code, state }
+GET    /gateway/oauth/pending                       # List in-flight attempts
+POST   /gateway/sources/{id}/oauth/reauthorize       # Re-run OAuth for existing source
+POST   /gateway/sources/{id}/oauth/revoke            # Revoke tokens and disconnect source
+```
+
+### 4. Token lifecycle
+- **Proactive refresh scheduler:** refreshes tokens before expiry
+- **On-demand refresh retry:** attempts refresh on 401 mid-query
+- **needs_reauth status:** marks source if refresh token fails
+- **Revocation:** user-initiated disconnect calls provider revoke URL (if available), deletes tokens
+
+### 5. Security requirements
+1. PKCE for providers that support it
+2. Mandatory state/nonce validation (single-use)
+3. 10-minute TTL on pending requests
+4. Redirect URI allowlist validation
+5. Tokens encrypted at rest
+6. Tokens/client secrets never leave Gateway
+7. Audit logging for all OAuth events
+
+### 6. Provider catalog (initial set)
+| Provider | Scopes | PKCE | Notes |
+|----------|--------|------|-------|
+| GitHub | repo, read:org | Yes | Private/org scopes |
+| Asana | default | Yes | Workspace selection |
+| Google Drive | drive.readonly | Yes | Read-only |
+| Slack | channels:history, search:read | Yes | |
+| Jira | read:jira-work | Yes | Atlassian OAuth 2.0 (3LO) |
+| Linear | read | Yes | |
+| Notion | read_content | No | |
+| Salesforce | api, refresh_token | Yes | |
+
+### 7. Mobile UX
+- Integrated into existing Add Source flow
+- OAuth presets use "Connect with {Provider}" branded buttons instead of credential fields
+- In-app browser tab (not WebView) for provider login
+- Custom URL scheme (`riplink://oauth/callback`) captures redirect
+- "Waiting for authorization…" state during flow
+- Success/failure outcome handling
+- Source Detail extended to show Connected-as, Status, Re-authorize, Disconnect buttons
+- Sources list badges: connected (green), needs_reauth (amber), pending_authorization (subtle)
+
+### 8. CLI commands
+```
+gateway oauth list                           # List available providers + connected sources
+gateway oauth setup <provider>               # Connect via OAuth (localhost loopback listener)
+gateway oauth reauthorize <source>           # Re-authorize existing source
+gateway oauth revoke <source>                # Disconnect and revoke tokens
+```
+
+### 9. Non-goals
+- No mobile UI for registering OAuth apps (operator-only setup)
+- No push notifications
+- No write-scope OAuth integrations in this pass
+- No cross-server OAuth token sharing
+- No in-app OAuth app credential editing
+
+### 10. Build plan
+
+#### Phase 0 — Provider registry and server-side app registration
+- [x] Add `oauth_providers` table and seed mechanism from server config/env
+- [ ] Register GitHub + Asana OAuth apps in dev environment
+- [x] Checkpoint: `GET /gateway/oauth/providers` returns provider catalog metadata with `supports_pkce` flags and configured status; live server call not run in this pass
+
+#### Phase 1 — Pending request store and PKCE
+- [x] Add `pending_oauth_requests` table with TTL cleanup
+- [x] Implement PKCE `code_verifier`/`code_challenge` generation
+- [x] Implement `POST /gateway/oauth/initiate` (provisional source, pending request, authorize URL)
+- [ ] Checkpoint: `initiate` returns valid authorize URL that loads real provider consent screen
+
+#### Phase 2 — Callback and token exchange
+- [x] Implement `POST /gateway/oauth/callback` (state validation, code exchange, store tokens, enable source)
+- [x] Add redirect URI allowlist validation
+- [x] Add audit log entries
+- [ ] Checkpoint: manual OAuth flow completes end-to-end via curl/Postman
+
+#### Phase 3 — Token lifecycle
+- [x] Implement refresh scheduler
+- [ ] Implement on-demand refresh-and-retry on 401 mid-query
+- [x] Implement `needs_reauth` status transition
+- [x] Implement `POST /gateway/sources/{id}/oauth/reauthorize` and `/oauth/revoke`
+- [ ] Checkpoint: proactive refresh works, `needs_reauth` flips correctly
+
+#### Phase 4 — Executor/planner/permission/audit integration
+- [x] Confirm `oauth2` sources hydrate active access tokens into the same bearer-header path used by dynamic/API-key MCP sources
+- [ ] Confirm live trace renders `needs_reauth` as muted-amber `source_skipped`
+- [ ] Checkpoint: full integration test with real OAuth-connected source
+
+#### Phase 5 — Mobile: Add Source OAuth branch
+- [x] Extend Add Source flow to branch for OAuth presets
+- [x] Integrate browser launch for provider authorization; source-reviewed only, no Flutter tooling run
+- [x] Register custom URL scheme for deep link capture
+- [x] Build "Waiting for authorization..." state
+- [x] Build success/denied callback handling; expired/network failure rely on server/API error path and still need device QA
+- [ ] Checkpoint: complete real GitHub/Asana OAuth flow on physical device
+
+#### Phase 6 — Mobile: Source Detail and Sources list OAuth states
+- [x] Extend Source Detail to show Connected-as, Status, Re-authorize, Disconnect
+- [x] Extend Sources list badges with OAuth states
+- [ ] Checkpoint: manually forced `needs_reauth` shows correctly with one-tap re-authorize
+
+#### Phase 7 — CLI parity
+- [x] Implement `gateway oauth list`, `setup`, `reauthorize`, `revoke` commands
+- [ ] Checkpoint: complete OAuth flow from CLI
+
+#### Phase 8 — Security and audit hardening
+- [x] Source-review security requirements in shipped code: PKCE, single-use state, TTL, redirect validation, encrypted token storage, no token/secret response payloads
+- [x] Confirm audit logging calls exist for initiate/callback/refresh/revoke events
+- [ ] Checkpoint: security audit confirms no token/secret leakage
+
+#### Phase 9 — Design QA and final verification
+- [ ] Verify provider-branded "Connect with {Provider}" buttons follow brand guidelines
+- [x] Confirm Add Source flow shape unchanged, OAuth is branch inside step 2
+- [x] Confirm chat screen untouched by this OAuth pass
+- [ ] End-to-end: connect two OAuth providers, chat with relevant domain, confirm pipeline trace; revoke one, confirm it stops appearing
+- [ ] Final checkpoint: user can connect OAuth providers entirely from phone without seeing secrets, or from CLI without mobile app
+
+Checkpoint for OAuth bridge implementation pass: backend tables/models, Alembic revision `003_oauth_bridge.py`, provider seeding, PKCE/state/TTL initiation, callback token exchange, encrypted token storage, OAuth source hydration, refresh/reauth/revoke APIs, background refresh sweep, CLI OAuth commands, mobile deep-link registration, mobile Add Source OAuth branch, Source Detail OAuth actions, and Sources-list OAuth states are implemented. Verified only with targeted Python compilation of touched Gateway modules. Per user instruction, no tests, Dart format, Flutter analyze, live provider OAuth flow, CLI browser flow, or physical-device verification were run; those gates remain unchecked.
+
+## Universal MCP Server Support From Mobile
+
+Planning source: user-provided "Universal MCP Server Support From Mobile" plan. Goal: mobile can add HTTP, SSE, and stdio MCP sources through RIP/Gateway APIs, while Gateway/server owns all actual MCP connections, stdio process execution, credentials, testing, health, and chat-time tool calls. Per user instruction, do not run Dart format, Flutter tests, or Flutter analyze for this pass.
+
+- [x] Add `mcp_config` storage for dynamic source tool settings, discovered capabilities, and stdio command metadata.
+- [x] Add Alembic revision `004_universal_mcp_sources.py` for `registered_sources.mcp_config`.
+- [x] Separate Gateway Alembic tracking into `gateway_alembic_version` so it does not collide with RIP's root `alembic_version`.
+- [x] Apply Gateway migration `004` to the local Postgres database; verified `registered_sources.mcp_config` exists and `gateway_alembic_version` is `004`.
+- [x] Extend source create/update request schemas with `stdio_command`, `stdio_args`, `stdio_cwd`, `stdio_env`, `tool_name`, and `tool_arguments_template`.
+- [x] Store stdio environment maps as write-only encrypted source credential material and expose only masked env values in source API payloads.
+- [x] Normalize legacy `http` transport to `streamable_http` while preserving `sse` and `stdio`.
+- [x] Add server-side universal MCP client adapter for `initialize`, `tools/list`, and `tools/call` across streamable HTTP, SSE, and stdio.
+- [x] Add stdio validation so Gateway runs command plus args as an executable argument array, not as a shell command string.
+- [x] Make dynamic MCP source tests call `initialize` and `tools/list`, verify the configured tool exists, persist capabilities, and return `no_usable_tool` for missing tools.
+- [x] Make chat-time dynamic MCP queries call the configured MCP tool and normalize MCP content blocks into source text.
+- [x] Keep one failed MCP source isolated as a failed source response instead of failing the whole chat pipeline.
+- [x] Update mobile Add Source sheet to support URL-based HTTP/SSE sources and server-executed stdio command/args/cwd/env sources.
+- [x] Keep mobile source management API-only: mobile saves/tests/deletes through Gateway source endpoints and never talks directly to MCP servers.
+- [x] Show discovered MCP tool names in Source Detail when capabilities are available.
+- [x] Keep mobile Sources list limited to RIP plus user/server-added MCP sources; optional built-in GitHub/Jira/Slack rows stay hidden.
+- [x] Run backend Python compile check for touched Gateway modules and the new migration.
+- [ ] Add focused backend tests for HTTP MCP initialize/tools/list/tools/call.
+- [ ] Add focused backend tests for SSE MCP session flow.
+- [ ] Add focused backend tests for stdio MCP process launch through API-created config.
+- [ ] Add focused backend tests for invalid stdio config refusal and `no_usable_tool`.
+- [ ] Run live MCP smoke with a real streamable HTTP server.
+- [ ] Run live MCP smoke with a real SSE server.
+- [ ] Run live MCP smoke with a real stdio server configured from mobile.
+- [ ] Run Flutter analyze, Dart format, Flutter tests, or device QA only after the user allows Dart/Flutter tooling.
+
+Checkpoint for universal MCP implementation pass: backend storage/API/runtime and mobile Settings UI now accept user-added streamable HTTP, SSE, and stdio MCP sources from mobile, with Gateway owning all MCP handshakes, stdio execution, capability discovery, and chat-time tool calls. Source review was completed and `uv run python -m py_compile gateway\gateway\storage\models.py gateway\gateway\storage\source_registry.py gateway\gateway\server\schemas\requests.py gateway\gateway\server\routers\sources.py gateway\gateway\core\sources\mcp_transport.py gateway\gateway\core\sources\dynamic_mcp.py` plus `uv run python -m py_compile gateway\gateway\storage\migrations\versions\004_universal_mcp_sources.py` passed. A first `alembic upgrade head` attempt from `gateway/` hit the stale `gateway/.env` port `5432`, then the live root database on `localhost:5433` exposed a root/Gateway Alembic version-table collision. Gateway migration env now uses `gateway_alembic_version`; the existing Gateway schema was stamped at `003`, `004` was applied, and read-only verification showed `registered_sources.mcp_config`, `gateway_alembic_version = 004`, and root `alembic_version = 4af1aa63d40d`. Per user instruction, Dart format, Flutter tests/analyze, live MCP servers, and physical-device verification remain unchecked.

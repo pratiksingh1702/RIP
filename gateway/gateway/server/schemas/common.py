@@ -20,5 +20,8 @@ class ContextPackage(BaseModel):
     domain: str
     context: List[ContextItem]
     tokens_used: int
+    tokens_retrieved: int = 0
+    token_allocation: dict[str, int] = {}
+    score_summary: List[dict] = []
     conflicts: List[dict]
     warnings: List[str]

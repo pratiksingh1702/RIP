@@ -15,6 +15,7 @@ import '../response_blocks/file_list_block.dart';
 import '../response_blocks/mermaid_block.dart';
 import '../response_blocks/table_block.dart';
 import '../response_blocks/workflow_tree_block.dart';
+import 'pipeline_trace_widgets.dart';
 import 'typing_indicator.dart';
 import 'suggestion_chips.dart';
 
@@ -27,6 +28,24 @@ class RipMessage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     if (message.isLoading) {
+      if (message.trace != null) {
+        return _AssistantShell(
+          timestamp: message.timestamp,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              PipelineStepList(trace: message.trace!),
+              const SizedBox(height: 10),
+              _AssistantActionButton(
+                icon: Icons.stop_rounded,
+                tooltip: 'Stop',
+                onTap: () => ref.read(chatProvider.notifier).cancelCurrentRequest(),
+              ),
+            ],
+          ),
+        );
+      }
       return TypingIndicator(
         label: message.content.isEmpty ? 'Querying repository graph...' : message.content,
         onStop: () => ref.read(chatProvider.notifier).cancelCurrentRequest(),
@@ -35,73 +54,16 @@ class RipMessage extends ConsumerWidget {
 
     final hasBlocks = message.blocks != null && message.blocks!.isNotEmpty;
 
-    return Align(
-      alignment: Alignment.centerLeft,
-      child: Container(
-        margin: const EdgeInsets.fromLTRB(14, 7, 50, 7),
-        padding: const EdgeInsets.fromLTRB(16, 14, 16, 11),
-        decoration: BoxDecoration(
-          color: AppColors.surface.withValues(alpha: 0.96),
-          borderRadius: const BorderRadius.only(
-            topLeft: Radius.circular(8),
-            topRight: Radius.circular(24),
-            bottomRight: Radius.circular(24),
-            bottomLeft: Radius.circular(24),
-          ),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.075)),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.18),
-              blurRadius: 26,
-              offset: const Offset(0, 14),
-            ),
-          ],
-        ),
-        child: ConstrainedBox(
-          constraints: BoxConstraints(
-            maxWidth: MediaQuery.of(context).size.width * 0.86,
-          ),
-          child: Column(
+    return _AssistantShell(
+      timestamp: message.timestamp,
+      child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Header
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    width: 22,
-                    height: 22,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(9),
-                      color: AppColors.primary,
-                    ),
-                    child: const Icon(
-                      Icons.bolt_rounded,
-                      size: 14,
-                      color: Colors.white,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    'Repository Intelligence',
-                    style: AppTextStyles.bodySmMuted.copyWith(
-                      fontWeight: FontWeight.w800,
-                      color: AppColors.textPrimary,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    DateFormatter.formatTime(message.timestamp),
-                    style: TextStyle(
-                      color: AppColors.textSecondary.withValues(alpha: 0.62),
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 10),
+              if (message.trace != null && message.trace!.hasEvents) ...[
+                PipelineSummaryChip(trace: message.trace!),
+                const SizedBox(height: 10),
+              ],
 
               // Content blocks
               if (hasBlocks)
@@ -151,11 +113,9 @@ class RipMessage extends ConsumerWidget {
                     },
                   ),
                 ],
-              ),
+                ),
             ],
           ),
-        ),
-      ),
     );
   }
 
@@ -263,6 +223,92 @@ class RipMessage extends ConsumerWidget {
   }
 }
 
+class _AssistantShell extends StatelessWidget {
+  final Widget child;
+  final DateTime timestamp;
+
+  const _AssistantShell({
+    required this.child,
+    required this.timestamp,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Container(
+        margin: const EdgeInsets.fromLTRB(14, 7, 50, 7),
+        padding: const EdgeInsets.fromLTRB(16, 14, 16, 11),
+        decoration: BoxDecoration(
+          color: AppColors.surface.withValues(alpha: 0.96),
+          borderRadius: const BorderRadius.only(
+            topLeft: Radius.circular(8),
+            topRight: Radius.circular(24),
+            bottomRight: Radius.circular(24),
+            bottomLeft: Radius.circular(24),
+          ),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.075)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.18),
+              blurRadius: 26,
+              offset: const Offset(0, 14),
+            ),
+          ],
+        ),
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxWidth: MediaQuery.of(context).size.width * 0.86,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 22,
+                    height: 22,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(9),
+                      color: AppColors.primary,
+                    ),
+                    child: const Icon(
+                      Icons.bolt_rounded,
+                      size: 14,
+                      color: Colors.white,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Repository Intelligence',
+                    style: AppTextStyles.bodySmMuted.copyWith(
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    DateFormatter.formatTime(timestamp),
+                    style: TextStyle(
+                      color: AppColors.textSecondary.withValues(alpha: 0.62),
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              child,
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _RepositorySearchFooter extends StatelessWidget {
   const _RepositorySearchFooter({
     required this.project,
@@ -281,7 +327,7 @@ class _RepositorySearchFooter extends StatelessWidget {
         : 'Searched indexed graph in $projectName';
 
     return Text(
-      '$scope · ${DateFormatter.formatTime(timestamp)}',
+      '$scope - ${DateFormatter.formatTime(timestamp)}',
       maxLines: 1,
       overflow: TextOverflow.ellipsis,
       style: TextStyle(

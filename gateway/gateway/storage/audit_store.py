@@ -5,6 +5,7 @@ from typing import List, Optional
 from uuid import uuid4
 
 import structlog
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from gateway.storage.database import async_session_factory
@@ -58,6 +59,26 @@ class AuditStore:
         except Exception as e:
             logger.error("Failed to save audit log", error=str(e))
             await db.rollback()
+        finally:
+            await self._close_if_owned(db)
+
+    async def list_logs(
+        self,
+        *,
+        session_id: str | None = None,
+        role: str | None = None,
+        limit: int = 100,
+    ) -> list[AuditLog]:
+        """List recent audit logs with lightweight filters."""
+        db = await self._get_db()
+        try:
+            query = select(AuditLog).order_by(AuditLog.timestamp.desc()).limit(limit)
+            if session_id:
+                query = query.where(AuditLog.session_id == session_id)
+            if role:
+                query = query.where(AuditLog.role == role)
+            result = await db.execute(query)
+            return list(result.scalars().all())
         finally:
             await self._close_if_owned(db)
 

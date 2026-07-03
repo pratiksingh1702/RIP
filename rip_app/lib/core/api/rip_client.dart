@@ -7,8 +7,10 @@ import '../../utils/logger.dart';
 
 class RipClient {
   late final Dio _dio;
+  late final String _serverUrl;
 
   RipClient({required String serverUrl, String? apiKey}) {
+    _serverUrl = serverUrl;
     RipLogger.info('Initializing with serverUrl: $serverUrl', tag: 'RipClient');
     _dio = Dio(BaseOptions(
       baseUrl: serverUrl,
@@ -348,6 +350,214 @@ class RipClient {
       RipLogger.error('deadCode failed', tag: 'RipClient_Endpoint', error: e, stackTrace: stack);
       rethrow;
     }
+  }
+
+  Future<Map<String, dynamic>> gatewayContext({
+    required String task,
+    required String sessionId,
+    int maxTokens = 12000,
+    String role = 'developer',
+    CancelToken? cancelToken,
+  }) async {
+    try {
+      RipLogger.info('Calling gatewayContext(sessionId: $sessionId)', tag: 'RipClient_Endpoint');
+      final response = await _dio.post('/gateway/api/context', data: {
+        'task': task,
+        'session_id': sessionId,
+        'max_tokens': maxTokens,
+        'role': role,
+      }, cancelToken: cancelToken);
+      final data = response.data as Map<String, dynamic>;
+      final result = data['data'] as Map<String, dynamic>? ?? data;
+      RipLogger.success('gatewayContext succeeded', tag: 'RipClient_Endpoint');
+      return result;
+    } catch (e, stack) {
+      RipLogger.error('gatewayContext failed', tag: 'RipClient_Endpoint', error: e, stackTrace: stack);
+      rethrow;
+    }
+  }
+
+  Future<Map<String, dynamic>> gatewayMetrics({CancelToken? cancelToken}) async {
+    final response = await _dio.get('/gateway/api/metrics', cancelToken: cancelToken);
+    final data = response.data as Map<String, dynamic>;
+    return data['data'] as Map<String, dynamic>? ?? data;
+  }
+
+  Future<Map<String, dynamic>> gatewaySources({CancelToken? cancelToken}) async {
+    final response = await _dio.get('/gateway/api/sources', cancelToken: cancelToken);
+    final data = response.data as Map<String, dynamic>;
+    return data['data'] as Map<String, dynamic>? ?? data;
+  }
+
+  Future<Map<String, dynamic>> gatewaySourcePresets({CancelToken? cancelToken}) async {
+    final response = await _dio.get('/gateway/api/sources/presets', cancelToken: cancelToken);
+    final data = response.data as Map<String, dynamic>;
+    return data['data'] as Map<String, dynamic>? ?? data;
+  }
+
+  Future<Map<String, dynamic>> gatewayOAuthProviders({CancelToken? cancelToken}) async {
+    final response = await _dio.get('/gateway/api/oauth/providers', cancelToken: cancelToken);
+    final data = response.data as Map<String, dynamic>;
+    return data['data'] as Map<String, dynamic>? ?? data;
+  }
+
+  Future<Map<String, dynamic>> initiateGatewayOAuth(
+    Map<String, dynamic> values, {
+    CancelToken? cancelToken,
+  }) async {
+    final response = await _dio.post('/gateway/api/oauth/initiate', data: values, cancelToken: cancelToken);
+    final data = response.data as Map<String, dynamic>;
+    return data['data'] as Map<String, dynamic>? ?? data;
+  }
+
+  Future<Map<String, dynamic>> completeGatewayOAuth(
+    Map<String, dynamic> values, {
+    CancelToken? cancelToken,
+  }) async {
+    final response = await _dio.post('/gateway/api/oauth/callback', data: values, cancelToken: cancelToken);
+    final data = response.data as Map<String, dynamic>;
+    return data['data'] as Map<String, dynamic>? ?? data;
+  }
+
+  Future<Map<String, dynamic>> gatewayOAuthPending({CancelToken? cancelToken}) async {
+    final response = await _dio.get('/gateway/api/oauth/pending', cancelToken: cancelToken);
+    final data = response.data as Map<String, dynamic>;
+    return data['data'] as Map<String, dynamic>? ?? data;
+  }
+
+  Future<Map<String, dynamic>> gatewaySettings({CancelToken? cancelToken}) async {
+    final response = await _dio.get('/gateway/settings', cancelToken: cancelToken);
+    final data = response.data as Map<String, dynamic>;
+    return data['data'] as Map<String, dynamic>? ?? data;
+  }
+
+  Future<Map<String, dynamic>> updateGatewaySettings(
+    Map<String, dynamic> values, {
+    CancelToken? cancelToken,
+  }) async {
+    final response = await _dio.patch('/gateway/settings', data: values, cancelToken: cancelToken);
+    final data = response.data as Map<String, dynamic>;
+    return data['data'] as Map<String, dynamic>? ?? data;
+  }
+
+  Future<Map<String, dynamic>> createGatewaySource(
+    Map<String, dynamic> values, {
+    CancelToken? cancelToken,
+  }) async {
+    final response = await _dio.post('/gateway/api/sources', data: values, cancelToken: cancelToken);
+    final data = response.data as Map<String, dynamic>;
+    return data['data'] as Map<String, dynamic>? ?? data;
+  }
+
+  Future<Map<String, dynamic>> updateGatewaySource(
+    String sourceId,
+    Map<String, dynamic> values, {
+    CancelToken? cancelToken,
+  }) async {
+    final response = await _dio.patch('/gateway/api/sources/$sourceId', data: values, cancelToken: cancelToken);
+    final data = response.data as Map<String, dynamic>;
+    return data['data'] as Map<String, dynamic>? ?? data;
+  }
+
+  Future<void> deleteGatewaySource(String sourceId, {CancelToken? cancelToken}) async {
+    await _dio.delete('/gateway/api/sources/$sourceId', cancelToken: cancelToken);
+  }
+
+  Future<Map<String, dynamic>> replaceGatewaySourceCredential(
+    String sourceId,
+    String credential, {
+    CancelToken? cancelToken,
+  }) async {
+    final response = await _dio.post(
+      '/gateway/api/sources/$sourceId/credential',
+      data: {'credential': credential},
+      cancelToken: cancelToken,
+    );
+    final data = response.data as Map<String, dynamic>;
+    return data['data'] as Map<String, dynamic>? ?? data;
+  }
+
+  Future<Map<String, dynamic>> testGatewaySource(String sourceId, {CancelToken? cancelToken}) async {
+    final response = await _dio.post('/gateway/api/sources/$sourceId/test', cancelToken: cancelToken);
+    final data = response.data as Map<String, dynamic>;
+    return data['data'] as Map<String, dynamic>? ?? data;
+  }
+
+  Future<Map<String, dynamic>> reauthorizeGatewaySourceOAuth(
+    String sourceId,
+    Map<String, dynamic> values, {
+    CancelToken? cancelToken,
+  }) async {
+    final response = await _dio.post(
+      '/gateway/api/sources/$sourceId/oauth/reauthorize',
+      data: values,
+      cancelToken: cancelToken,
+    );
+    final data = response.data as Map<String, dynamic>;
+    return data['data'] as Map<String, dynamic>? ?? data;
+  }
+
+  Future<Map<String, dynamic>> revokeGatewaySourceOAuth(String sourceId, {CancelToken? cancelToken}) async {
+    final response = await _dio.post('/gateway/api/sources/$sourceId/oauth/revoke', cancelToken: cancelToken);
+    final data = response.data as Map<String, dynamic>;
+    return data['data'] as Map<String, dynamic>? ?? data;
+  }
+
+  Future<List<dynamic>> gatewaySessions({CancelToken? cancelToken}) async {
+    final response = await _dio.get('/gateway/api/sessions', cancelToken: cancelToken);
+    final data = response.data;
+    if (data is Map<String, dynamic>) return data['data'] as List? ?? const [];
+    return data as List? ?? const [];
+  }
+
+  Future<List<dynamic>> gatewayAudit({
+    String? sessionId,
+    String? role,
+    CancelToken? cancelToken,
+  }) async {
+    final response = await _dio.get(
+      '/gateway/api/audit',
+      queryParameters: {
+        if (sessionId != null) 'session_id': sessionId,
+        if (role != null) 'role': role,
+      },
+      cancelToken: cancelToken,
+    );
+    final data = response.data as Map<String, dynamic>;
+    final result = data['data'] as Map<String, dynamic>? ?? data;
+    return result['audit_logs'] as List? ?? const [];
+  }
+
+  Future<void> submitGatewayFeedback({
+    required String sessionId,
+    int? rating,
+    bool? wasHelpful,
+    List<String> missingContext = const [],
+    List<String> irrelevantContext = const [],
+    String? comment,
+    CancelToken? cancelToken,
+  }) async {
+    await _dio.post('/gateway/api/feedback', data: {
+      'session_id': sessionId,
+      if (rating != null) 'rating': rating,
+      if (wasHelpful != null) 'was_helpful': wasHelpful,
+      'missing_context': missingContext,
+      'irrelevant_context': irrelevantContext,
+      if (comment != null) 'comment': comment,
+    }, cancelToken: cancelToken);
+  }
+
+  Uri chatPipelineWebSocketUri(String sessionId, {int afterSeq = 0}) {
+    final base = Uri.parse(_serverUrl);
+    final scheme = base.scheme == 'https' ? 'wss' : 'ws';
+    final basePath = base.path.endsWith('/')
+        ? base.path.substring(0, base.path.length - 1)
+        : base.path;
+    return base.replace(
+      scheme: scheme,
+      path: '$basePath/ws/chat/$sessionId',
+      queryParameters: {'after_seq': '$afterSeq'},
+    );
   }
 
   Future<bool> healthCheck() async {

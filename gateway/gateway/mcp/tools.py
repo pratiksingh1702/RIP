@@ -7,6 +7,12 @@ from mcp.types import Tool
 
 def get_tools() -> list[Tool]:
     """Get list of MCP tools for Context Gateway."""
+    auth_property = {
+        "api_key": {
+            "type": "string",
+            "description": "RIP API key required when RIP_API_KEYS is configured",
+        }
+    }
     return [
         Tool(
             name="get_context",
@@ -30,7 +36,8 @@ def get_tools() -> list[Tool]:
                         "description": "Agent role for permission filtering",
                         "default": "developer",
                         "enum": ["junior_dev", "developer", "senior_dev", "ci_agent"]
-                    }
+                    },
+                    **auth_property,
                 },
                 "required": ["task"]
             }
@@ -46,7 +53,8 @@ def get_tools() -> list[Tool]:
                 "type": "object",
                 "properties": {
                     "diff": {"type": "string", "description": "The git diff or code change to validate"},
-                    "files": {"type": "array", "items": {"type": "string"}, "description": "Specific files being changed"}
+                    "files": {"type": "array", "items": {"type": "string"}, "description": "Specific files being changed"},
+                    **auth_property,
                 },
                 "required": ["diff"]
             }
@@ -62,7 +70,8 @@ def get_tools() -> list[Tool]:
                 "type": "object",
                 "properties": {
                     "query": {"type": "string", "description": "What to search for"},
-                    "limit": {"type": "integer", "description": "Maximum results", "default": 10}
+                    "limit": {"type": "integer", "description": "Maximum results", "default": 10},
+                    **auth_property,
                 },
                 "required": ["query"]
             }
@@ -78,7 +87,8 @@ def get_tools() -> list[Tool]:
                 "type": "object",
                 "properties": {
                     "topic": {"type": "string", "description": "What to explain (service, feature, or module name)"},
-                    "include_diagrams": {"type": "boolean", "description": "Include Mermaid diagrams in response", "default": True}
+                    "include_diagrams": {"type": "boolean", "description": "Include Mermaid diagrams in response", "default": True},
+                    **auth_property,
                 },
                 "required": ["topic"]
             }

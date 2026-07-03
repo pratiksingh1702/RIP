@@ -1,6 +1,7 @@
 """RIP source client (MCP)."""
 
 import asyncio
+import subprocess
 import time
 from typing import Any
 
@@ -64,32 +65,47 @@ class RIPSource(BaseSource):
     async def query(self, query_type: str, query_params: dict[str, Any]) -> SourceResponse:
         """Query RIP using its CLI or MCP interface."""
         start_time = time.time()
+        logger.info("Starting RIP source query", query_type=query_type, query_params=query_params)
 
         try:
             # Use dummy data for testing
             if self.DUMMY_MODE:
+                logger.debug("Using dummy mode for RIP query", query_type=query_type)
                 result = self._get_dummy_response(query_type, query_params)
+                effective_query_type = query_type
+                attempts = [{"query_type": query_type, "status": "success"}]
             else:
                 # For now, use the CLI directly (simpler for initial implementation)
-                result = await self._cli_query(query_type, query_params)
+                result, effective_query_type, attempts = await self._cli_query_with_fallback(
+                    query_type,
+                    query_params,
+                )
                 
             latency_ms = int((time.time() - start_time) * 1000)
-
-            return SourceResponse(
+            response_obj = SourceResponse(
                 source="rip",
-                query_type=query_type,
+                query_type=effective_query_type,
                 content=result,
                 metadata={
                     "query_params": query_params,
+                    "requested_query_type": query_type,
+                    "fallback_attempts": attempts,
                     "files": self._extract_file_paths(result),
                 },
                 token_count=len(result.split()),  # rough estimate
                 latency_ms=latency_ms,
                 success=True
             )
+            logger.info(
+                "RIP source query successful", 
+                query_type=effective_query_type,
+                latency_ms=latency_ms,
+                token_count=response_obj.token_count
+            )
+            return response_obj
         except Exception as e:
             latency_ms = int((time.time() - start_time) * 1000)
-            logger.error("RIP query failed", query_type=query_type, error=str(e))
+            logger.error("RIP query failed", query_type=query_type, error=str(e), traceback=True)
             return SourceResponse(
                 source="rip",
                 query_type=query_type,
@@ -154,6 +170,66 @@ Changes would affect:
         
         return dummy_responses.get(query_type, dummy_responses["search"])
 
+    async def _cli_query_with_fallback(
+        self,
+        query_type: str,
+        query_params: dict[str, Any],
+    ) -> tuple[str, str, list[dict[str, str]]]:
+        """Run a RIP query, falling back to alternate query types before failing."""
+        attempts: list[dict[str, str]] = []
+
+        for candidate in self._fallback_query_types(query_type):
+            try:
+                logger.debug("Trying RIP query with fallback type", requested=query_type, candidate=candidate)
+                result = await self._cli_query(candidate, query_params)
+                attempts.append({"query_type": candidate, "status": "success"})
+                if candidate != query_type:
+                    logger.info(
+                        "RIP query fallback succeeded",
+                        requested_query_type=query_type,
+                        effective_query_type=candidate,
+                    )
+                return result, candidate, attempts
+            except Exception as exc:
+                attempts.append({
+                    "query_type": candidate,
+                    "status": "failed",
+                    "error": str(exc),
+                })
+                logger.warning(
+                    "RIP query attempt failed",
+                    requested_query_type=query_type,
+                    attempted_query_type=candidate,
+                    error=str(exc),
+                )
+
+        summary = "; ".join(
+            f"{attempt['query_type']}: {attempt.get('error', attempt['status'])}"
+            for attempt in attempts
+        )
+        logger.error("All RIP query fallbacks failed", requested_query_type=query_type, attempts=attempts)
+        raise RuntimeError(f"All RIP query fallbacks failed for {query_type}: {summary}")
+
+    def _fallback_query_types(self, query_type: str) -> list[str]:
+        """Return alternate RIP query types, keeping explain as the final fallback."""
+        fallback_map = {
+            "architecture": ["architecture", "explain", "trace", "search"],
+            "trace": ["trace", "explain", "search", "architecture"],
+            "impact": ["impact", "explain", "trace", "search"],
+            "search": ["search", "explain"],
+            "metrics": ["metrics", "explain", "architecture"],
+            "onboard": ["onboard", "explain", "architecture"],
+            "explain": ["explain"],
+        }
+        candidates = fallback_map.get(query_type, [query_type, "search", "explain"])
+        deduped: list[str] = []
+        for candidate in candidates:
+            if candidate not in deduped:
+                deduped.append(candidate)
+        if "explain" not in deduped:
+            deduped.append("explain")
+        return deduped
+
     async def _cli_query(self, query_type: str, query_params: dict[str, Any]) -> str:
         """Execute a RIP CLI command."""
         args = ["run", "repo"]
@@ -179,19 +255,37 @@ Changes would affect:
             # Default to search
             args.extend(["search", target])
 
-        proc = await asyncio.create_subprocess_exec(
-            "uv",
-            *args,
+        command = "uv " + " ".join(args)
+        logger.debug("Executing RIP CLI command", command=command, cwd=settings.rip_mcp_cwd)
+
+        completed = await asyncio.to_thread(
+            subprocess.run,
+            ["uv", *args],
             cwd=settings.rip_mcp_cwd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            check=False,
         )
-        stdout, stderr = await proc.communicate()
 
-        if proc.returncode != 0:
-            raise RuntimeError(f"RIP command failed: {stderr.decode('utf-8', errors='replace')}")
+        if completed.returncode != 0:
+            stderr_text = completed.stderr.strip()
+            stdout_text = completed.stdout.strip()
+            detail = stderr_text or stdout_text or "no output"
+            logger.error(
+                "RIP CLI command failed", 
+                command=command,
+                exit_code=completed.returncode,
+                stderr=stderr_text,
+                stdout=stdout_text
+            )
+            raise RuntimeError(
+                f"RIP command failed ({command}, exit {completed.returncode}): {detail}"
+            )
 
-        return stdout.decode('utf-8', errors='replace')
+        logger.debug("RIP CLI command succeeded", command=command, output_length=len(completed.stdout))
+        return completed.stdout
 
     def _query_target(self, query_params: dict[str, Any]) -> str:
         """Choose the best CLI target from gateway query parameters."""
@@ -211,14 +305,17 @@ Changes would affect:
             return True
             
         try:
-            proc = await asyncio.create_subprocess_exec(
-                "uv", "run", "repo", "--help",
+            completed = await asyncio.to_thread(
+                subprocess.run,
+                ["uv", "run", "repo", "--help"],
                 cwd=settings.rip_mcp_cwd,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                check=False,
             )
-            await proc.wait()
-            self.available = proc.returncode == 0
+            self.available = completed.returncode == 0
             return self.available
         except Exception as e:
             logger.warning("RIP health check failed", error=str(e))

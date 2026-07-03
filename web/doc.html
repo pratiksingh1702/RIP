@@ -797,7 +797,7 @@
       <section class="doc-page" id="quickstart" data-title="Quickstart install init index search trace impact explain architecture onboard">
         <div class="section-head">
           <h2>Quickstart <a class="anchor-link" href="#quickstart">#</a></h2>
-          <a class="edit-link" href="https://github.com/pratiksingh1702/RIP/edit/main/workflow.md" target="_blank" rel="noreferrer">Edit this page</a>
+          <a class="edit-link" href="https://github.com/pratiksingh1702/RIP/edit/main/documentation/workflow.md" target="_blank" rel="noreferrer">Edit this page</a>
         </div>
         <p class="lead">The core loop is intentionally short: install the CLI, initialize a repository, index it, then ask questions. Indexing creates the graph and vector data used by every analysis command.</p>
         <div class="steps">
@@ -825,7 +825,7 @@ repo onboard --output ONBOARDING.md</code></pre>
       <section class="doc-page" id="installation" data-title="Installation PyPI standalone installer VS Code Flutter source uv sync">
         <div class="section-head">
           <h2>Installation paths <a class="anchor-link" href="#installation">#</a></h2>
-          <a class="edit-link" href="https://github.com/pratiksingh1702/RIP/edit/main/workflow.md" target="_blank" rel="noreferrer">Edit this page</a>
+          <a class="edit-link" href="https://github.com/pratiksingh1702/RIP/edit/main/documentation/workflow.md" target="_blank" rel="noreferrer">Edit this page</a>
         </div>
         <div class="grid">
           <article class="card"><span class="chip">PyPI</span><h3>Developer CLI</h3><p>Fastest path for engineers who already have Python. Install with pip and verify with `repo --help`.</p></article>
@@ -844,7 +844,7 @@ uv run repo --help</code></pre>
       <section class="doc-page" id="runtime-modes" data-title="Runtime modes auto local server docker offline REST Flutter Gateway WebSockets remote Git">
         <div class="section-head">
           <h2>Runtime modes <a class="anchor-link" href="#runtime-modes">#</a></h2>
-          <a class="edit-link" href="https://github.com/pratiksingh1702/RIP/edit/main/cli.md" target="_blank" rel="noreferrer">Edit this page</a>
+          <a class="edit-link" href="https://github.com/pratiksingh1702/RIP/edit/main/documentation/cli.md" target="_blank" rel="noreferrer">Edit this page</a>
         </div>
         <p class="lead">Runtime-aware commands accept `--mode auto|server|local`. Local mode is for offline single-developer analysis. Server mode is required for REST, Flutter, Gateway, WebSockets, remote Git indexing, shared indexes, and concurrent users.</p>
         <table>
@@ -868,7 +868,7 @@ uv run repo serve --mode server --host 0.0.0.0 --port 8000</code></pre>
       <section class="doc-page" id="configuration" data-title="Configuration config toml environment variables LLM providers Neo4j Qdrant Postgres Redis">
         <div class="section-head">
           <h2>Configuration <a class="anchor-link" href="#configuration">#</a></h2>
-          <a class="edit-link" href="https://github.com/pratiksingh1702/RIP/edit/main/workflow.md" target="_blank" rel="noreferrer">Edit this page</a>
+          <a class="edit-link" href="https://github.com/pratiksingh1702/RIP/edit/main/documentation/workflow.md" target="_blank" rel="noreferrer">Edit this page</a>
         </div>
         <p class="lead">Configuration priority is command-line options first, environment variables second, and `.repo-intel/config.toml` third. Local mode works with no server config; server mode needs service URLs and credentials.</p>
         <pre data-lang="toml"><code>[graph]
@@ -898,7 +898,7 @@ repo explain "how auth works" --no-llm --tree --deps</code></pre>
       <section class="doc-page" id="cli-overview" data-title="CLI overview verbose logs commands mode flags">
         <div class="section-head">
           <h2>CLI overview <a class="anchor-link" href="#cli-overview">#</a></h2>
-          <a class="edit-link" href="https://github.com/pratiksingh1702/RIP/edit/main/cli.md" target="_blank" rel="noreferrer">Edit this page</a>
+          <a class="edit-link" href="https://github.com/pratiksingh1702/RIP/edit/main/documentation/cli.md" target="_blank" rel="noreferrer">Edit this page</a>
         </div>
         <p class="lead">Every `repo` command accepts `-v` / `--verbose`. Verbose mode prints detailed runtime logs and writes `.repo-intel/logs/&lt;command&gt;-YYYYMMDD-HHMMSS.log` when a target repository is available.</p>
         <div class="grid three">
@@ -911,7 +911,7 @@ repo explain "how auth works" --no-llm --tree --deps</code></pre>
       <section class="doc-page" id="cli-indexing" data-title="CLI indexing repo init repo index repo status repo git-index remote git subdir branch folder-name project-name">
         <div class="section-head">
           <h2>Indexing commands <a class="anchor-link" href="#cli-indexing">#</a></h2>
-          <a class="edit-link" href="https://github.com/pratiksingh1702/RIP/edit/main/cli.md" target="_blank" rel="noreferrer">Edit this page</a>
+          <a class="edit-link" href="https://github.com/pratiksingh1702/RIP/edit/main/documentation/cli.md" target="_blank" rel="noreferrer">Edit this page</a>
         </div>
         <div class="command-list">
           <article class="command-card">
@@ -952,7 +952,7 @@ repo status C:\path\to\project</code></pre>
       <section class="doc-page" id="cli-analysis" data-title="CLI analysis repo search trace impact dependencies explain dead-code onboard architecture metrics">
         <div class="section-head">
           <h2>Analysis commands <a class="anchor-link" href="#cli-analysis">#</a></h2>
-          <a class="edit-link" href="https://github.com/pratiksingh1702/RIP/edit/main/cli.md" target="_blank" rel="noreferrer">Edit this page</a>
+          <a class="edit-link" href="https://github.com/pratiksingh1702/RIP/edit/main/documentation/cli.md" target="_blank" rel="noreferrer">Edit this page</a>
         </div>
         <div class="command-list">
           <article class="command-card"><h3>repo search</h3><p>Semantic search for code by behavior or concept.</p><pre data-lang="powershell"><code>repo search "database queries" --language python --limit 50
@@ -976,7 +976,7 @@ repo dead-code --type functions --format json</code></pre></article>
       <section class="doc-page" id="cli-projects" data-title="CLI projects api keys repo projects repo use repo api-keys access all open projects project scoped">
         <div class="section-head">
           <h2>Projects and API keys <a class="anchor-link" href="#cli-projects">#</a></h2>
-          <a class="edit-link" href="https://github.com/pratiksingh1702/RIP/edit/main/cli.md" target="_blank" rel="noreferrer">Edit this page</a>
+          <a class="edit-link" href="https://github.com/pratiksingh1702/RIP/edit/main/documentation/cli.md" target="_blank" rel="noreferrer">Edit this page</a>
         </div>
         <p class="lead">Projects isolate graph and vector results. API keys protect server access and can be used by Flutter, REST clients, and integrations.</p>
         <div class="grid">
@@ -1000,7 +1000,7 @@ repo api-keys revoke 2</code></pre>
       <section class="doc-page" id="cli-server" data-title="CLI server maintenance repo serve delete config doctor runtime status">
         <div class="section-head">
           <h2>Server and maintenance <a class="anchor-link" href="#cli-server">#</a></h2>
-          <a class="edit-link" href="https://github.com/pratiksingh1702/RIP/edit/main/cli.md" target="_blank" rel="noreferrer">Edit this page</a>
+          <a class="edit-link" href="https://github.com/pratiksingh1702/RIP/edit/main/documentation/cli.md" target="_blank" rel="noreferrer">Edit this page</a>
         </div>
         <div class="command-list">
           <article class="command-card"><h3>repo serve</h3><p>Start the RIP API server for REST, Flutter, Gateway, WebSockets, remote Git indexing, and shared indexes.</p><pre data-lang="powershell"><code>docker compose up -d
@@ -1131,7 +1131,7 @@ uv run gateway mcp-server</code></pre>
       <section class="doc-page" id="architecture" data-title="Architecture user interfaces core engine storage parser indexer graph search LLM services">
         <div class="section-head">
           <h2>System architecture <a class="anchor-link" href="#architecture">#</a></h2>
-          <a class="edit-link" href="https://github.com/pratiksingh1702/RIP/edit/main/workflow.md" target="_blank" rel="noreferrer">Edit this page</a>
+          <a class="edit-link" href="https://github.com/pratiksingh1702/RIP/edit/main/documentation/workflow.md" target="_blank" rel="noreferrer">Edit this page</a>
         </div>
         <div class="grid three">
           <article class="card"><span class="chip">Interfaces</span><h3>Human and agent surfaces</h3><p>CLI, FastAPI, VS Code, Flutter, MCP, and Gateway all sit above the same indexed knowledge layer.</p></article>
@@ -1232,7 +1232,7 @@ gateway status</code></pre>
       <section class="doc-page" id="vscode" data-title="VS Code extension chat panel explain trace architecture metrics index status">
         <div class="section-head">
           <h2>VS Code extension <a class="anchor-link" href="#vscode">#</a></h2>
-          <a class="edit-link" href="https://github.com/pratiksingh1702/RIP/edit/main/workflow.md" target="_blank" rel="noreferrer">Edit this page</a>
+          <a class="edit-link" href="https://github.com/pratiksingh1702/RIP/edit/main/documentation/workflow.md" target="_blank" rel="noreferrer">Edit this page</a>
         </div>
         <p class="lead">The VS Code extension is the editor-first interface. It exposes RIP Chat, context menu actions, architecture visualization, metrics, and index status monitoring.</p>
       </section>
@@ -1240,7 +1240,7 @@ gateway status</code></pre>
       <section class="doc-page" id="vscode-workflows" data-title="VS Code workflows index project explain authentication trace service">
         <div class="section-head">
           <h2>Editor workflows <a class="anchor-link" href="#vscode-workflows">#</a></h2>
-          <a class="edit-link" href="https://github.com/pratiksingh1702/RIP/edit/main/workflow.md" target="_blank" rel="noreferrer">Edit this page</a>
+          <a class="edit-link" href="https://github.com/pratiksingh1702/RIP/edit/main/documentation/workflow.md" target="_blank" rel="noreferrer">Edit this page</a>
         </div>
         <pre data-lang="text"><code>Index this project
 Explain how authentication works
@@ -1251,7 +1251,7 @@ Trace UserService</code></pre>
       <section class="doc-page" id="flutter" data-title="Flutter app mobile server URL API key project switching chat indexing status">
         <div class="section-head">
           <h2>Flutter app <a class="anchor-link" href="#flutter">#</a></h2>
-          <a class="edit-link" href="https://github.com/pratiksingh1702/RIP/edit/main/workflow.md" target="_blank" rel="noreferrer">Edit this page</a>
+          <a class="edit-link" href="https://github.com/pratiksingh1702/RIP/edit/main/documentation/workflow.md" target="_blank" rel="noreferrer">Edit this page</a>
         </div>
         <p class="lead">The Flutter app connects to a server-mode RIP backend. Use `repo serve --host 0.0.0.0` so the phone can reach the server over the local network, then provide the API key in the app setup flow.</p>
       </section>
@@ -1259,7 +1259,7 @@ Trace UserService</code></pre>
       <section class="doc-page" id="flutter-commands" data-title="Flutter commands slash index at projects project list remote git websocket progress">
         <div class="section-head">
           <h2>Mobile commands <a class="anchor-link" href="#flutter-commands">#</a></h2>
-          <a class="edit-link" href="https://github.com/pratiksingh1702/RIP/edit/main/workflow.md" target="_blank" rel="noreferrer">Edit this page</a>
+          <a class="edit-link" href="https://github.com/pratiksingh1702/RIP/edit/main/documentation/workflow.md" target="_blank" rel="noreferrer">Edit this page</a>
         </div>
         <p>The app mirrors server-backed workflows. Project surfaces use project metadata, and remote Git indexing can be triggered with the same `subdir` semantics as the CLI.</p>
         <pre data-lang="text"><code>/index https://github.com/pratiksingh1702/flutter_music_app.git --folder flutter_music_app_lib --project-name flutter_music_app_lib --subdir lib --branch main
@@ -1301,7 +1301,7 @@ Trace UserService</code></pre>
       </section>
 
       <footer>
-        RIP docs are generated from `workflow.md`, `cli.md`, `gateway/docs/*`, and the live router surfaces. <a href="index.html">Return to product page</a>.
+        RIP docs are generated from `documentation/workflow.md`, `documentation/cli.md`, `gateway/docs/*`, and the live router surfaces. <a href="index.html">Return to product page</a>.
       </footer>
     </main>
   </div>

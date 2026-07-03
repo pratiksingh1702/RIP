@@ -13,13 +13,13 @@ DEFAULT_POLICIES = {
     ),
     UserRole.DEVELOPER: AccessPolicy(
         role=UserRole.DEVELOPER,
-        allowed_sources=["rip"],
+        allowed_sources=["rip", "*"],
         max_token_budget=12000,
         can_access_sensitive_domains=True
     ),
     UserRole.SENIOR_DEV: AccessPolicy(
         role=UserRole.SENIOR_DEV,
-        allowed_sources=["rip"],
+        allowed_sources=["rip", "*"],
         max_token_budget=20000,
         can_access_sensitive_domains=True
     ),

@@ -13,6 +13,7 @@ import '../../utils/date_formatter.dart';
 import '../providers/chat_provider.dart';
 import '../providers/connection_provider.dart';
 import '../providers/project_provider.dart';
+import '../providers/chat_session_provider.dart';
 import '../widgets/chat/chat_bubble.dart';
 import '../widgets/common/error_banner.dart';
 import '../widgets/sidebar/app_drawer.dart';
@@ -128,12 +129,23 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     _focusNode.requestFocus();
   }
 
+  Future<void> _createNewChat() async {
+    HapticFeedback.selectionClick();
+    final activeProjectId = ref.read(activeProjectIdProvider);
+    await ref.read(chatSessionNotifierProvider.notifier).createNewChat(
+          projectId: activeProjectId,
+        );
+    _textController.clear();
+    setState(() => _composerExpanded = false);
+  }
+
   @override
   Widget build(BuildContext context) {
     final messages = ref.watch(chatProvider);
     final activeProject = ref.watch(activeProjectProvider);
     final connectionStatus = ref.watch(connectionStatusProvider);
     final isAssistantBusy = ref.watch(isAssistantBusyProvider);
+    final activeSessionId = ref.watch(activeChatSessionIdProvider);
 
     return Scaffold(
       extendBodyBehindAppBar: true,
@@ -183,10 +195,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                   HapticFeedback.selectionClick();
                   context.push('/setup');
                 },
+                onNewChatTap: _createNewChat,
                 project: activeProject.maybeWhen(
                   data: (project) => project,
                   orElse: () => null,
                 ),
+                activeSessionId: activeSessionId,
               ),
               connectionStatus.when(
                 data: (isConnected) => isConnected
@@ -393,21 +407,34 @@ class _ProjectStatPill extends StatelessWidget {
   }
 }
 
-class _FloatingHeader extends StatelessWidget {
+class _FloatingHeader extends ConsumerWidget {
   const _FloatingHeader({
     required this.progress,
     required this.onMenuTap,
     required this.onSettingsTap,
+    required this.onNewChatTap,
     required this.project,
+    required this.activeSessionId,
   });
 
   final double progress;
   final VoidCallback onMenuTap;
   final VoidCallback onSettingsTap;
+  final VoidCallback onNewChatTap;
   final Project? project;
+  final String? activeSessionId;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final chatSessionsAsync = ref.watch(chatSessionsProvider);
+    final sessions = chatSessionsAsync.value ?? [];
+    final activeSession = sessions.isNotEmpty 
+        ? sessions.firstWhere(
+            (s) => s.id == activeSessionId,
+            orElse: () => sessions.first,
+          )
+        : null;
+
     final top = MediaQuery.paddingOf(context).top;
     final chrome = Theme.of(context).extension<ChatChromeTheme>() ??
         const ChatChromeTheme.dark();
@@ -464,11 +491,11 @@ class _FloatingHeader extends StatelessWidget {
                           mainAxisAlignment: MainAxisAlignment.center,
                           crossAxisAlignment: CrossAxisAlignment.center,
                           children: [
-                            const Text(
+                            Text(
                               'RIP · Repository Intelligence',
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
+                              style: const TextStyle(
                                 color: AppColors.textPrimary,
                                 fontSize: 17,
                                 fontWeight: FontWeight.w700,
@@ -476,9 +503,9 @@ class _FloatingHeader extends StatelessWidget {
                             ),
                             AnimatedSwitcher(
                               duration: const Duration(milliseconds: 180),
-                              child: project == null
-                                  ? const Text(
-                                      'Select an indexed repository',
+                              child: activeSession == null
+                                  ? Text(
+                                      'Start a new chat',
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
                                       style: TextStyle(
@@ -488,8 +515,8 @@ class _FloatingHeader extends StatelessWidget {
                                       ),
                                     )
                                   : Text(
-                                      '${project!.projectName} · ${project!.entitiesCount} entities',
-                                      key: ValueKey(project!.projectId),
+                                      '${activeSession.title}${project != null ? ' · ' + project!.projectName : ''}',
+                                      key: ValueKey(activeSession.id),
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
                                       style: TextStyle(
@@ -504,6 +531,12 @@ class _FloatingHeader extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(width: 12),
+                      _GlassIconButton(
+                        icon: Icons.add_comment_rounded,
+                        tooltip: 'New Chat',
+                        onPressed: onNewChatTap,
+                      ),
+                      const SizedBox(width: 8),
                       _GlassIconButton(
                         icon: Icons.tune_rounded,
                         tooltip: 'Settings',

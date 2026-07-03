@@ -1,6 +1,7 @@
 """MCP stdio server (Phase 9)."""
 
 import asyncio
+import os
 import structlog
 from typing import Any
 
@@ -34,6 +35,7 @@ async def main():
     async def call_tool(name: str, arguments: dict[str, Any]) -> str:
         """Call a tool."""
         logger.info("Calling tool", tool_name=name, arguments=arguments)
+        _verify_mcp_api_key(arguments)
 
         if name == "get_context":
             return await with_logging(name, arguments, handle_get_context)
@@ -53,6 +55,19 @@ async def main():
             write_stream,
             server.create_initialization_options()
         )
+
+def _verify_mcp_api_key(arguments: dict[str, Any]) -> None:
+    """Require a RIP API key for MCP calls when API keys are configured."""
+    configured = {
+        key.strip()
+        for key in os.getenv("RIP_API_KEYS", "").split(",")
+        if key.strip()
+    }
+    if not configured:
+        return
+    provided = str(arguments.pop("api_key", "") or "")
+    if provided not in configured:
+        raise PermissionError("Invalid or missing api_key for Context Gateway MCP tool call")
 
 
 if __name__ == "__main__":

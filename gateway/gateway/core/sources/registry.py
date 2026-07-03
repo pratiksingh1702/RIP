@@ -6,10 +6,13 @@ import structlog
 
 from gateway.config import settings
 from .base import BaseSource
+from .dynamic_mcp import DynamicMCPSource
 from .rip_client import RIPSource
 from .github import GitHubSource
 from .jira import JiraSource
 from .slack import SlackSource
+from gateway.storage import source_registry as source_store
+from gateway.storage.source_registry import SourceRecord
 
 logger = structlog.get_logger(__name__)
 
@@ -20,6 +23,7 @@ class SourceRegistry:
     def __init__(self):
         self._sources: Dict[str, BaseSource] = {}
         self._health: Dict[str, bool] = {}
+        self._records: Dict[str, SourceRecord] = {}
         self._initialize_sources()
 
     def _initialize_sources(self) -> None:
@@ -37,6 +41,37 @@ class SourceRegistry:
         self._sources["slack"] = SlackSource(enabled=settings.slack_mcp_enabled)
         self._health["slack"] = settings.slack_mcp_enabled
 
+    async def refresh(self) -> None:
+        """Hydrate the process registry from persistent source rows."""
+        try:
+            records = await source_store.list_sources()
+        except Exception as exc:
+            logger.warning("Failed to refresh persistent source registry", error=str(exc))
+            return
+
+        next_sources: Dict[str, BaseSource] = {}
+        next_health: Dict[str, bool] = {}
+        next_records: Dict[str, SourceRecord] = {}
+        for record in records:
+            source = self._source_from_record(record)
+            next_sources[record.name] = source
+            next_health[record.name] = record.health_status == "ok" or bool(source.is_available())
+            next_records[record.name] = record
+        self._sources = next_sources
+        self._health = next_health
+        self._records = next_records
+
+    def _source_from_record(self, record: SourceRecord) -> BaseSource:
+        if record.name == "rip":
+            return self._sources.get("rip") or RIPSource()
+        if record.name == "github" and record.kind == "builtin":
+            return GitHubSource(enabled=record.enabled)
+        if record.name == "jira" and record.kind == "builtin":
+            return JiraSource(enabled=record.enabled)
+        if record.name == "slack" and record.kind == "builtin":
+            return SlackSource(enabled=record.enabled)
+        return DynamicMCPSource(record)
+
     @property
     def sources(self) -> Dict[str, BaseSource]:
         """Get all registered sources."""
@@ -45,6 +80,10 @@ class SourceRegistry:
     def get_source(self, name: str) -> BaseSource | None:
         """Get a source by name."""
         return self._sources.get(name)
+
+    def get_record(self, name: str) -> SourceRecord | None:
+        """Get persistent metadata for a source by name."""
+        return self._records.get(name)
 
     def list_sources(self) -> Dict[str, BaseSource]:
         """List all registered sources."""
@@ -73,10 +112,22 @@ class SourceRegistry:
 
     def enabled_source_names(self) -> list[str]:
         """Return sources currently enabled for planner/executor use."""
+        enabled = []
+        for name, source in self._sources.items():
+            record = self._records.get(name)
+            if record is not None:
+                if record.protected or record.enabled:
+                    enabled.append(name)
+                continue
+            if name == "rip" or getattr(source, "enabled", source.is_available()):
+                enabled.append(name)
+        return enabled
+
+    def dynamic_source_records(self) -> list[SourceRecord]:
+        """Return enabled non-built-in sources for planner hint matching."""
         return [
-            name
-            for name, source in self._sources.items()
-            if name == "rip" or getattr(source, "enabled", source.is_available())
+            record for record in self._records.values()
+            if record.enabled and record.kind == "mcp" and not record.protected
         ]
 
     def set_enabled(self, name: str, enabled: bool) -> bool:
@@ -87,6 +138,8 @@ class SourceRegistry:
         setattr(source, "enabled", enabled)
         source.available = enabled
         self._health[name] = enabled
+        if name in self._records:
+            self._records[name].enabled = enabled
         return True
 
 

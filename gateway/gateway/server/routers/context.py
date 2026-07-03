@@ -19,6 +19,7 @@ async def get_context(request: GetContextRequest):
             task=request.task,
             max_tokens=request.max_tokens,
             role=request.role,
+            trace_session_id=request.session_id,
         )
         return GetContextResponse(
             session_id=context_package.session_id,
@@ -26,6 +27,9 @@ async def get_context(request: GetContextRequest):
             domain=context_package.domain,
             context=context_package.context,
             tokens_used=context_package.tokens_used,
+            tokens_retrieved=context_package.tokens_retrieved,
+            token_allocation=context_package.token_allocation,
+            score_summary=context_package.score_summary,
             conflicts=context_package.conflicts,
             warnings=context_package.warnings,
         )

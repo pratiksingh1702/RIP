@@ -20,6 +20,9 @@ class GetContextResponse(BaseModel):
     domain: str
     context: List[ContextItem]
     tokens_used: int
+    tokens_retrieved: int = 0
+    token_allocation: dict[str, int] = {}
+    score_summary: List[dict[str, Any]] = []
     conflicts: List[dict]
     warnings: List[str]
 
@@ -44,3 +47,11 @@ class MetricsResponse(BaseModel):
     active_sessions: int
     tokens_retrieved: int
     tokens_delivered: int
+    active_conflicts: int = 0
+    source_health: List[dict[str, Any]] = []
+
+
+class FeedbackResponse(BaseModel):
+    """Feedback submission response."""
+    status: str
+    session_id: str

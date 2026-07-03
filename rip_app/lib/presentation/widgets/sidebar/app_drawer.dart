@@ -3,12 +3,12 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:rip_app/core/design/app_colors.dart';
-import 'package:rip_app/data/models/message.dart';
 import 'package:rip_app/utils/date_formatter.dart';
 
 import '../../providers/chat_provider.dart';
 import '../../providers/project_provider.dart';
 import '../../providers/settings_provider.dart';
+import '../../providers/chat_session_provider.dart';
 import '../overlays/add_repo_sheet.dart';
 import 'project_list.dart';
 
@@ -18,8 +18,8 @@ class AppDrawer extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final themeMode = ref.watch(themeModeProvider);
-    final messages = ref.watch(chatProvider);
-    final recentMessages = _recentMessages(messages);
+    final chatSessionsAsync = ref.watch(chatSessionsProvider);
+    final activeSessionId = ref.watch(activeChatSessionIdProvider);
 
     return Drawer(
       width: MediaQuery.sizeOf(context).width * 0.82,
@@ -40,6 +40,21 @@ class AppDrawer extends ConsumerWidget {
               const SizedBox(height: 8),
               Row(
                 children: [
+                  Expanded(
+                    child: _CompactAction(
+                      icon: Icons.add_comment_rounded,
+                      label: 'New Chat',
+                      onTap: () async {
+                        HapticFeedback.selectionClick();
+                        final activeProjectId = ref.read(activeProjectIdProvider);
+                        await ref.read(chatSessionNotifierProvider.notifier).createNewChat(
+                              projectId: activeProjectId,
+                            );
+                        if (context.mounted) Navigator.pop(context);
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 8),
                   Expanded(
                     child: _CompactAction(
                       icon: Icons.add_rounded,
@@ -81,28 +96,93 @@ class AppDrawer extends ConsumerWidget {
                 child: ListView(
                   padding: EdgeInsets.zero,
                   children: [
-                    if (recentMessages.isNotEmpty)
-                      _CompactSection(
-                        title: 'Recent Queries',
-                        children: [
-                          for (final msg in recentMessages)
-                            _CompactRow(
-                              icon: msg.isUser
-                                  ? Icons.person_outline_rounded
-                                  : Icons.bolt_rounded,
-                              title: msg.content,
-                              subtitle: DateFormatter.formatTime(msg.timestamp),
-                              onTap: () => Navigator.pop(context),
-                            ),
-                        ],
-                      ),
+                    chatSessionsAsync.when(
+                      loading: () => const Center(child: CircularProgressIndicator()),
+                      error: (err, stack) => Text('Error: $err'),
+                      data: (chatSessions) {
+                        if (chatSessions.isEmpty) {
+                          return const _CompactSection(
+                            title: 'Chats',
+                            children: [
+                              Padding(
+                                padding: EdgeInsets.all(16),
+                                child: Text(
+                                  'No chats yet. Start a new chat!',
+                                  style: TextStyle(color: Colors.grey),
+                                ),
+                              ),
+                            ],
+                          );
+                        }
+                        return _CompactSection(
+                          title: 'Chats',
+                          children: [
+                            for (final session in chatSessions)
+                              _ChatSessionRow(
+                                session: session,
+                                isActive: session.id == activeSessionId,
+                                onTap: () async {
+                                  HapticFeedback.selectionClick();
+                                  await ref.read(chatSessionNotifierProvider.notifier).selectChatSession(session.id);
+                                  if (context.mounted) Navigator.pop(context);
+                                },
+                                onDelete: () async {
+                                  HapticFeedback.mediumImpact();
+                                  await ref.read(chatSessionNotifierProvider.notifier).deleteChatSession(session.id);
+                                },
+                              ),
+                          ],
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 10),
                     _CompactSection(
                       title: 'Repository Tools',
                       children: [
                         _CompactRow(
+                          icon: Icons.route_rounded,
+                          title: 'Activity',
+                          subtitle: 'Sessions and conflicts',
+                          onTap: () {
+                            HapticFeedback.selectionClick();
+                            Navigator.pop(context);
+                            context.push('/activity');
+                          },
+                        ),
+                        _CompactRow(
+                          icon: Icons.hub_rounded,
+                          title: 'Sources',
+                          subtitle: 'RIP and external context',
+                          onTap: () {
+                            HapticFeedback.selectionClick();
+                            Navigator.pop(context);
+                            context.push('/sources');
+                          },
+                        ),
+                        _CompactRow(
+                          icon: Icons.policy_rounded,
+                          title: 'Audit',
+                          subtitle: 'Role-gated access decisions',
+                          onTap: () {
+                            HapticFeedback.selectionClick();
+                            Navigator.pop(context);
+                            context.push('/audit');
+                          },
+                        ),
+                        _CompactRow(
+                          icon: Icons.qr_code_rounded,
+                          title: 'MCP export',
+                          subtitle: 'Copy agent config',
+                          onTap: () {
+                            HapticFeedback.selectionClick();
+                            Navigator.pop(context);
+                            context.push('/mcp-export');
+                          },
+                        ),
+                        _CompactRow(
                           icon: Icons.history_rounded,
                           title: 'Clear query history',
-                          subtitle: 'Reset current repository session',
+                          subtitle: 'Reset current chat',
                           onTap: () async {
                             HapticFeedback.mediumImpact();
                             await ref.read(chatProvider.notifier).clearChat();
@@ -171,14 +251,78 @@ class AppDrawer extends ConsumerWidget {
       ),
     );
   }
+}
 
-  List<Message> _recentMessages(List<Message> messages) {
-    return messages
-        .where((message) => message.content.trim().isNotEmpty)
-        .toList()
-        .reversed
-        .take(4)
-        .toList();
+class _ChatSessionRow extends StatelessWidget {
+  const _ChatSessionRow({
+    required this.session,
+    required this.isActive,
+    required this.onTap,
+    required this.onDelete,
+  });
+
+  final dynamic session;
+  final bool isActive;
+  final VoidCallback onTap;
+  final VoidCallback onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Material(
+      color: isActive ? colorScheme.primaryContainer : Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          child: Row(
+            children: [
+              Icon(
+                isActive ? Icons.chat_bubble : Icons.chat_bubble_outline_rounded,
+                color: isActive ? colorScheme.primary : colorScheme.onSurfaceVariant,
+                size: 18,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      session.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: isActive ? colorScheme.onPrimaryContainer : colorScheme.onSurface,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 1),
+                    Text(
+                      DateFormatter.formatTime(session.updatedAt),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: isActive
+                            ? colorScheme.onPrimaryContainer.withValues(alpha: 0.8)
+                            : colorScheme.onSurfaceVariant.withValues(alpha: 0.8),
+                        fontSize: 11,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.delete_outline_rounded, size: 18),
+                color: colorScheme.error,
+                onPressed: onDelete,
+                visualDensity: VisualDensity.compact,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
 

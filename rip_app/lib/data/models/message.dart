@@ -1,5 +1,6 @@
 import 'package:equatable/equatable.dart';
 import '../../domain/enums/message_type.dart';
+import 'pipeline_trace.dart';
 import 'rip_response.dart';
 
 class Message extends Equatable {
@@ -10,6 +11,7 @@ class Message extends Equatable {
   final DateTime timestamp;
   final Map<String, dynamic>? metadata;
   final List<RipResponseBlock>? blocks;
+  final PipelineTrace? trace;
   final bool isLoading;
 
   const Message({
@@ -20,6 +22,7 @@ class Message extends Equatable {
     required this.timestamp,
     this.metadata,
     this.blocks,
+    this.trace,
     this.isLoading = false,
   });
 
@@ -31,6 +34,7 @@ class Message extends Equatable {
     DateTime? timestamp,
     Map<String, dynamic>? metadata,
     List<RipResponseBlock>? blocks,
+    PipelineTrace? trace,
     bool? isLoading,
   }) {
     return Message(
@@ -41,6 +45,7 @@ class Message extends Equatable {
       timestamp: timestamp ?? this.timestamp,
       metadata: metadata ?? this.metadata,
       blocks: blocks ?? this.blocks,
+      trace: trace ?? this.trace,
       isLoading: isLoading ?? this.isLoading,
     );
   }
@@ -54,6 +59,7 @@ class Message extends Equatable {
         timestamp,
         metadata,
         blocks,
+        trace,
         isLoading,
       ];
 }

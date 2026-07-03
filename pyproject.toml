@@ -49,7 +49,8 @@ requires = ["setuptools>=70.0"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
-include = ["cli*", "core*", "server*", "mcp*", "gateway*"]
+where = ["."]
+include = ["cli", "cli.*", "core", "core.*", "server", "server.*", "mcp", "mcp.*", "gateway.gateway", "gateway.gateway.*"]
 exclude = ["*.tests", "*.tests.*", "tests.*", "tests", "gateway.tests", "gateway.tests.*"]
 
 [dependency-groups]

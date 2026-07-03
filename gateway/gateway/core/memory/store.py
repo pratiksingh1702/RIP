@@ -80,6 +80,29 @@ class SessionStore:
         finally:
             await self._close_if_owned(db)
 
+    async def update_session_stats(
+        self,
+        session_id: UUID,
+        *,
+        sources_used: List[str],
+        tokens_retrieved: int,
+        tokens_delivered: int,
+    ) -> None:
+        """Update source and token counters for a session."""
+        db = await self._get_db()
+        try:
+            result = await db.execute(select(DbSession).where(DbSession.id == session_id))
+            db_session = result.scalar_one_or_none()
+
+            if db_session:
+                db_session.sources_used = sorted(set(sources_used))
+                db_session.tokens_retrieved = tokens_retrieved
+                db_session.tokens_delivered = tokens_delivered
+                db_session.tokens_saved = max(0, tokens_retrieved - tokens_delivered)
+                await db.commit()
+        finally:
+            await self._close_if_owned(db)
+
     async def complete_session(
         self,
         session_id: UUID,

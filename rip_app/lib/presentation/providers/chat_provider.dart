@@ -4,7 +4,9 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 import 'package:drift/drift.dart' show Value;
+import 'package:web_socket_channel/web_socket_channel.dart';
 import '../../data/models/message.dart';
+import '../../data/models/pipeline_trace.dart';
 import '../../data/models/rip_response.dart';
 import '../../data/local/app_database.dart';
 import '../../domain/enums/message_type.dart';
@@ -12,7 +14,9 @@ import '../../utils/command_parser.dart';
 import '../../utils/response_parser.dart';
 import '../../core/exceptions.dart';
 import 'connection_provider.dart';
+import 'gateway_provider.dart';
 import 'project_provider.dart';
+import 'chat_session_provider.dart';
 
 const uuid = Uuid();
 
@@ -26,26 +30,57 @@ class ChatNotifier extends Notifier<List<Message>> {
   late AppDatabase _db;
   CancelToken? _activeCancelToken;
   String? _activePendingId;
+  String? _lastGatewaySessionId;
+  String? _currentSessionId;
 
   @override
   List<Message> build() {
     _db = ref.watch(databaseProvider);
-    _loadMessages();
+    _loadDefaultMessages();
     return [];
   }
 
-  Future<void> _loadMessages() async {
-    final dbMessages = await _db.getAllMessages();
+  Future<void> _loadDefaultMessages() async {
+    // Try to load default session or first available session
+    final sessions = await _db.getAllChatSessions();
+    if (sessions.isNotEmpty) {
+      final defaultSession = sessions.firstWhere(
+        (s) => s.id == 'default-session',
+        orElse: () => sessions.first,
+      );
+      await loadSessionMessages(defaultSession.id);
+      ref.read(activeChatSessionIdProvider.notifier).state = defaultSession.id;
+    } else {
+      // No sessions yet, just initialize with empty state
+      state = [];
+    }
+  }
+
+  Future<void> loadSessionMessages(String sessionId) async {
+    _currentSessionId = sessionId;
+    final dbMessages = await _db.getMessagesForSession(sessionId);
     state = dbMessages.map((dbMsg) {
       List<RipResponseBlock>? blocks;
+      PipelineTrace? trace;
       if (dbMsg.metadata != null && dbMsg.metadata!.isNotEmpty) {
         try {
-          final List<dynamic> decoded = jsonDecode(dbMsg.metadata!);
-          blocks = decoded
-              .map((j) => RipResponseBlock.fromJson(j as Map<String, dynamic>))
-              .toList();
+          final decoded = jsonDecode(dbMsg.metadata!);
+          if (decoded is List) {
+            blocks = decoded
+                .map((j) => RipResponseBlock.fromJson(j as Map<String, dynamic>))
+                .toList();
+          } else if (decoded is Map<String, dynamic>) {
+            final blockData = decoded['blocks'] as List? ?? const [];
+            blocks = blockData
+                .map((j) => RipResponseBlock.fromJson(j as Map<String, dynamic>))
+                .toList();
+            final traceData = decoded['trace'];
+            if (traceData is Map<String, dynamic>) {
+              trace = PipelineTrace.fromJson(traceData);
+            }
+          }
         } catch (e) {
-          log('Error decoding metadata blocks: $e');
+          log('Error decoding metadata: $e');
         }
       }
       return Message(
@@ -55,25 +90,45 @@ class ChatNotifier extends Notifier<List<Message>> {
         type: dbMsg.messageType,
         timestamp: dbMsg.timestamp,
         blocks: blocks,
+        trace: trace,
       );
     }).toList();
   }
 
   Future<void> addMessage(Message message) async {
+    if (_currentSessionId == null) {
+      // No active session, create one first
+      final activeProjectId = ref.read(activeProjectIdProvider);
+      await ref.read(chatSessionNotifierProvider.notifier).createNewChat(
+            projectId: activeProjectId,
+          );
+      _currentSessionId = ref.read(activeChatSessionIdProvider);
+    }
+
     state = [...state, message];
     await _db.insertMessage(ChatMessagesCompanion(
       id: Value(message.id),
+      chatSessionId: Value(_currentSessionId!),
       content: Value(message.content),
       isUser: Value(message.isUser),
       messageType: Value(message.type),
       timestamp: Value(message.timestamp),
-      metadata: message.blocks != null
-          ? Value(jsonEncode(message.blocks!.map((b) => b.toJson()).toList()))
+      metadata: message.blocks != null || message.trace != null
+          ? Value(_encodeMetadata(message.blocks, message.trace))
           : const Value.absent(),
     ));
   }
 
   Future<void> sendMessage(String text) async {
+    if (_currentSessionId == null) {
+      // No active session, create one first
+      final activeProjectId = ref.read(activeProjectIdProvider);
+      await ref.read(chatSessionNotifierProvider.notifier).createNewChat(
+            projectId: activeProjectId,
+          );
+      _currentSessionId = ref.read(activeChatSessionIdProvider);
+    }
+
     if (text.trim().isEmpty) return;
     if (ref.read(isAssistantBusyProvider)) {
       await addMessage(Message(
@@ -100,31 +155,12 @@ class ChatNotifier extends Notifier<List<Message>> {
     state = [...state, userMsg];
     await _db.insertMessage(ChatMessagesCompanion(
       id: Value(userMsg.id),
+      chatSessionId: Value(_currentSessionId!),
       content: Value(userMsg.content),
       isUser: Value(userMsg.isUser),
       messageType: Value(userMsg.type),
       timestamp: Value(userMsg.timestamp),
     ));
-
-    final localReply = _localReplyForUnsupportedMessage(trimmedText);
-    if (localReply != null) {
-      final ripMsg = Message(
-        id: uuid.v4(),
-        content: localReply,
-        isUser: false,
-        type: MessageType.text,
-        timestamp: DateTime.now(),
-      );
-      state = [...state, ripMsg];
-      await _db.insertMessage(ChatMessagesCompanion(
-        id: Value(ripMsg.id),
-        content: Value(ripMsg.content),
-        isUser: Value(ripMsg.isUser),
-        messageType: Value(ripMsg.type),
-        timestamp: Value(ripMsg.timestamp),
-      ));
-      return;
-    }
 
     // 2. Add temporary loading/typing indicator message
     final pendingId = uuid.v4();
@@ -134,6 +170,7 @@ class ChatNotifier extends Notifier<List<Message>> {
       isUser: false,
       type: MessageType.text,
       timestamp: DateTime.now(),
+      trace: PipelineTrace.empty(pendingId),
       isLoading: true,
     );
     state = [...state, pendingMsg];
@@ -145,11 +182,31 @@ class ChatNotifier extends Notifier<List<Message>> {
     try {
       // 3. Parse command & execute
       final parsedCmd = CommandParser.parse(trimmedText);
+      final useGatewayPipeline = parsedCmd.type == CommandType.unknown;
+      _lastGatewaySessionId = null;
+      final traceCollector = useGatewayPipeline
+          ? _collectPipelineTrace(pendingId, cancelToken)
+          : Future.value(PipelineTrace.empty(pendingId));
       final rawResponse = await _executeCommand(
         parsedCmd,
         trimmedText,
+        gatewaySessionId: useGatewayPipeline ? pendingId : null,
         cancelToken: cancelToken,
       );
+      final trace = await traceCollector.timeout(
+        const Duration(seconds: 2),
+        onTimeout: () {
+          for (final message in state) {
+            if (message.id == pendingId && message.trace != null) {
+              return message.trace!;
+            }
+          }
+          return PipelineTrace.empty(pendingId);
+        },
+      );
+      final persistedTrace = useGatewayPipeline && _lastGatewaySessionId != null
+          ? trace.withSessionId(_lastGatewaySessionId!)
+          : trace;
 
       // 4. Parse response into blocks
       final blocks = ResponseParser.parse(
@@ -165,6 +222,7 @@ class ChatNotifier extends Notifier<List<Message>> {
         type: MessageType.text,
         timestamp: DateTime.now(),
         blocks: blocks,
+        trace: persistedTrace.hasEvents ? persistedTrace : null,
         isLoading: false,
       );
 
@@ -174,11 +232,12 @@ class ChatNotifier extends Notifier<List<Message>> {
       // 7. Save to DB
       await _db.insertMessage(ChatMessagesCompanion(
         id: Value(ripMsg.id),
+        chatSessionId: Value(_currentSessionId!),
         content: Value(ripMsg.content),
         isUser: Value(ripMsg.isUser),
         messageType: Value(ripMsg.type),
         timestamp: Value(ripMsg.timestamp),
-        metadata: Value(jsonEncode(blocks.map((b) => b.toJson()).toList())),
+        metadata: Value(_encodeMetadata(blocks, ripMsg.trace)),
       ));
     } catch (e, stackTrace) {
       log('Error sending message: $e', error: e, stackTrace: stackTrace);
@@ -210,6 +269,7 @@ class ChatNotifier extends Notifier<List<Message>> {
       state = state.map((m) => m.id == pendingId ? errorMsg : m).toList();
       await _db.insertMessage(ChatMessagesCompanion(
         id: Value(errorMsg.id),
+        chatSessionId: Value(_currentSessionId!),
         content: Value(errorMsg.content),
         isUser: Value(errorMsg.isUser),
         messageType: Value(errorMsg.type),
@@ -260,6 +320,7 @@ class ChatNotifier extends Notifier<List<Message>> {
     state = state.map((m) => m.id == pendingId ? stoppedMsg : m).toList();
     await _db.insertMessage(ChatMessagesCompanion(
       id: Value(stoppedMsg.id),
+      chatSessionId: Value(_currentSessionId!),
       content: Value(stoppedMsg.content),
       isUser: Value(stoppedMsg.isUser),
       messageType: Value(stoppedMsg.type),
@@ -267,9 +328,21 @@ class ChatNotifier extends Notifier<List<Message>> {
     ));
   }
 
+  Future<void> clearMessages() async {
+    state = [];
+  }
+
+  Future<void> clearChat() async {
+    if (_currentSessionId != null) {
+      await _db.deleteMessagesForSession(_currentSessionId!);
+    }
+    state = [];
+  }
+
   Future<String> _executeCommand(
     ParsedCommand cmd,
     String rawText, {
+    String? gatewaySessionId,
     required CancelToken cancelToken,
   }) async {
     final client = ref.read(ripClientProvider);
@@ -277,7 +350,8 @@ class ChatNotifier extends Notifier<List<Message>> {
 
     if (projectId == null &&
         cmd.type != CommandType.indexRepository &&
-        cmd.type != CommandType.projects) {
+        cmd.type != CommandType.projects &&
+        cmd.type != CommandType.unknown) {
       throw Exception('No active project selected. Select a project first using @ or drawer.');
     }
 
@@ -464,165 +538,91 @@ class ChatNotifier extends Notifier<List<Message>> {
         return buffer.toString();
 
       case CommandType.unknown:
-        final result = await client.explain(
-          projectId: projectId!,
-          topic: rawText,
+        final result = await client.gatewayContext(
+          task: rawText,
+          sessionId: gatewaySessionId ?? uuid.v4(),
+          role: ref.read(gatewayRoleProvider),
           cancelToken: cancelToken,
         );
-        return result['explanation'] as String? ?? 'No response from server.';
+        return _formatGatewayContext(result);
     }
+  }
+
+  Future<PipelineTrace> _collectPipelineTrace(
+    String sessionId,
+    CancelToken cancelToken,
+  ) async {
+    var trace = PipelineTrace.empty(sessionId);
+    WebSocketChannel? channel;
+    try {
+      final client = ref.read(ripClientProvider);
+      channel = WebSocketChannel.connect(
+        client.chatPipelineWebSocketUri(sessionId),
+      );
+      cancelToken.whenCancel.then((_) => channel?.sink.close());
+      await for (final raw in channel.stream) {
+        final decoded = jsonDecode(raw as String) as Map<String, dynamic>;
+        trace = trace.fold(PipelineEvent.fromJson(decoded));
+        state = state
+            .map((message) => message.id == sessionId
+                ? message.copyWith(trace: trace)
+                : message)
+            .toList();
+        if (trace.isComplete) break;
+      }
+    } catch (e) {
+      log('Pipeline stream unavailable: $e');
+    } finally {
+      await channel?.sink.close();
+    }
+    return trace;
+  }
+
+  String _formatGatewayContext(Map<String, dynamic> result) {
+    final buffer = StringBuffer();
+    final intent = result['intent'];
+    final domain = result['domain'];
+    _lastGatewaySessionId = result['session_id'] as String?;
+    if (intent != null || domain != null) {
+      buffer.writeln('Intent: ${intent ?? 'unknown'} - Domain: ${domain ?? 'general'}\n');
+    }
+    final context = result['context'] as List? ?? const [];
+    if (context.isEmpty) {
+      return buffer.isEmpty ? 'No context returned.' : buffer.toString();
+    }
+    for (final item in context.take(6)) {
+      if (item is Map<String, dynamic>) {
+        final source = item['source'] ?? 'source';
+        final score = (item['score'] as num?)?.toStringAsFixed(2);
+        buffer.writeln('### $source${score == null ? '' : ' - score $score'}');
+        buffer.writeln(item['content'] ?? '');
+        buffer.writeln();
+      }
+    }
+    final tokenAllocation = result['token_allocation'];
+    if (tokenAllocation is Map && tokenAllocation.isNotEmpty) {
+      buffer.writeln('Token allocation:');
+      tokenAllocation.forEach((source, tokens) {
+        buffer.writeln('- $source: $tokens');
+      });
+    }
+    return buffer.toString();
+  }
+
+  String _encodeMetadata(
+    List<RipResponseBlock>? blocks,
+    PipelineTrace? trace,
+  ) {
+    return jsonEncode({
+      'blocks': blocks?.map((block) => block.toJson()).toList() ?? const [],
+      if (trace != null) 'trace': trace.toJson(),
+    });
   }
 
   int _intFlag(ParsedCommand cmd, String name, {required int fallback}) {
     final value = cmd.flagValue(name);
     if (value == null || value == 'true') return fallback;
     return int.tryParse(value) ?? fallback;
-  }
-
-  String? _localReplyForUnsupportedMessage(String text) {
-    final normalized = text.trim().toLowerCase();
-    if (normalized.isEmpty) return null;
-
-    final parsedCommand = CommandParser.parse(text);
-    if (text.trimLeft().startsWith('/')) {
-      if (parsedCommand.type == CommandType.unknown) {
-        return 'Unknown command. Use /search, /explain, /trace, /impact, /architecture, /metrics, /onboard, /dependencies, /projects, or /dead-code.';
-      }
-      return null;
-    }
-
-    if (_looksLikeGarbage(normalized)) {
-      return 'I need a real codebase question. Ask about a file, symbol, flow, dependency, architecture, impact, or bug.';
-    }
-
-    if (_looksOffTopic(normalized) && !_looksCodeRelated(text)) {
-      return 'I only help with this repository. Ask about code, files, architecture, dependencies, impact, search, or debugging.';
-    }
-
-    return null;
-  }
-
-  bool _looksLikeGarbage(String text) {
-    final compact = text.replaceAll(RegExp(r'\s+'), '');
-    if (compact.length <= 2) return true;
-    if (RegExp(r'^(.)\1{4,}$').hasMatch(compact)) return true;
-
-    final letters = RegExp(r'[a-z0-9]').allMatches(compact).length;
-    if (letters == 0) return true;
-    final symbolRatio = (compact.length - letters) / compact.length;
-    if (compact.length >= 5 && symbolRatio > 0.65) return true;
-
-    final vowels = RegExp(r'[aeiou]').allMatches(compact).length;
-    if (compact.length >= 12 && vowels == 0 && !compact.contains('_')) {
-      return true;
-    }
-
-    return false;
-  }
-
-  bool _looksOffTopic(String text) {
-    const offTopicTerms = [
-      'weather',
-      'recipe',
-      'cook',
-      'cooking',
-      'movie',
-      'song',
-      'lyrics',
-      'poem',
-      'story',
-      'joke',
-      'dating',
-      'relationship',
-      'homework',
-      'essay',
-      'translate',
-      'sports',
-      'cricket',
-      'football',
-      'stock price',
-      'bitcoin',
-      'horoscope',
-      'medical',
-      'doctor',
-      'legal advice',
-      'lawyer',
-    ];
-
-    return offTopicTerms.any(text.contains);
-  }
-
-  bool _looksCodeRelated(String text) {
-    final normalized = text.toLowerCase();
-    const codeTerms = [
-      'repo',
-      'repository',
-      'code',
-      'file',
-      'folder',
-      'class',
-      'function',
-      'method',
-      'symbol',
-      'module',
-      'package',
-      'import',
-      'dependency',
-      'dependencies',
-      'architecture',
-      'trace',
-      'impact',
-      'search',
-      'explain',
-      'debug',
-      'bug',
-      'error',
-      'exception',
-      'api',
-      'endpoint',
-      'database',
-      'query',
-      'model',
-      'provider',
-      'widget',
-      'screen',
-      'service',
-      'controller',
-      'route',
-      'login',
-      'auth',
-      'state',
-      'build',
-      'test',
-      'config',
-      'index',
-      'graph',
-      'flow',
-      'depends',
-      'call',
-      'calls',
-      'used',
-      'unused',
-    ];
-
-    if (codeTerms.any(normalized.contains)) return true;
-    if (RegExp(r'\b[\w\-\/\\]+\.(dart|py|ts|tsx|js|jsx|java|go|rs|json|yaml|yml|md)\b')
-        .hasMatch(normalized)) {
-      return true;
-    }
-    if (RegExp(r'\b[A-Z][a-z0-9]+[A-Z][A-Za-z0-9]*\b').hasMatch(text)) {
-      return true;
-    }
-    if (RegExp(r'\b[a-z][a-z0-9]*_[a-z0-9_]+\b').hasMatch(normalized)) {
-      return true;
-    }
-
-    return false;
-  }
-
-  Future<void> clearChat() async {
-    state = [];
-    await _db.deleteAllMessages();
   }
 }
 

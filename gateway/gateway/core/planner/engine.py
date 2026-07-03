@@ -43,6 +43,7 @@ class PlannerEngine:
                         estimated_tokens=1500
                     )
                 )
+        queries = self._require_rip_explain(queries, enabled_sources, task)
 
         # Conditional sources only run when their source is enabled and condition is met.
         for query_spec in strategy.get("conditional_query", []):
@@ -60,20 +61,19 @@ class PlannerEngine:
                     estimated_tokens=1000,
                 )
             )
+        queries.extend(self._dynamic_source_queries(classification, task, enabled_sources))
 
-        # Build retrieval steps
-        steps = [
-            RetrievalStep(
-                queries=queries,
-                parallel=True,
-                condition="always"
-            )
-        ]
+        # Build retrieval steps. Keep the required RIP explain query first so the
+        # most reliable context path is available before broader probes run.
+        steps = self._build_retrieval_steps(queries)
 
         # Allocate token budget
         token_allocation = allocate_token_budget(
             total_budget=max_tokens,
-            token_weights=strategy["token_weights"],
+            token_weights=self._token_weights_with_dynamic_sources(
+                strategy["token_weights"],
+                queries,
+            ),
             enabled_sources=enabled_sources
         )
 
@@ -112,6 +112,12 @@ class PlannerEngine:
             query_params["limit"] = 10
         elif source == "slack":
             query_params["limit"] = 10
+        else:
+            query_params["limit"] = 10
+            record = self.source_registry.get_record(source)
+            if record is not None:
+                query_params["source_id"] = record.id
+                query_params["domain_hints"] = record.domain_hints
 
         return SourceQuery(
             source=source,
@@ -122,6 +128,63 @@ class PlannerEngine:
             timeout_seconds=settings.source_timeout_seconds
         )
 
+    def _require_rip_explain(
+        self,
+        queries: list[SourceQuery],
+        enabled_sources: list[str],
+        task: str,
+    ) -> list[SourceQuery]:
+        """Make RIP explain the required first context query whenever RIP is enabled."""
+        if "rip" not in enabled_sources:
+            return queries
+
+        explain_query = self._build_query(
+            source="rip",
+            query_type="explain",
+            task=task,
+            priority=1,
+            estimated_tokens=2000,
+        )
+        remaining = [
+            query
+            for query in queries
+            if not (query.source == "rip" and query.query_type == "explain")
+        ]
+        return [explain_query, *remaining]
+
+    def _build_retrieval_steps(self, queries: list[SourceQuery]) -> list[RetrievalStep]:
+        """Run required RIP explain first, then fan out to the remaining queries."""
+        if not queries:
+            return [RetrievalStep(queries=[], parallel=True, condition="always")]
+
+        first = queries[0]
+        if first.source == "rip" and first.query_type == "explain":
+            steps = [
+                RetrievalStep(
+                    queries=[first],
+                    parallel=False,
+                    condition="always",
+                )
+            ]
+            remaining = queries[1:]
+            if remaining:
+                steps.append(
+                    RetrievalStep(
+                        queries=remaining,
+                        parallel=True,
+                        condition="always",
+                    )
+                )
+            return steps
+
+        return [
+            RetrievalStep(
+                queries=queries,
+                parallel=True,
+                condition="always",
+            )
+        ]
+
     def _condition_matches(self, condition: str, task: str) -> bool:
         """Evaluate lightweight retrieval conditions without side effects."""
         if condition == "always":
@@ -131,6 +194,47 @@ class PlannerEngine:
         if condition == "files_overlap_with_active_prs":
             return True
         return False
+
+    def _dynamic_source_queries(
+        self,
+        classification: ClassificationResult,
+        task: str,
+        enabled_sources: list[str],
+    ) -> list[SourceQuery]:
+        """Add runtime MCP sources using domain hints without rewriting strategies."""
+        queries: list[SourceQuery] = []
+        domain_terms = {
+            classification.domain.lower(),
+            *(keyword.lower() for keyword in classification.domain_keywords_found),
+        }
+        task_lower = task.lower()
+        for record in self.source_registry.dynamic_source_records():
+            if record.name not in enabled_sources:
+                continue
+            hints = {hint.lower() for hint in record.domain_hints}
+            matched = bool(hints & domain_terms) or any(hint in task_lower for hint in hints)
+            queries.append(
+                self._build_query(
+                    source=record.name,
+                    query_type="search",
+                    task=task,
+                    priority=2 if matched else 3,
+                    estimated_tokens=1000 if matched else 600,
+                )
+            )
+        return queries
+
+    def _token_weights_with_dynamic_sources(
+        self,
+        base_weights: dict[str, float],
+        queries: list[SourceQuery],
+    ) -> dict[str, float]:
+        """Give dynamic sources modest allocation without changing built-in weights."""
+        weights = dict(base_weights)
+        for query in queries:
+            if query.source not in weights:
+                weights[query.source] = 0.10 if query.priority <= 2 else 0.05
+        return weights
 
     def _extract_ticket(self, task: str) -> str | None:
         """Extract common Jira-style ticket identifiers from task text."""

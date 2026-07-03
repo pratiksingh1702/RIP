@@ -37,7 +37,7 @@ class PermissionEngine:
 
         for item in items:
             # Check if source is allowed
-            source_allowed = item.source in policy.allowed_sources
+            source_allowed = "*" in policy.allowed_sources or item.source in policy.allowed_sources
             # Check if domain is sensitive
             domain_sensitive = domain in SENSITIVE_DOMAINS if domain else False
             domain_allowed = policy.can_access_sensitive_domains or not domain_sensitive

@@ -2,9 +2,11 @@
 
 import re
 import structlog
+from typing import Any
 
 from gateway.config import settings
 from gateway.core.classifier.engine import ClassifierEngine
+from gateway.core.events import PipelineEventSink, get_pipeline_event_bus
 from gateway.core.planner.engine import PlannerEngine
 from gateway.core.executor.engine import ExecutorEngine
 from gateway.core.ranker.engine import RankerEngine
@@ -14,6 +16,7 @@ from gateway.core.memory.conflict_detector import ConflictDetector
 from gateway.core.sources.registry import get_source_registry
 from gateway.core.sources.models import SourceResponse
 from gateway.server.schemas.common import ContextPackage, ContextItem
+from gateway.storage.source_registry import get_gateway_settings
 
 logger = structlog.get_logger(__name__)
 
@@ -35,63 +38,195 @@ class GatewayPipeline:
         self,
         task: str,
         max_tokens: int = settings.default_max_tokens,
-        role: str = "developer"
+        role: str = "developer",
+        trace_session_id: str | None = None,
+        event_sink: PipelineEventSink | None = None,
     ) -> ContextPackage:
         """Run full pipeline to get context."""
-        logger.info("Starting context pipeline", task=task[:50])
+        logger.info("Starting context pipeline", task=task, max_tokens=max_tokens, role=role)
+        await self.source_registry.refresh()
+        editable_settings = await get_gateway_settings()
+        logger.debug("Using gateway settings", settings=editable_settings)
+        if max_tokens == settings.default_max_tokens:
+            max_tokens = int(editable_settings["default_max_tokens"])
+        if role == "developer":
+            role = str(editable_settings["default_role"])
+
+        async def emit(event: dict[str, Any]) -> None:
+            if event_sink is not None:
+                await event_sink(event)
+                return
+            if trace_session_id:
+                await get_pipeline_event_bus().emit(
+                    trace_session_id,
+                    stage=str(event["stage"]),
+                    status=str(event["status"]),
+                    detail=str(event["detail"]),
+                    source=event.get("source"),
+                    meta=event.get("meta") or {},
+                )
 
         # Step 1: Classify intent
+        logger.info("Starting intent classification")
+        await emit({
+            "stage": "intent",
+            "status": "started",
+            "detail": "Reading your request",
+            "meta": {},
+        })
         classification = await self.classifier.classify_async(task)
+        await emit({
+            "stage": "intent",
+            "status": "done",
+            "detail": (
+                f"{classification.intent.value} - {classification.domain} domain - "
+                f"{int(classification.confidence * 100)}% confidence"
+            ),
+            "meta": {
+                "intent": classification.intent.value,
+                "domain": classification.domain,
+                "confidence": classification.confidence,
+                "risk": classification.risk_level.value,
+            },
+        })
         logger.info(
             "Classification complete",
             intent=classification.intent,
             domain=classification.domain,
-            confidence=classification.confidence
+            confidence=classification.confidence,
+            risk_level=classification.risk_level
         )
 
         # Step 2: Create session
+        logger.info("Creating session")
         session = await self.session_store.create_session(
             agent_type="mcp_agent",
             task=task,
             classification=classification
         )
         session_id = str(session.id)
+        logger.info("Session created", session_id=session_id)
 
         # Step 3: Plan retrieval
+        logger.info("Starting retrieval planning")
         plan = self.planner.plan(classification, task, max_tokens)
-        logger.info("Plan created", steps=len(plan.steps))
+        await emit({
+            "stage": "plan",
+            "status": "done",
+            "detail": (
+                f"Planning retrieval - {len(plan.token_allocation)} sources, "
+                f"{max_tokens:,} token budget"
+            ),
+            "meta": {
+                "sources": list(plan.token_allocation),
+                "token_budget": max_tokens,
+                "token_allocation": plan.token_allocation,
+            },
+        })
+        logger.info(
+            "Plan created", 
+            steps=len(plan.steps), 
+            token_allocation=plan.token_allocation,
+            plan=plan
+        )
 
         # Step 4: Execute retrieval
-        execution_result = await self.executor.execute(plan)
+        logger.info("Starting plan execution")
+        execution_result = await self.executor.execute(plan, event_sink=emit)
         logger.info(
             "Execution complete",
             success_count=execution_result.success_count,
             failure_count=execution_result.failure_count,
-            total_latency=execution_result.total_latency_ms
+            total_latency=execution_result.total_latency_ms,
+            sources_used=[r.source for r in execution_result.source_responses]
         )
 
         files_accessed = self._extract_files_from_responses(execution_result.source_responses)
         await self.session_store.update_files_accessed(session.id, files_accessed)
+        logger.debug("Files accessed in session", files_accessed=files_accessed)
 
         # Step 5: Detect conflicts before final formatting so warnings are visible.
+        logger.info("Checking for conflicts")
+        await emit({
+            "stage": "conflict_check",
+            "status": "started",
+            "detail": "Checking for conflicts with active sessions",
+            "meta": {"files": files_accessed},
+        })
         conflicts = await self.conflict_detector.detect(session.id, files_accessed)
+        if conflicts:
+            logger.warning("Conflicts detected", conflicts=conflicts)
+            await emit({
+                "stage": "conflict_found",
+                "status": "done",
+                "detail": self._conflict_detail(conflicts),
+                "meta": {"count": len(conflicts)},
+            })
+        else:
+            logger.info("No conflicts found")
+            await emit({
+                "stage": "conflict_check",
+                "status": "done",
+                "detail": "No active file conflicts found",
+                "meta": {"count": 0},
+            })
 
         # Step 6: Rank and compress
+        successful_responses = [
+            response for response in execution_result.source_responses if response.success
+        ]
+        logger.info("Starting ranking and compression", candidates=len(successful_responses))
+        await emit({
+            "stage": "rank",
+            "status": "started",
+            "detail": f"Scoring {len(successful_responses)} candidates",
+            "meta": {"count": len(successful_responses)},
+        })
         ranked = await self.ranker.rank_and_compress(
             execution_result.source_responses,
             classification,
             task,
             max_tokens
         )
+        removed = max(0, len(successful_responses) - len(ranked.included) - len(ranked.excluded))
+        if removed:
+            logger.debug("Removed duplicate items", count=removed)
+            await emit({
+                "stage": "dedup",
+                "status": "done",
+                "detail": f"Removed {removed} duplicate items",
+                "meta": {"removed": removed},
+            })
+        await emit({
+            "stage": "compress",
+            "status": "done",
+            "detail": f"Compressed to {ranked.tokens_used:,} of {ranked.token_budget:,} tokens",
+            "meta": {
+                "before_tokens": sum(response.token_count for response in successful_responses),
+                "after_tokens": ranked.tokens_used,
+                "token_budget": ranked.token_budget,
+            },
+        })
+        logger.info("Ranking complete", included=len(ranked.included), excluded=len(ranked.excluded))
 
         # Step 7: Apply permissions
         user_role = self._coerce_role(role)
+        logger.info("Applying permissions filters", role=user_role, domain=classification.domain)
         filtered = await self.permissions.filter_context(
             ranked.included,
             user_role,
             classification.domain,
             session_id=session_id
         )
+        filtered_count = max(0, len(ranked.included) - len(filtered))
+        if filtered_count:
+            logger.info("Filtered context items", count=filtered_count, role=user_role.value)
+            await emit({
+                "stage": "permission_filter",
+                "status": "done",
+                "detail": f"Applied {user_role.value} access rules",
+                "meta": {"filtered": filtered_count, "role": user_role.value},
+            })
 
         # Build context package
         context_items = [
@@ -106,13 +241,35 @@ class GatewayPipeline:
         ]
 
         warnings = self._build_warnings(execution_result.source_responses)
+        tokens_retrieved = sum(
+            response.token_count for response in execution_result.source_responses
+        )
+        await self.session_store.update_session_stats(
+            session.id,
+            sources_used=[
+                response.source for response in execution_result.source_responses
+            ],
+            tokens_retrieved=tokens_retrieved,
+            tokens_delivered=ranked.tokens_used,
+        )
+        await emit({
+            "stage": "done",
+            "status": "done",
+            "detail": "Answer context ready",
+            "meta": {
+                "context_items": len(context_items),
+                "tokens_used": ranked.tokens_used,
+            },
+        })
 
         logger.info(
             "Pipeline complete",
             session_id=session_id,
             context_items=len(context_items),
             tokens_used=ranked.tokens_used,
+            tokens_retrieved=tokens_retrieved,
             conflicts=len(conflicts),
+            warnings=len(warnings)
         )
 
         return ContextPackage(
@@ -121,6 +278,9 @@ class GatewayPipeline:
             domain=classification.domain,
             context=context_items,
             tokens_used=ranked.tokens_used,
+            tokens_retrieved=tokens_retrieved,
+            token_allocation=plan.token_allocation,
+            score_summary=self._score_summary(ranked.included),
             conflicts=[conflict.model_dump(mode="json") for conflict in conflicts],
             warnings=warnings
         )
@@ -168,6 +328,25 @@ class GatewayPipeline:
     def _build_warnings(self, responses: list[SourceResponse]) -> list[str]:
         warnings = []
         for response in responses:
-            if not response.success and response.error:
-                warnings.append(f"{response.source}/{response.query_type}: {response.error}")
+            if not response.success:
+                reason = response.error or "source query failed"
+                warnings.append(f"{response.source}/{response.query_type}: {reason}")
         return warnings
+
+    def _score_summary(self, items) -> list[dict[str, Any]]:
+        return [
+            {
+                "source": item.source,
+                "query_type": item.query_type,
+                "score": item.score,
+                "metadata": item.metadata,
+            }
+            for item in items[:5]
+        ]
+
+    def _conflict_detail(self, conflicts) -> str:
+        first = conflicts[0]
+        files = getattr(first, "overlapping_files", None) or []
+        if files:
+            return f"{files[0]} is being edited in another active session"
+        return "A file conflict was found with another active session"

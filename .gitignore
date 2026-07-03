@@ -21,6 +21,19 @@ dist/
 .env
 .venv
 
+# Generated agent and build prompt artifacts
+AGENT_BUILD_PROMPT.md
+CONTEXT_GATEWAY_BUILD_PROMPT.md
+CONTINUE_PROMPT.md
+*_PROMPT.md
+*BUILD_PROMPT.md
+AGENTS.md
+CLAUDE.md
+CODEX.md
+.agents/
+.codex/
+.claude/
+
 # IDE
 .idea/
 *.swp
@@ -44,4 +57,3 @@ Thumbs.db
 branch_structure.json
 temp_auto_push.bat
 temp_interactive_push.bat
-.gitignore

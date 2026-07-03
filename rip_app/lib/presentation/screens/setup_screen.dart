@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../providers/settings_provider.dart';
+import '../providers/gateway_provider.dart';
 import '../../core/api/rip_client.dart';
 
 class SetupScreen extends ConsumerStatefulWidget {
@@ -14,6 +15,10 @@ class SetupScreen extends ConsumerStatefulWidget {
 class _SetupScreenState extends ConsumerState<SetupScreen> {
   final _serverUrlController = TextEditingController();
   final _apiKeyController = TextEditingController();
+  final _maxTokensController = TextEditingController(text: '12000');
+  final _reserveController = TextEditingController(text: '0.10');
+  final _minPerSourceController = TextEditingController(text: '500');
+  String _role = 'developer';
   bool _isTestingConnection = false;
   String? _connectionError;
 
@@ -27,10 +32,27 @@ class _SetupScreenState extends ConsumerState<SetupScreen> {
     await ref.read(settingsProvider.future);
     final serverUrl = ref.read(serverUrlProvider);
     final apiKey = ref.read(apiKeyProvider);
+    final role = ref.read(gatewayRoleProvider);
     setState(() {
       _serverUrlController.text = serverUrl;
       _apiKeyController.text = apiKey ?? '';
+      _role = role;
     });
+    try {
+      final defaults = await RipClient(
+        serverUrl: serverUrl,
+        apiKey: apiKey?.isEmpty == true ? null : apiKey,
+      ).gatewaySettings();
+      if (!mounted) return;
+      setState(() {
+        _maxTokensController.text = '${defaults['default_max_tokens'] ?? 12000}';
+        _reserveController.text = '${defaults['overhead_reserve_ratio'] ?? 0.10}';
+        _minPerSourceController.text = '${defaults['min_tokens_per_source'] ?? 500}';
+        _role = '${defaults['default_role'] ?? role}';
+      });
+    } catch (_) {
+      // Defaults are optional during first setup, before the server is reachable.
+    }
   }
 
   Future<void> _testConnection() async {
@@ -56,6 +78,8 @@ class _SetupScreenState extends ConsumerState<SetupScreen> {
               .saveApiKey(_apiKeyController.text);
         }
         if (mounted) {
+          ref.read(gatewayRoleProvider.notifier).state = _role;
+          await _saveGatewayDefaults(client);
           context.go('/chat');
         }
       } else {
@@ -78,7 +102,19 @@ class _SetupScreenState extends ConsumerState<SetupScreen> {
   void dispose() {
     _serverUrlController.dispose();
     _apiKeyController.dispose();
+    _maxTokensController.dispose();
+    _reserveController.dispose();
+    _minPerSourceController.dispose();
     super.dispose();
+  }
+
+  Future<void> _saveGatewayDefaults(RipClient client) async {
+    await client.updateGatewaySettings({
+      'default_role': _role,
+      'default_max_tokens': int.tryParse(_maxTokensController.text.trim()) ?? 12000,
+      'overhead_reserve_ratio': double.tryParse(_reserveController.text.trim()) ?? 0.10,
+      'min_tokens_per_source': int.tryParse(_minPerSourceController.text.trim()) ?? 500,
+    });
   }
 
   @override
@@ -88,7 +124,7 @@ class _SetupScreenState extends ConsumerState<SetupScreen> {
         title: const Text('Setup RIP'),
       ),
       body: SafeArea(
-        child: Padding(
+        child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -133,6 +169,58 @@ class _SetupScreenState extends ConsumerState<SetupScreen> {
                   prefixIcon: Icon(Icons.key),
                 ),
                 obscureText: true,
+              ),
+              const SizedBox(height: 16),
+              DropdownButtonFormField<String>(
+                value: _role,
+                decoration: const InputDecoration(
+                  labelText: 'Default role',
+                  prefixIcon: Icon(Icons.admin_panel_settings_outlined),
+                ),
+                items: const [
+                  DropdownMenuItem(value: 'junior_dev', child: Text('Junior developer')),
+                  DropdownMenuItem(value: 'developer', child: Text('Developer')),
+                  DropdownMenuItem(value: 'senior_dev', child: Text('Senior developer')),
+                  DropdownMenuItem(value: 'ci_agent', child: Text('CI agent')),
+                ],
+                onChanged: (value) {
+                  if (value != null) setState(() => _role = value);
+                },
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _maxTokensController,
+                      decoration: const InputDecoration(
+                        labelText: 'Token budget',
+                        prefixIcon: Icon(Icons.speed_rounded),
+                      ),
+                      keyboardType: TextInputType.number,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: TextField(
+                      controller: _reserveController,
+                      decoration: const InputDecoration(
+                        labelText: 'Reserve %',
+                        prefixIcon: Icon(Icons.pie_chart_outline_rounded),
+                      ),
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: _minPerSourceController,
+                decoration: const InputDecoration(
+                  labelText: 'Minimum per source',
+                  prefixIcon: Icon(Icons.account_tree_outlined),
+                ),
+                keyboardType: TextInputType.number,
               ),
               if (_connectionError != null) ...[
                 const SizedBox(height: 16),

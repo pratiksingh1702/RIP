@@ -9,7 +9,19 @@ from fastapi.middleware.cors import CORSMiddleware
 from gateway.config import settings
 from gateway.core.sources.registry import get_source_registry
 from gateway.server.middleware.rate_limit import RateLimitMiddleware
-from gateway.server.routers import health, context, validate, sessions, sources, metrics
+from gateway.server.routers import (
+    audit,
+    context,
+    feedback,
+    health,
+    metrics,
+    oauth,
+    settings as gateway_settings,
+    sessions,
+    sources,
+    validate,
+)
+from gateway.storage.database import ensure_storage_schema
 
 logger = structlog.get_logger(__name__)
 
@@ -26,20 +38,39 @@ async def _background_health_check():
         await asyncio.sleep(settings.cache_ttl_seconds)
 
 
+async def _background_oauth_refresh():
+    """Refresh expiring OAuth tokens in the background."""
+    while True:
+        try:
+            await oauth.oauth_manager.refresh_due_tokens()
+            await get_source_registry().refresh()
+        except Exception as e:
+            logger.error("Background OAuth refresh failed", error=str(e))
+        await asyncio.sleep(300)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan for setup/teardown."""
     logger.info("Starting Context Gateway server", version=settings.version)
+    await ensure_storage_schema()
+    await get_source_registry().refresh()
     
     # Start background health checks
     health_task = asyncio.create_task(_background_health_check())
+    oauth_task = asyncio.create_task(_background_oauth_refresh())
     
     yield
     
     # Cancel background health checks
     health_task.cancel()
+    oauth_task.cancel()
     try:
         await health_task
+    except asyncio.CancelledError:
+        pass
+    try:
+        await oauth_task
     except asyncio.CancelledError:
         pass
     
@@ -73,7 +104,11 @@ def create_app() -> FastAPI:
     app.include_router(validate.router, prefix="/api/validate", tags=["validate"])
     app.include_router(sessions.router, prefix="/api/sessions", tags=["sessions"])
     app.include_router(sources.router, prefix="/api/sources", tags=["sources"])
+    app.include_router(oauth.router, prefix="/api/oauth", tags=["oauth"])
+    app.include_router(gateway_settings.router, prefix="/api/settings", tags=["settings"])
     app.include_router(metrics.router, prefix="/api/metrics", tags=["metrics"])
+    app.include_router(audit.router, prefix="/api/audit", tags=["audit"])
+    app.include_router(feedback.router, prefix="/api/feedback", tags=["feedback"])
 
     return app
 
