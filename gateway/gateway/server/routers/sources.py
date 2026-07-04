@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query, Request
 
 from gateway.core import oauth as oauth_manager
+from gateway.core.permissions.models import UserRole
 from gateway.core.sources.dynamic_mcp import DynamicMCPSource
 from gateway.core.sources.registry import get_source_registry
 from gateway.server.schemas.requests import (
@@ -14,9 +15,12 @@ from gateway.server.schemas.requests import (
     OAuthReauthorizeRequest,
     SourceCreateRequest,
     SourceCredentialRequest,
+    SourceProjectAllocationRequest,
     SourceUpdateRequest,
 )
 from gateway.server.schemas.responses import SourceListResponse
+from gateway.server.request_context import gateway_user_id
+from gateway.storage.audit_store import get_audit_store
 from gateway.storage import source_registry as source_store
 from gateway.storage.source_registry import SourceRecord
 
@@ -69,11 +73,12 @@ PRESET_CATALOG = [
 
 @router.get("", response_model=SourceListResponse)
 @router.get("/", response_model=SourceListResponse)
-async def list_sources():
+async def list_sources(request: Request, project_id: str | None = Query(None)):
     """List all available sources."""
     try:
-        await registry.refresh()
-        sources = await source_store.list_sources()
+        user_id = gateway_user_id(request)
+        await registry.refresh(project_id=project_id, user_id=user_id)
+        sources = await source_store.list_sources(project_id=project_id, user_id=user_id)
         return SourceListResponse(
             sources=[
                 _source_payload(source)
@@ -92,6 +97,7 @@ async def create_source(request: SourceCreateRequest):
     try:
         record = await source_store.create_source(
             name=request.name,
+            project_id=request.project_id,
             kind=request.kind,
             transport=_normalize_transport(request.transport),
             endpoint_url=request.endpoint_url,
@@ -103,7 +109,7 @@ async def create_source(request: SourceCreateRequest):
             enabled=request.enabled,
             created_by="mobile",
         )
-        await registry.refresh()
+        await registry.refresh(project_id=request.project_id)
         return _source_payload(record)
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
@@ -128,9 +134,9 @@ async def patch_settings(request: GatewaySettingsRequest):
 
 
 @router.get("/{source_id}")
-async def get_source(source_id: str):
+async def get_source(source_id: str, request: Request, project_id: str | None = Query(None)):
     """Get source detail."""
-    record = await source_store.get_source(source_id)
+    record = await source_store.get_source(source_id, project_id=project_id, user_id=gateway_user_id(request))
     if record is None:
         raise HTTPException(status_code=404, detail="Source not found")
     return _source_payload(record, detail=True)
@@ -161,7 +167,7 @@ async def patch_source(source_id: str, request: SourceUpdateRequest):
     if record is None:
         raise HTTPException(status_code=404, detail="Source not found")
     registry.set_enabled(record.name, record.enabled)
-    await registry.refresh()
+    await registry.refresh(project_id=record.project_id)
     return _source_payload(record, detail=True)
 
 
@@ -179,23 +185,43 @@ async def delete_source(source_id: str):
 
 
 @router.post("/{source_id}/credential")
-async def replace_credential(source_id: str, request: SourceCredentialRequest):
+async def replace_credential(source_id: str, payload: SourceCredentialRequest, request: Request):
     """Replace a source credential without revealing the saved value."""
-    record = await source_store.replace_credential(source_id, request.credential)
+    current = await source_store.get_source(source_id, user_id=gateway_user_id(request))
+    if current is not None and current.auth_type == "oauth2":
+        try:
+            await oauth_manager.ensure_oauth_providers()
+            record = await source_store.replace_user_oauth_credential(
+                source_id,
+                user_id=gateway_user_id(request),
+                credential=payload.credential,
+                provider_id=current.oauth_provider_id or current.name,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+    else:
+        record = await source_store.replace_credential(source_id, payload.credential)
     if record is None:
         raise HTTPException(status_code=404, detail="Source not found")
-    await registry.refresh()
+    await registry.refresh(project_id=record.project_id)
+    await _audit_source_event(
+        action="source_credential_update",
+        source=record.name,
+        user_id=gateway_user_id(request),
+        reason="credential replaced from mobile/API",
+    )
     return _source_payload(record, detail=True)
 
 
 @router.post("/{source_id}/test")
-async def test_source(source_id: str):
+async def test_source(source_id: str, request: Request, project_id: str | None = Query(None)):
     """Test source connection using the mobile four-state contract."""
-    record = await source_store.get_source(source_id)
+    user_id = gateway_user_id(request)
+    record = await source_store.get_source(source_id, project_id=project_id, user_id=user_id)
     if record is None:
         raise HTTPException(status_code=404, detail="Source not found")
     if record.name in {"rip", "github", "jira", "slack"}:
-        await registry.refresh()
+        await registry.refresh(project_id=record.project_id or project_id, user_id=user_id)
         source = registry.get_source(record.name)
         ok = await source.health_check() if source else False
         return {"status": "ok" if ok else "unreachable", "source": record.name}
@@ -204,7 +230,7 @@ async def test_source(source_id: str):
 
 
 @router.post("/{source_id}/oauth/reauthorize")
-async def reauthorize_oauth_source(source_id: str, request: OAuthReauthorizeRequest):
+async def reauthorize_oauth_source(source_id: str, request: OAuthReauthorizeRequest, http_request: Request):
     """Restart OAuth authorization for an existing source."""
     try:
         result = await oauth_manager.reauthorize_source(
@@ -212,21 +238,27 @@ async def reauthorize_oauth_source(source_id: str, request: OAuthReauthorizeRequ
             redirect_uri=request.redirect_uri,
             client_type=request.client_type,
             requested_by=request.requested_by,
+            user_id=gateway_user_id(http_request),
+            project_id=request.project_id,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    await registry.refresh()
+    await registry.refresh(project_id=request.project_id, user_id=gateway_user_id(http_request))
     return result
 
 
 @router.post("/{source_id}/oauth/revoke")
-async def revoke_oauth_source(source_id: str):
+async def revoke_oauth_source(source_id: str, request: Request, project_id: str | None = Query(None)):
     """Disconnect an OAuth source without deleting the source row."""
     try:
-        result = await oauth_manager.revoke_source(source_id)
+        result = await oauth_manager.revoke_source(
+            source_id,
+            user_id=gateway_user_id(request),
+            project_id=project_id,
+        )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    await registry.refresh()
+    await registry.refresh(project_id=project_id, user_id=gateway_user_id(request))
     return result
 
 
@@ -249,7 +281,7 @@ async def _set_enabled(source_name: str, enabled: bool):
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     if record is None:
         raise HTTPException(status_code=404, detail=f"Unknown source: {source_name}")
-    await registry.refresh()
+    await registry.refresh(project_id=record.project_id)
     return {"status": "ok", "source": source_name, "enabled": record.enabled}
 
 
@@ -257,6 +289,8 @@ def _source_payload(source: SourceRecord, *, detail: bool = False) -> dict[str, 
     payload: dict[str, Any] = {
         "id": source.id,
         "name": source.name,
+        "project_id": source.project_id,
+        "scope": "global" if source.project_id is None else "project",
         "kind": source.kind,
         "transport": source.transport,
         "endpoint_url": source.endpoint_url,
@@ -265,9 +299,18 @@ def _source_payload(source: SourceRecord, *, detail: bool = False) -> dict[str, 
         "capabilities": (source.mcp_config or {}).get("capabilities"),
         "auth_type": source.auth_type,
         "credential_mask": source.credential_mask,
-        "oauth_provider_id": source.oauth_provider_id,
+        "oauth_provider_id": source.oauth_provider_id or (source.name if source.requires_auth else None),
         "oauth_status": source.oauth_status or _oauth_status_from_health(source.health_status),
         "oauth_account_label": source.oauth_account_label,
+        "requires_auth": source.requires_auth,
+        "connected": source.connected,
+        "connectable": source.connectable,
+        "integration_state": source.integration_state,
+        "guidance": source.guidance,
+        "category": source.category,
+        "allocated_project_ids": source.allocated_project_ids or [],
+        "allocation_count": source.allocation_count,
+        "allocated_to_project": source.allocated_to_project,
         "domain_hints": source.domain_hints,
         "priority_hint": source.priority_hint,
         "enabled": source.protected or source.enabled,
@@ -285,10 +328,55 @@ def _source_payload(source: SourceRecord, *, detail: bool = False) -> dict[str, 
     return payload
 
 
+@router.get("/{source_id}/projects")
+async def get_source_projects(source_id: str, request: Request):
+    """Return the current user's project allocations for this connected integration."""
+    try:
+        return await source_store.list_project_allocations(
+            source_id,
+            user_id=gateway_user_id(request),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.put("/{source_id}/projects")
+async def put_source_projects(source_id: str, payload: SourceProjectAllocationRequest, request: Request):
+    """Replace all project allocations for this connected integration."""
+    try:
+        result = await source_store.replace_project_allocations(
+            source_id,
+            user_id=gateway_user_id(request),
+            project_ids=payload.project_ids,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    await registry.refresh(user_id=gateway_user_id(request))
+    await _audit_source_event(
+        action="source_project_allocation_update",
+        source=source_id,
+        user_id=gateway_user_id(request),
+        reason=f"{len(result['project_ids'])} project(s) allocated",
+    )
+    return result
+
+
+async def _audit_source_event(action: str, source: str, user_id: str | None, reason: str) -> None:
+    await get_audit_store().log_access(
+        session_id="integrations",
+        role=UserRole.DEVELOPER,
+        action=action,
+        allowed=True,
+        user_id=user_id,
+        source=source,
+        reason=reason,
+    )
+
+
 def _visible_in_mobile_sources(source: SourceRecord) -> bool:
     if source.name == "rip":
         return True
-    return source.kind != "builtin"
+    return True
 
 
 def _normalize_transport(transport: str) -> str:

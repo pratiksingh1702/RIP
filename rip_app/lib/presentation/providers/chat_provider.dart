@@ -538,9 +538,11 @@ class ChatNotifier extends Notifier<List<Message>> {
         return buffer.toString();
 
       case CommandType.unknown:
+        final projectId = ref.read(activeProjectIdProvider);
         final result = await client.gatewayContext(
           task: rawText,
           sessionId: gatewaySessionId ?? uuid.v4(),
+          projectId: projectId,
           role: ref.read(gatewayRoleProvider),
           cancelToken: cancelToken,
         );

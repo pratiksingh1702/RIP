@@ -11,6 +11,7 @@ import structlog
 from gateway.config import settings
 from gateway.core.sources.base import BaseSource
 from gateway.core.sources.models import SourceResponse
+from gateway.storage.source_registry import SourceRecord
 
 logger = structlog.get_logger(__name__)
 
@@ -20,11 +21,14 @@ class SlackSource(BaseSource):
 
     name = "slack"
 
-    def __init__(self, enabled: bool = False):
-        self.enabled = enabled
-        self.available = enabled
+    def __init__(self, enabled: bool = False, record: SourceRecord | None = None):
+        self._record = record
+        self.enabled = record.enabled if record is not None else enabled
+        self.available = self.enabled
         self.token = settings.slack_token.strip()
         self.channel_id = settings.slack_channel_id.strip()
+        if record is not None:
+            self._apply_record(record)
 
     async def query(self, query_type: str, params: dict[str, Any]) -> SourceResponse:
         """Fetch Slack search or channel context."""
@@ -117,6 +121,13 @@ class SlackSource(BaseSource):
 
     def _clean(self, text: str) -> str:
         return " ".join(text.replace("\n", " ").split())
+
+    def _apply_record(self, record: SourceRecord) -> None:
+        config = record.mcp_config or {}
+        self.token = (record.credential or self.token or "").strip()
+        self.channel_id = str(config.get("channel_id") or self.channel_id or "").strip()
+        self.enabled = bool(record.enabled)
+        self.available = self.enabled
 
     def _error(self, query_type: str, message: str, start: float) -> SourceResponse:
         return SourceResponse(

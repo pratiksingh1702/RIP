@@ -11,6 +11,7 @@ class GetContextRequest(BaseModel):
     max_tokens: int = 12000
     role: str = "developer"
     session_id: Optional[str] = None
+    project_id: Optional[str] = None
 
 
 class ValidateChangeRequest(BaseModel):
@@ -32,6 +33,7 @@ class FeedbackRequest(BaseModel):
 class SourceCreateRequest(BaseModel):
     """Register a built-in preset or custom MCP source."""
     name: str
+    project_id: Optional[str] = None
     kind: str = "mcp"
     transport: str = "http"
     endpoint_url: Optional[str] = None
@@ -51,6 +53,7 @@ class SourceCreateRequest(BaseModel):
 class SourceUpdateRequest(BaseModel):
     """Patch source metadata editable from mobile Settings."""
     name: Optional[str] = None
+    project_id: Optional[str] = None
     transport: Optional[str] = None
     endpoint_url: Optional[str] = None
     stdio_command: Optional[str] = None
@@ -82,6 +85,7 @@ class OAuthInitiateRequest(BaseModel):
     """Start an OAuth authorization flow."""
     provider_id: str
     source_name: Optional[str] = None
+    project_id: Optional[str] = None
     domain_hints: list[str] = []
     redirect_uri: str
     client_type: str = "mobile"
@@ -98,5 +102,11 @@ class OAuthCallbackRequest(BaseModel):
 class OAuthReauthorizeRequest(BaseModel):
     """Restart authorization for an existing OAuth source."""
     redirect_uri: str
+    project_id: Optional[str] = None
     client_type: str = "mobile"
     requested_by: Optional[str] = None
+
+
+class SourceProjectAllocationRequest(BaseModel):
+    """Replace project allocations for a connected integration."""
+    project_ids: list[str] = Field(default_factory=list)

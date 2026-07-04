@@ -12,6 +12,7 @@ import structlog
 from gateway.config import settings
 from gateway.core.sources.base import BaseSource
 from gateway.core.sources.models import SourceResponse
+from gateway.storage.source_registry import SourceRecord
 
 logger = structlog.get_logger(__name__)
 
@@ -21,13 +22,16 @@ class JiraSource(BaseSource):
 
     name = "jira"
 
-    def __init__(self, enabled: bool = False):
-        self.enabled = enabled
-        self.available = enabled
+    def __init__(self, enabled: bool = False, record: SourceRecord | None = None):
+        self._record = record
+        self.enabled = record.enabled if record is not None else enabled
+        self.available = self.enabled
         self.base_url = settings.jira_url.rstrip("/")
         self.token = settings.jira_token.strip()
         self.email = settings.jira_email.strip()
         self.project_key = settings.jira_project_key.strip()
+        if record is not None:
+            self._apply_record(record)
 
     async def query(self, query_type: str, params: dict[str, Any]) -> SourceResponse:
         """Fetch Jira issue context."""
@@ -149,6 +153,14 @@ class JiraSource(BaseSource):
         if self.token and not self.email:
             headers["Authorization"] = f"Bearer {self.token}"
         return headers
+
+    def _apply_record(self, record: SourceRecord) -> None:
+        config = record.mcp_config or {}
+        self.base_url = (record.endpoint_url or self.base_url).rstrip("/")
+        self.token = (record.credential or self.token or "").strip()
+        self.project_key = str(config.get("project_key") or self.project_key or "").strip()
+        self.enabled = bool(record.enabled)
+        self.available = self.enabled
 
     def _error(self, query_type: str, message: str, start: float) -> SourceResponse:
         return SourceResponse(

@@ -10,11 +10,20 @@ from dataclasses import dataclass
 from itertools import cycle
 from uuid import UUID, uuid4
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
+from sqlalchemy import or_
 
 from gateway.config import settings
 from gateway.storage.database import async_session_factory
-from gateway.storage.models import GatewaySetting, OAuthToken, RegisteredSource, SourceCredential
+from gateway.storage.models import (
+    GatewaySetting,
+    OAuthToken,
+    OAuthProvider,
+    RegisteredSource,
+    SourceCredential,
+    SourceProjectLink,
+    UserOAuthToken,
+)
 
 
 @dataclass(slots=True)
@@ -23,6 +32,7 @@ class SourceRecord:
 
     id: str
     name: str
+    project_id: str | None
     kind: str
     transport: str
     endpoint_url: str | None
@@ -40,6 +50,15 @@ class SourceRecord:
     health_status: str
     protected: bool
     created_by: str | None
+    requires_auth: bool = False
+    connected: bool = False
+    connectable: bool = False
+    allocated_project_ids: list[str] | None = None
+    allocation_count: int = 0
+    allocated_to_project: bool = False
+    integration_state: str = "available"
+    guidance: str | None = None
+    category: str = "custom"
 
 
 BUILTIN_SOURCE_DEFAULTS = [
@@ -61,9 +80,9 @@ BUILTIN_SOURCE_DEFAULTS = [
         "kind": "builtin",
         "transport": "http",
         "endpoint_url": settings.github_api_url,
-        "auth_type": "bearer" if settings.github_token else "none",
+        "auth_type": "bearer" if settings.github_token else "oauth2",
         "mcp_config": {"tool_name": "search"},
-        "enabled": settings.github_mcp_enabled,
+        "enabled": settings.github_mcp_enabled if settings.github_token else False,
         "health_status": "unknown",
         "protected": False,
         "priority_hint": 70,
@@ -74,9 +93,9 @@ BUILTIN_SOURCE_DEFAULTS = [
         "kind": "builtin",
         "transport": "http",
         "endpoint_url": settings.jira_url or None,
-        "auth_type": "bearer" if settings.jira_token else "none",
+        "auth_type": "bearer" if settings.jira_token else "oauth2",
         "mcp_config": {"tool_name": "search"},
-        "enabled": settings.jira_mcp_enabled,
+        "enabled": settings.jira_mcp_enabled if settings.jira_token else False,
         "health_status": "unknown",
         "protected": False,
         "priority_hint": 65,
@@ -87,9 +106,9 @@ BUILTIN_SOURCE_DEFAULTS = [
         "kind": "builtin",
         "transport": "http",
         "endpoint_url": "https://slack.com/api",
-        "auth_type": "bearer" if settings.slack_token else "none",
+        "auth_type": "bearer" if settings.slack_token else "oauth2",
         "mcp_config": {"tool_name": "search"},
-        "enabled": settings.slack_mcp_enabled,
+        "enabled": settings.slack_mcp_enabled if settings.slack_token else False,
         "health_status": "unknown",
         "protected": False,
         "priority_hint": 55,
@@ -154,6 +173,9 @@ async def ensure_builtin_sources() -> None:
                 continue
             source.kind = "builtin"
             source.protected = bool(defaults["protected"])
+            source.transport = defaults["transport"]
+            source.endpoint_url = defaults["endpoint_url"]
+            source.auth_type = defaults["auth_type"]
             source.mcp_config = source.mcp_config or dict(defaults.get("mcp_config") or {})
             if source.name == "rip":
                 source.enabled = True
@@ -163,11 +185,26 @@ async def ensure_builtin_sources() -> None:
             await session.commit()
 
 
-async def list_sources() -> list[SourceRecord]:
+async def list_sources(
+    *,
+    project_id: str | None = None,
+    user_id: str | None = None,
+    include_global: bool = True,
+) -> list[SourceRecord]:
     """Return all registered source rows with decrypted credentials for runtime use."""
     await ensure_builtin_sources()
     async with async_session_factory() as session:
-        sources = (await session.execute(select(RegisteredSource).order_by(RegisteredSource.priority_hint.desc()))).scalars().all()
+        stmt = select(RegisteredSource).order_by(RegisteredSource.priority_hint.desc())
+        if project_id is not None:
+            if include_global:
+                stmt = stmt.where(
+                    (RegisteredSource.project_id == project_id)
+                    | (RegisteredSource.project_id.is_(None))
+                    | (RegisteredSource.protected.is_(True))
+                )
+            else:
+                stmt = stmt.where(RegisteredSource.project_id == project_id)
+        sources = (await session.execute(stmt)).scalars().all()
         credential_refs = [source.credential_ref for source in sources if source.credential_ref]
         for source in sources:
             mcp_config = source.mcp_config or {}
@@ -180,24 +217,55 @@ async def list_sources() -> list[SourceRecord]:
                 select(SourceCredential).where(SourceCredential.ref.in_(credential_refs))
             )
             credentials = {credential.ref: credential for credential in result.scalars()}
-        token_rows = (
-            await session.execute(
-                select(OAuthToken).where(OAuthToken.source_id.in_([source.id for source in sources]))
-            )
-        ).scalars()
-        oauth_tokens = {token.source_id: token for token in token_rows}
+        allocation_map: dict[str, list[str]] = {}
+        if user_id:
+            token_rows = (
+                await session.execute(
+                    select(UserOAuthToken).where(
+                        UserOAuthToken.source_id.in_([source.id for source in sources]),
+                        UserOAuthToken.user_id == user_id,
+                        UserOAuthToken.project_id.in_(["", project_id or ""]),
+                    )
+                )
+            ).scalars().all()
+            token_ids = [token.id for token in token_rows]
+            if token_ids:
+                link_rows = (
+                    await session.execute(
+                        select(SourceProjectLink).where(SourceProjectLink.user_oauth_token_id.in_(token_ids))
+                    )
+                ).scalars().all()
+                token_id_to_source = {token.id: str(token.source_id) for token in token_rows}
+                for link in link_rows:
+                    source_key = token_id_to_source.get(link.user_oauth_token_id)
+                    if source_key:
+                        allocation_map.setdefault(source_key, []).append(link.project_id)
+        else:
+            token_rows = (
+                await session.execute(
+                    select(OAuthToken).where(OAuthToken.source_id.in_([source.id for source in sources]))
+                )
+            ).scalars().all()
+        oauth_tokens = _token_map(token_rows, project_id=project_id)
         return [
             _record_from_model(
                 source,
                 credentials.get(source.credential_ref or ""),
                 oauth_tokens.get(source.id),
                 credentials,
+                project_id=project_id,
+                allocated_project_ids=allocation_map.get(str(source.id), []),
             )
             for source in sources
         ]
 
 
-async def get_source(source_id_or_name: str) -> SourceRecord | None:
+async def get_source(
+    source_id_or_name: str,
+    *,
+    project_id: str | None = None,
+    user_id: str | None = None,
+) -> SourceRecord | None:
     """Get a source by UUID or name."""
     await ensure_builtin_sources()
     async with async_session_factory() as session:
@@ -213,19 +281,32 @@ async def get_source(source_id_or_name: str) -> SourceRecord | None:
         credential = None
         if source.credential_ref:
             credential = await session.get(SourceCredential, source.credential_ref)
-        oauth_token = await session.get(OAuthToken, source.id)
+        oauth_token, allocated_project_ids = await _load_oauth_token_for_scope(
+            session,
+            source.id,
+            project_id=project_id,
+            user_id=user_id,
+        )
         extra_credentials = {}
         env_ref = (source.mcp_config or {}).get("stdio_env_ref")
         if env_ref:
             env_credential = await session.get(SourceCredential, env_ref)
             if env_credential:
                 extra_credentials[env_ref] = env_credential
-        return _record_from_model(source, credential, oauth_token, extra_credentials)
+        return _record_from_model(
+            source,
+            credential,
+            oauth_token,
+            extra_credentials,
+            project_id=project_id,
+            allocated_project_ids=allocated_project_ids,
+        )
 
 
 async def create_source(
     *,
     name: str,
+    project_id: str | None = None,
     kind: str = "mcp",
     transport: str,
     endpoint_url: str | None,
@@ -240,8 +321,24 @@ async def create_source(
     """Create a dynamic source row and optional credential."""
     await ensure_builtin_sources()
     async with async_session_factory() as session:
+        name_value = name.strip()
+        existing = (
+            await session.execute(
+                select(RegisteredSource).where(
+                    RegisteredSource.name == name_value,
+                    or_(
+                        RegisteredSource.project_id == project_id,
+                        RegisteredSource.protected.is_(True),
+                        RegisteredSource.kind == "builtin",
+                    ),
+                )
+            )
+        ).scalars().first()
+        if existing is not None:
+            raise ValueError(f"Source name '{name_value}' is already used in this scope")
         source = RegisteredSource(
-            name=name.strip(),
+            name=name_value,
+            project_id=project_id,
             kind=kind,
             transport=transport,
             endpoint_url=endpoint_url,
@@ -279,9 +376,28 @@ async def update_source(source_id_or_name: str, updates: dict) -> SourceRecord |
             return None
         if source.protected and updates.get("enabled") is False:
             raise ValueError("RIP is always on and cannot be disabled")
-        for field in ("name", "endpoint_url", "auth_type", "transport"):
+        next_name = updates.get("name", source.name)
+        next_project_id = updates.get("project_id", source.project_id)
+        if next_name != source.name or next_project_id != source.project_id:
+            existing = (
+                await session.execute(
+                    select(RegisteredSource).where(
+                        RegisteredSource.id != source.id,
+                        RegisteredSource.name == str(next_name).strip(),
+                        or_(
+                            RegisteredSource.project_id == next_project_id,
+                            RegisteredSource.protected.is_(True),
+                            RegisteredSource.kind == "builtin",
+                        ),
+                    )
+                )
+            ).scalars().first()
+            if existing is not None:
+                raise ValueError(f"Source name '{next_name}' is already used in this scope")
+        for field in ("name", "project_id", "endpoint_url", "auth_type", "transport"):
             if field in updates and updates[field] is not None:
-                setattr(source, field, updates[field])
+                value = str(updates[field]).strip() if field == "name" else updates[field]
+                setattr(source, field, value)
         if "mcp_config" in updates and updates["mcp_config"] is not None:
             merged = dict(source.mcp_config or {})
             merged.update(updates["mcp_config"])
@@ -314,7 +430,7 @@ async def delete_source(source_id_or_name: str) -> bool:
         source = await _load_source_model(session, source_id_or_name)
         if source is None:
             return False
-        if source.protected:
+        if source.protected or source.kind == "builtin":
             raise ValueError(f"{source.name} is a protected source and cannot be removed")
         await session.delete(source)
         await session.commit()
@@ -341,25 +457,89 @@ async def replace_credential(source_id_or_name: str, credential: str) -> SourceR
         return _record_from_model(source, stored, oauth_token, extra_credentials)
 
 
+async def replace_user_oauth_credential(
+    source_id_or_name: str,
+    *,
+    user_id: str,
+    credential: str,
+    provider_id: str | None = None,
+) -> SourceRecord | None:
+    """Store a mobile-entered API key as the current user's connected source credential."""
+    async with async_session_factory() as session:
+        source = await _load_source_model(session, source_id_or_name)
+        if source is None:
+            return None
+        provider_key = provider_id or source.name
+        provider = await session.get(OAuthProvider, provider_key)
+        if provider is None:
+            raise ValueError(f"OAuth provider '{provider_key}' is not registered")
+        token = await _load_user_source_token(session, source.id, user_id)
+        if token is None:
+            token = UserOAuthToken(
+                source_id=source.id,
+                provider_id=provider.id,
+                user_id=user_id,
+                project_id="",
+                access_token=_crypt(credential.encode("utf-8")),
+                account_label=f"{source.name} token",
+            )
+            session.add(token)
+        token.provider_id = provider.id
+        token.access_token = _crypt(credential.encode("utf-8"))
+        token.refresh_token = None
+        token.scope = "api_key"
+        token.token_type = "Bearer"
+        token.account_label = f"{source.name} token"
+        token.status = "active"
+        source.enabled = True
+        source.health_status = "ok"
+        await session.commit()
+        await session.refresh(source)
+        return _record_from_model(
+            source,
+            None,
+            token,
+            {},
+            project_id=None,
+            allocated_project_ids=await _allocation_ids(session, token),
+        )
+
+
 async def get_gateway_settings() -> dict:
     """Return editable Gateway defaults."""
     async with async_session_factory() as session:
         row = await session.get(GatewaySetting, "defaults")
         stored = row.value if row else {}
-    return {
-        "default_max_tokens": stored.get("default_max_tokens", settings.default_max_tokens),
-        "overhead_reserve_ratio": stored.get("overhead_reserve_ratio", settings.overhead_reserve_ratio),
-        "min_tokens_per_source": stored.get("min_tokens_per_source", settings.min_tokens_per_source),
-        "default_role": stored.get("default_role", settings.default_role),
+    # Merge stored settings with defaults from settings class
+    defaults = {
+        "default_max_tokens": settings.default_max_tokens,
+        "overhead_reserve_ratio": settings.overhead_reserve_ratio,
+        "min_tokens_per_source": settings.min_tokens_per_source,
+        "default_role": settings.default_role,
     }
+    # Non-secret source defaults can be persisted here; credentials belong in
+    # SourceCredential/OAuthToken rows.
+    for key in ["github_repo", "github_api_url", "jira_url", "jira_project_key", "slack_channel_id"]:
+        if key in stored:
+            defaults[key] = stored[key]
+        else:
+            # Check if key exists in settings class
+            if hasattr(settings, key):
+                defaults[key] = getattr(settings, key)
+    # Also include any other stored keys
+    for key, val in stored.items():
+        if key not in defaults:
+            defaults[key] = val
+    return defaults
 
 
 async def update_gateway_settings(updates: dict) -> dict:
     """Persist editable Gateway defaults."""
     current = await get_gateway_settings()
-    for key in ("default_max_tokens", "overhead_reserve_ratio", "min_tokens_per_source", "default_role"):
-        if key in updates and updates[key] is not None:
-            current[key] = updates[key]
+    # Apply all updates, not just specific keys
+    for key, value in updates.items():
+        if value is not None:
+            current[key] = value
     async with async_session_factory() as session:
         row = await session.get(GatewaySetting, "defaults")
         if row is None:
@@ -416,17 +596,155 @@ async def _load_source_model(session, source_id_or_name: str) -> RegisteredSourc
     return (await session.execute(stmt)).scalar_one_or_none()
 
 
+async def _load_oauth_token_for_scope(
+    session,
+    source_id,
+    *,
+    project_id: str | None = None,
+    user_id: str | None = None,
+):
+    if user_id:
+        token = await _load_user_source_token(session, source_id, user_id)
+        if token is None and project_id:
+            token = (
+                await session.execute(
+                    select(UserOAuthToken).where(
+                        UserOAuthToken.source_id == source_id,
+                        UserOAuthToken.user_id == user_id,
+                        UserOAuthToken.project_id == project_id,
+                    )
+                )
+            ).scalar_one_or_none()
+        if token is None:
+            return None, []
+        return token, await _allocation_ids(session, token)
+    return await session.get(OAuthToken, source_id), []
+
+
+async def _load_user_source_token(session, source_id, user_id: str) -> UserOAuthToken | None:
+    """Load the reusable per-user credential row for a source."""
+    return (
+        await session.execute(
+            select(UserOAuthToken).where(
+                UserOAuthToken.source_id == source_id,
+                UserOAuthToken.user_id == user_id,
+                UserOAuthToken.project_id == "",
+            )
+        )
+    ).scalar_one_or_none()
+
+
+async def _allocation_ids(session, token: UserOAuthToken) -> list[str]:
+    rows = (
+        await session.execute(
+            select(SourceProjectLink.project_id)
+            .where(SourceProjectLink.user_oauth_token_id == token.id)
+            .order_by(SourceProjectLink.project_id)
+        )
+    ).scalars().all()
+    if rows:
+        return [str(row) for row in rows]
+    # Compatibility: old user_oauth_tokens rows stored the active project directly.
+    return [token.project_id] if token.project_id else []
+
+
+def _token_map(
+    token_rows: list[OAuthToken | UserOAuthToken],
+    *,
+    project_id: str | None,
+) -> dict:
+    by_source = {}
+    for token in token_rows:
+        source_id = token.source_id
+        if not isinstance(token, UserOAuthToken):
+            by_source[source_id] = token
+            continue
+        if token.project_id == "":
+            by_source[source_id] = token
+        elif project_id and token.project_id == project_id and source_id not in by_source:
+            by_source[source_id] = token
+    return by_source
+
+
+def _integration_state(
+    *,
+    source: RegisteredSource,
+    requires_auth: bool,
+    oauth_token: OAuthToken | UserOAuthToken | None,
+    oauth_active: bool,
+    project_id: str | None,
+    allocated_to_project: bool,
+    allocation_count: int,
+    server_setup_required: bool,
+) -> tuple[str, str | None]:
+    if source.protected:
+        return "connected", None
+    if server_setup_required:
+        return "server_setup_required", "Provider authorization is waiting for server-side OAuth setup or completion."
+    if requires_auth and oauth_token is None:
+        return "not_connected", "Connect this integration from mobile before using it in projects."
+    if oauth_token is not None and oauth_token.status != "active":
+        return "needs_reauth", "Access expired or was revoked. Reconnect this integration."
+    if requires_auth and oauth_active and project_id and not allocated_to_project:
+        return "connected_unallocated", "Connected, but not enabled for this project."
+    if requires_auth and oauth_active and allocation_count == 0:
+        return "connected_unallocated", "Connected, but not enabled for any project yet."
+    if requires_auth and oauth_active:
+        return "connected", None
+    if source.auth_type in {"bearer", "api_key", "token"} and not source.credential_ref:
+        return "manual_intervention_required", "Add this source API key from mobile before testing or using it."
+    if source.transport == "stdio":
+        return "server_exclusive", "This source runs only on Gateway. Mobile can configure it, but Gateway executes it."
+    return "available", None
+
+
+def _source_category(source: RegisteredSource) -> str:
+    hints = {hint.lower() for hint in (source.domain_hints or [])}
+    name = source.name.lower()
+    if name in {"github", "gitlab", "bitbucket"} or {"code", "git", "review"} & hints:
+        return "code"
+    if name in {"jira", "linear", "asana"} or {"planning", "tickets", "requirements"} & hints:
+        return "planning"
+    if name in {"slack", "teams", "discord"} or {"discussion", "support"} & hints:
+        return "communication"
+    if name in {"notion", "google_drive", "confluence"} or {"docs", "knowledge"} & hints:
+        return "knowledge"
+    if source.kind == "builtin":
+        return "builtin"
+    return "custom"
+
+
 def _record_from_model(
     source: RegisteredSource,
     credential: SourceCredential | None,
-    oauth_token: OAuthToken | None = None,
+    oauth_token: OAuthToken | UserOAuthToken | None = None,
     extra_credentials: dict[str, SourceCredential] | None = None,
+    project_id: str | None = None,
+    allocated_project_ids: list[str] | None = None,
 ) -> SourceRecord:
     oauth_active = oauth_token is not None and oauth_token.status == "active"
+    requires_auth = source.auth_type == "oauth2"
     mcp_config = _record_mcp_config(source.mcp_config or {}, extra_credentials or {})
+    allocations = sorted(set(allocated_project_ids or []))
+    allocated_to_project = bool(project_id and project_id in allocations)
+    server_setup_required = requires_auth and not source.enabled and source.health_status == "pending_authorization"
+    state, guidance = _integration_state(
+        source=source,
+        requires_auth=requires_auth,
+        oauth_token=oauth_token,
+        oauth_active=oauth_active,
+        project_id=project_id,
+        allocated_to_project=allocated_to_project,
+        allocation_count=len(allocations),
+        server_setup_required=server_setup_required,
+    )
+    runtime_enabled = source.enabled
+    if requires_auth:
+        runtime_enabled = oauth_active and (project_id is None or allocated_to_project)
     return SourceRecord(
         id=str(source.id),
         name=source.name,
+        project_id=source.project_id,
         kind=source.kind,
         transport=source.transport,
         endpoint_url=source.endpoint_url,
@@ -438,13 +756,86 @@ def _record_from_model(
         oauth_provider_id=oauth_token.provider_id if oauth_token else None,
         oauth_status=oauth_token.status if oauth_token else None,
         oauth_account_label=oauth_token.account_label if oauth_token else None,
+        requires_auth=requires_auth,
+        connected=oauth_active,
+        connectable=requires_auth,
         domain_hints=list(source.domain_hints or []),
         priority_hint=source.priority_hint,
-        enabled=source.enabled and (source.auth_type != "oauth2" or oauth_active),
+        enabled=runtime_enabled,
         health_status=source.health_status,
         protected=source.protected,
         created_by=source.created_by,
+        allocated_project_ids=allocations,
+        allocation_count=len(allocations),
+        allocated_to_project=allocated_to_project,
+        integration_state=state,
+        guidance=guidance,
+        category=_source_category(source),
     )
+
+
+async def list_project_allocations(
+    source_id_or_name: str,
+    *,
+    user_id: str,
+) -> dict:
+    """List projects allocated to the current user's connected source credential."""
+    await ensure_builtin_sources()
+    async with async_session_factory() as session:
+        source = await _load_source_model(session, source_id_or_name)
+        if source is None:
+            raise ValueError("Source not found")
+        token = await _load_user_source_token(session, source.id, user_id)
+        if token is None:
+            return {
+                "source_id": str(source.id),
+                "connected": False,
+                "project_ids": [],
+                "allocation_count": 0,
+                "state": "not_connected",
+                "guidance": "Connect this integration before assigning it to projects.",
+            }
+        project_ids = await _allocation_ids(session, token)
+        return {
+            "source_id": str(source.id),
+            "connected": token.status == "active",
+            "project_ids": project_ids,
+            "allocation_count": len(project_ids),
+            "state": "connected" if project_ids else "connected_unallocated",
+            "guidance": None if project_ids else "Connected but not enabled for any project yet.",
+        }
+
+
+async def replace_project_allocations(
+    source_id_or_name: str,
+    *,
+    user_id: str,
+    project_ids: list[str],
+) -> dict:
+    """Replace all project links for the current user's connected source credential."""
+    await ensure_builtin_sources()
+    normalized = sorted({str(project_id).strip() for project_id in project_ids if str(project_id).strip()})
+    async with async_session_factory() as session:
+        source = await _load_source_model(session, source_id_or_name)
+        if source is None:
+            raise ValueError("Source not found")
+        token = await _load_user_source_token(session, source.id, user_id)
+        if token is None:
+            raise ValueError("Connect this integration before assigning it to projects")
+        await session.execute(
+            delete(SourceProjectLink).where(SourceProjectLink.user_oauth_token_id == token.id)
+        )
+        for project_id in normalized:
+            session.add(SourceProjectLink(user_oauth_token_id=token.id, project_id=project_id))
+        await session.commit()
+        return {
+            "source_id": str(source.id),
+            "connected": token.status == "active",
+            "project_ids": normalized,
+            "allocation_count": len(normalized),
+            "state": "connected" if normalized else "connected_unallocated",
+            "guidance": None if normalized else "Connected but not enabled for any project yet.",
+        }
 
 
 def _record_mcp_config(
@@ -463,7 +854,7 @@ def _record_mcp_config(
 
 def _record_credential(
     credential: SourceCredential | None,
-    oauth_token: OAuthToken | None,
+    oauth_token: OAuthToken | UserOAuthToken | None,
 ) -> str | None:
     if oauth_token is not None and oauth_token.status == "active":
         return _decrypt(oauth_token.access_token)

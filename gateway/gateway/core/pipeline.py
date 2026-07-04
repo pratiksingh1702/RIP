@@ -40,11 +40,13 @@ class GatewayPipeline:
         max_tokens: int = settings.default_max_tokens,
         role: str = "developer",
         trace_session_id: str | None = None,
+        project_id: str | None = None,
+        user_id: str | None = None,
         event_sink: PipelineEventSink | None = None,
     ) -> ContextPackage:
         """Run full pipeline to get context."""
-        logger.info("Starting context pipeline", task=task, max_tokens=max_tokens, role=role)
-        await self.source_registry.refresh()
+        logger.info("Starting context pipeline", task=task, max_tokens=max_tokens, role=role, project_id=project_id, user_id=user_id)
+        await self.source_registry.refresh(project_id=project_id, user_id=user_id)
         editable_settings = await get_gateway_settings()
         logger.debug("Using gateway settings", settings=editable_settings)
         if max_tokens == settings.default_max_tokens:
@@ -109,7 +111,7 @@ class GatewayPipeline:
 
         # Step 3: Plan retrieval
         logger.info("Starting retrieval planning")
-        plan = self.planner.plan(classification, task, max_tokens)
+        plan = self.planner.plan(classification, task, max_tokens, project_id=project_id)
         await emit({
             "stage": "plan",
             "status": "done",

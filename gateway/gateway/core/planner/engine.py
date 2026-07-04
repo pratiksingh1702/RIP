@@ -21,12 +21,13 @@ class PlannerEngine:
         self,
         classification: ClassificationResult,
         task: str,
-        max_tokens: int = settings.default_max_tokens
+        max_tokens: int = settings.default_max_tokens,
+        project_id: str | None = None,
     ) -> Plan:
         """Create a retrieval plan for the given classification and task."""
         # Get strategy
         strategy = STRATEGY_TABLE.get(classification.intent, STRATEGY_TABLE[IntentType.INVESTIGATION])
-        enabled_sources = self.source_registry.enabled_source_names()
+        enabled_sources = self.source_registry.enabled_source_names(project_id=project_id)
 
         # Build queries
         queries = []
@@ -39,11 +40,12 @@ class PlannerEngine:
                         source=query_spec["source"],
                         query_type=query_spec["type"],
                         task=task,
+                        project_id=project_id,
                         priority=1,
                         estimated_tokens=1500
                     )
                 )
-        queries = self._require_rip_explain(queries, enabled_sources, task)
+        queries = self._require_rip_explain(queries, enabled_sources, task, project_id)
 
         # Conditional sources only run when their source is enabled and condition is met.
         for query_spec in strategy.get("conditional_query", []):
@@ -57,11 +59,12 @@ class PlannerEngine:
                     source=source,
                     query_type=query_spec["type"],
                     task=task,
+                    project_id=project_id,
                     priority=2,
                     estimated_tokens=1000,
                 )
             )
-        queries.extend(self._dynamic_source_queries(classification, task, enabled_sources))
+        queries.extend(self._dynamic_source_queries(classification, task, enabled_sources, project_id))
 
         # Build retrieval steps. Keep the required RIP explain query first so the
         # most reliable context path is available before broader probes run.
@@ -95,6 +98,7 @@ class PlannerEngine:
         source: str,
         query_type: str,
         task: str,
+        project_id: str | None,
         priority: int,
         estimated_tokens: int
     ) -> SourceQuery:
@@ -102,6 +106,8 @@ class PlannerEngine:
         query_params: dict[str, Any] = {}
         query_params["task"] = task
         query_params["query"] = task
+        if project_id:
+            query_params["project_id"] = project_id
         if source == "rip":
             query_params["limit"] = 10
         elif source == "jira":
@@ -133,6 +139,7 @@ class PlannerEngine:
         queries: list[SourceQuery],
         enabled_sources: list[str],
         task: str,
+        project_id: str | None,
     ) -> list[SourceQuery]:
         """Make RIP explain the required first context query whenever RIP is enabled."""
         if "rip" not in enabled_sources:
@@ -142,6 +149,7 @@ class PlannerEngine:
             source="rip",
             query_type="explain",
             task=task,
+            project_id=project_id,
             priority=1,
             estimated_tokens=2000,
         )
@@ -200,6 +208,7 @@ class PlannerEngine:
         classification: ClassificationResult,
         task: str,
         enabled_sources: list[str],
+        project_id: str | None,
     ) -> list[SourceQuery]:
         """Add runtime MCP sources using domain hints without rewriting strategies."""
         queries: list[SourceQuery] = []
@@ -208,7 +217,7 @@ class PlannerEngine:
             *(keyword.lower() for keyword in classification.domain_keywords_found),
         }
         task_lower = task.lower()
-        for record in self.source_registry.dynamic_source_records():
+        for record in self.source_registry.dynamic_source_records(project_id=project_id):
             if record.name not in enabled_sources:
                 continue
             hints = {hint.lower() for hint in record.domain_hints}
@@ -218,6 +227,7 @@ class PlannerEngine:
                     source=record.name,
                     query_type="search",
                     task=task,
+                    project_id=project_id,
                     priority=2 if matched else 3,
                     estimated_tokens=1000 if matched else 600,
                 )
@@ -244,7 +254,12 @@ class PlannerEngine:
         return match.group(0) if match else None
 
 
-def plan(classification: ClassificationResult, task: str, max_tokens: int = settings.default_max_tokens) -> Plan:
+def plan(
+    classification: ClassificationResult,
+    task: str,
+    max_tokens: int = settings.default_max_tokens,
+    project_id: str | None = None,
+) -> Plan:
     """Convenience function to create a plan."""
     engine = PlannerEngine()
-    return engine.plan(classification, task, max_tokens)
+    return engine.plan(classification, task, max_tokens, project_id=project_id)

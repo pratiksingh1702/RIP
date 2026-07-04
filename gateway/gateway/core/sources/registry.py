@@ -24,6 +24,8 @@ class SourceRegistry:
         self._sources: Dict[str, BaseSource] = {}
         self._health: Dict[str, bool] = {}
         self._records: Dict[str, SourceRecord] = {}
+        self._project_id: str | None = None
+        self._user_id: str | None = None
         self._initialize_sources()
 
     def _initialize_sources(self) -> None:
@@ -41,14 +43,16 @@ class SourceRegistry:
         self._sources["slack"] = SlackSource(enabled=settings.slack_mcp_enabled)
         self._health["slack"] = settings.slack_mcp_enabled
 
-    async def refresh(self) -> None:
+    async def refresh(self, project_id: str | None = None, user_id: str | None = None) -> None:
         """Hydrate the process registry from persistent source rows."""
         try:
-            records = await source_store.list_sources()
+            records = await source_store.list_sources(project_id=project_id, user_id=user_id)
         except Exception as exc:
             logger.warning("Failed to refresh persistent source registry", error=str(exc))
             return
 
+        self._project_id = project_id
+        self._user_id = user_id
         next_sources: Dict[str, BaseSource] = {}
         next_health: Dict[str, bool] = {}
         next_records: Dict[str, SourceRecord] = {}
@@ -65,11 +69,11 @@ class SourceRegistry:
         if record.name == "rip":
             return self._sources.get("rip") or RIPSource()
         if record.name == "github" and record.kind == "builtin":
-            return GitHubSource(enabled=record.enabled)
+            return GitHubSource(record=record)
         if record.name == "jira" and record.kind == "builtin":
-            return JiraSource(enabled=record.enabled)
+            return JiraSource(record=record)
         if record.name == "slack" and record.kind == "builtin":
-            return SlackSource(enabled=record.enabled)
+            return SlackSource(record=record)
         return DynamicMCPSource(record)
 
     @property
@@ -110,8 +114,10 @@ class SourceRegistry:
         """Check if a source is healthy (alias for get_health)."""
         return self.get_health(name)
 
-    def enabled_source_names(self) -> list[str]:
+    def enabled_source_names(self, project_id: str | None = None) -> list[str]:
         """Return sources currently enabled for planner/executor use."""
+        if project_id != self._project_id:
+            logger.debug("Source registry project differs from requested project", requested=project_id, active=self._project_id)
         enabled = []
         for name, source in self._sources.items():
             record = self._records.get(name)
@@ -123,11 +129,12 @@ class SourceRegistry:
                 enabled.append(name)
         return enabled
 
-    def dynamic_source_records(self) -> list[SourceRecord]:
+    def dynamic_source_records(self, project_id: str | None = None) -> list[SourceRecord]:
         """Return enabled non-built-in sources for planner hint matching."""
         return [
             record for record in self._records.values()
             if record.enabled and record.kind == "mcp" and not record.protected
+            and (project_id is None or record.project_id in {None, project_id})
         ]
 
     def set_enabled(self, name: str, enabled: bool) -> bool:

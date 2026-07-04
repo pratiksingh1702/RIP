@@ -54,6 +54,7 @@ async def lifespan(app: FastAPI):
     """Application lifespan for setup/teardown."""
     logger.info("Starting Context Gateway server", version=settings.version)
     await ensure_storage_schema()
+    await oauth.oauth_manager.ensure_oauth_providers()
     await get_source_registry().refresh()
     
     # Start background health checks
@@ -104,6 +105,7 @@ def create_app() -> FastAPI:
     app.include_router(validate.router, prefix="/api/validate", tags=["validate"])
     app.include_router(sessions.router, prefix="/api/sessions", tags=["sessions"])
     app.include_router(sources.router, prefix="/api/sources", tags=["sources"])
+    app.include_router(sources.router, prefix="/api/integrations", tags=["integrations"])
     app.include_router(oauth.router, prefix="/api/oauth", tags=["oauth"])
     app.include_router(gateway_settings.router, prefix="/api/settings", tags=["settings"])
     app.include_router(metrics.router, prefix="/api/metrics", tags=["metrics"])

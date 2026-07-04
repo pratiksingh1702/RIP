@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'connection_provider.dart';
+import 'project_provider.dart';
 import 'settings_provider.dart';
 
 final gatewayRoleProvider = StateProvider<String>((ref) => 'developer');
@@ -10,7 +11,8 @@ final gatewayMetricsProvider = FutureProvider.autoDispose<Map<String, dynamic>>(
 });
 
 final gatewaySourcesProvider = FutureProvider.autoDispose<Map<String, dynamic>>((ref) {
-  return ref.watch(ripClientProvider).gatewaySources();
+  final projectId = ref.watch(activeProjectIdProvider);
+  return ref.watch(ripClientProvider).gatewaySources(projectId: projectId);
 });
 
 final gatewaySourcePresetsProvider = FutureProvider.autoDispose<Map<String, dynamic>>((ref) {

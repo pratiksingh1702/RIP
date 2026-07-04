@@ -77,6 +77,15 @@ class RipClient {
     ));
   }
 
+  bool _isNotFoundError(Object error) {
+    if (error is RIPNotFoundException) return true;
+    if (error is DioException) {
+      if (error.response?.statusCode == 404) return true;
+      return error.error is RIPNotFoundException;
+    }
+    return false;
+  }
+
   Future<List<Project>> listProjects({CancelToken? cancelToken}) async {
     try {
       RipLogger.info('Calling listProjects()', tag: 'RipClient_Endpoint');
@@ -355,6 +364,7 @@ class RipClient {
   Future<Map<String, dynamic>> gatewayContext({
     required String task,
     required String sessionId,
+    String? projectId,
     int maxTokens = 12000,
     String role = 'developer',
     CancelToken? cancelToken,
@@ -364,6 +374,7 @@ class RipClient {
       final response = await _dio.post('/gateway/api/context', data: {
         'task': task,
         'session_id': sessionId,
+        if (projectId != null) 'project_id': projectId,
         'max_tokens': maxTokens,
         'role': role,
       }, cancelToken: cancelToken);
@@ -383,8 +394,59 @@ class RipClient {
     return data['data'] as Map<String, dynamic>? ?? data;
   }
 
-  Future<Map<String, dynamic>> gatewaySources({CancelToken? cancelToken}) async {
-    final response = await _dio.get('/gateway/api/sources', cancelToken: cancelToken);
+  Future<Map<String, dynamic>> gatewaySources({String? projectId, CancelToken? cancelToken}) async {
+    final response = await _dio.get(
+      '/gateway/api/sources',
+      queryParameters: {
+        if (projectId != null) 'project_id': projectId,
+      },
+      cancelToken: cancelToken,
+    );
+    final data = response.data as Map<String, dynamic>;
+    return data['data'] as Map<String, dynamic>? ?? data;
+  }
+
+  Future<Map<String, dynamic>> gatewayIntegrationProjects(
+    String sourceId, {
+    CancelToken? cancelToken,
+  }) async {
+    Response<dynamic> response;
+    try {
+      response = await _dio.get(
+        '/gateway/api/sources/$sourceId/projects',
+        cancelToken: cancelToken,
+      );
+    } catch (error) {
+      if (!_isNotFoundError(error)) rethrow;
+      response = await _dio.get(
+        '/gateway/api/integrations/$sourceId/projects',
+        cancelToken: cancelToken,
+      );
+    }
+    final data = response.data as Map<String, dynamic>;
+    return data['data'] as Map<String, dynamic>? ?? data;
+  }
+
+  Future<Map<String, dynamic>> updateGatewayIntegrationProjects(
+    String sourceId,
+    List<String> projectIds, {
+    CancelToken? cancelToken,
+  }) async {
+    Response<dynamic> response;
+    try {
+      response = await _dio.put(
+        '/gateway/api/sources/$sourceId/projects',
+        data: {'project_ids': projectIds},
+        cancelToken: cancelToken,
+      );
+    } catch (error) {
+      if (!_isNotFoundError(error)) rethrow;
+      response = await _dio.put(
+        '/gateway/api/integrations/$sourceId/projects',
+        data: {'project_ids': projectIds},
+        cancelToken: cancelToken,
+      );
+    }
     final data = response.data as Map<String, dynamic>;
     return data['data'] as Map<String, dynamic>? ?? data;
   }
@@ -477,8 +539,14 @@ class RipClient {
     return data['data'] as Map<String, dynamic>? ?? data;
   }
 
-  Future<Map<String, dynamic>> testGatewaySource(String sourceId, {CancelToken? cancelToken}) async {
-    final response = await _dio.post('/gateway/api/sources/$sourceId/test', cancelToken: cancelToken);
+  Future<Map<String, dynamic>> testGatewaySource(String sourceId, {String? projectId, CancelToken? cancelToken}) async {
+    final response = await _dio.post(
+      '/gateway/api/sources/$sourceId/test',
+      queryParameters: {
+        if (projectId != null) 'project_id': projectId,
+      },
+      cancelToken: cancelToken,
+    );
     final data = response.data as Map<String, dynamic>;
     return data['data'] as Map<String, dynamic>? ?? data;
   }
@@ -497,8 +565,14 @@ class RipClient {
     return data['data'] as Map<String, dynamic>? ?? data;
   }
 
-  Future<Map<String, dynamic>> revokeGatewaySourceOAuth(String sourceId, {CancelToken? cancelToken}) async {
-    final response = await _dio.post('/gateway/api/sources/$sourceId/oauth/revoke', cancelToken: cancelToken);
+  Future<Map<String, dynamic>> revokeGatewaySourceOAuth(String sourceId, {String? projectId, CancelToken? cancelToken}) async {
+    final response = await _dio.post(
+      '/gateway/api/sources/$sourceId/oauth/revoke',
+      queryParameters: {
+        if (projectId != null) 'project_id': projectId,
+      },
+      cancelToken: cancelToken,
+    );
     final data = response.data as Map<String, dynamic>;
     return data['data'] as Map<String, dynamic>? ?? data;
   }

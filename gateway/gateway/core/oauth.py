@@ -19,7 +19,14 @@ from sqlalchemy import delete, select
 from gateway.core.permissions.models import UserRole
 from gateway.storage.audit_store import get_audit_store
 from gateway.storage.database import async_session_factory
-from gateway.storage.models import OAuthProvider, OAuthToken, PendingOAuthRequest, RegisteredSource
+from gateway.storage.models import (
+    OAuthProvider,
+    OAuthToken,
+    PendingOAuthRequest,
+    RegisteredSource,
+    SourceProjectLink,
+    UserOAuthToken,
+)
 from gateway.storage.source_registry import _crypt, _decrypt, mask_secret
 
 logger = structlog.get_logger(__name__)
@@ -38,6 +45,23 @@ class ProviderSeed:
     supports_pkce: bool
     icon_key: str
 
+
+__all__ = [
+    "ensure_oauth_providers",
+    "list_providers",
+    "initiate_oauth",
+    "complete_callback",
+    "list_pending",
+    "reauthorize_source",
+    "revoke_source",
+    "refresh_due_tokens",
+    "mark_needs_reauth",
+    "add_custom_oauth_provider",
+    "update_oauth_provider",
+    "delete_oauth_provider",
+    "token_mask_for_payload",
+    "PROVIDER_SEEDS",
+]
 
 PROVIDER_SEEDS = [
     ProviderSeed(
@@ -169,6 +193,113 @@ async def ensure_oauth_providers() -> None:
         await session.commit()
 
 
+async def add_custom_oauth_provider(
+    *,
+    provider_id: str,
+    display_name: str,
+    authorize_url: str,
+    token_url: str,
+    revoke_url: str | None = None,
+    client_id: str,
+    client_secret: str,
+    default_scopes: list[str] | None = None,
+    supports_pkce: bool = True,
+    icon_key: str = "custom",
+    allowed_redirect_uris: list[str] | None = None,
+) -> None:
+    """Add a custom OAuth provider to the registry."""
+    await ensure_oauth_providers()
+    async with async_session_factory() as session:
+        existing = await session.get(OAuthProvider, provider_id)
+        if existing is not None:
+            raise ValueError(f"Provider with id '{provider_id}' already exists")
+
+        provider = OAuthProvider(
+            id=provider_id,
+            display_name=display_name,
+            authorize_url=authorize_url,
+            token_url=token_url,
+            revoke_url=revoke_url,
+            client_id=client_id,
+            client_secret=_crypt(client_secret.encode("utf-8")),
+            default_scopes=default_scopes or [],
+            supports_pkce=supports_pkce,
+            icon_key=icon_key,
+            allowed_redirect_uris=allowed_redirect_uris or ["riplink://oauth/callback"],
+            enabled=True,
+        )
+        session.add(provider)
+        await session.commit()
+
+
+async def update_oauth_provider(
+    provider_id: str,
+    *,
+    display_name: str | None = None,
+    authorize_url: str | None = None,
+    token_url: str | None = None,
+    revoke_url: str | None = None,
+    client_id: str | None = None,
+    client_secret: str | None = None,
+    default_scopes: list[str] | None = None,
+    supports_pkce: bool | None = None,
+    icon_key: str | None = None,
+    allowed_redirect_uris: list[str] | None = None,
+    enabled: bool | None = None,
+) -> None:
+    """Update an existing OAuth provider."""
+    await ensure_oauth_providers()
+    async with async_session_factory() as session:
+        provider = await session.get(OAuthProvider, provider_id)
+        if provider is None:
+            raise ValueError(f"Provider with id '{provider_id}' not found")
+
+        if display_name is not None:
+            provider.display_name = display_name
+        if authorize_url is not None:
+            provider.authorize_url = authorize_url
+        if token_url is not None:
+            provider.token_url = token_url
+        if revoke_url is not None:
+            provider.revoke_url = revoke_url
+        if client_id is not None:
+            provider.client_id = client_id
+        if client_secret is not None:
+            provider.client_secret = _crypt(client_secret.encode("utf-8"))
+        if default_scopes is not None:
+            provider.default_scopes = default_scopes
+        if supports_pkce is not None:
+            provider.supports_pkce = supports_pkce
+        if icon_key is not None:
+            provider.icon_key = icon_key
+        if allowed_redirect_uris is not None:
+            provider.allowed_redirect_uris = allowed_redirect_uris
+        if enabled is not None:
+            provider.enabled = enabled
+        else:
+            # Auto-enable if we have client_id and secret
+            provider.enabled = bool(provider.client_id and provider.client_secret)
+
+        await session.commit()
+
+
+async def delete_oauth_provider(provider_id: str) -> bool:
+    """Delete a custom OAuth provider."""
+    await ensure_oauth_providers()
+    # Check if provider is in the seed list (builtin)
+    seed_ids = {seed.id for seed in PROVIDER_SEEDS}
+    if provider_id in seed_ids:
+        raise ValueError(f"Cannot delete builtin provider '{provider_id}'")
+
+    async with async_session_factory() as session:
+        provider = await session.get(OAuthProvider, provider_id)
+        if provider is None:
+            return False
+        await session.delete(provider)
+        await session.commit()
+        return True
+
+
 async def list_providers() -> list[dict[str, Any]]:
     """Return provider metadata safe for clients."""
     await ensure_oauth_providers()
@@ -198,6 +329,8 @@ async def initiate_oauth(
     client_type: str,
     requested_by: str | None = None,
     existing_source_id: str | None = None,
+    user_id: str | None = None,
+    project_id: str | None = None,
 ) -> dict[str, Any]:
     """Create a pending request and return a browser authorize URL."""
     await ensure_oauth_providers()
@@ -215,6 +348,9 @@ async def initiate_oauth(
             source = await _load_source(session, existing_source_id)
             if source is None:
                 raise ValueError("Source not found")
+            source.auth_type = "oauth2"
+            source.domain_hints = domain_hints
+            source.priority_hint = max(source.priority_hint or 0, 50)
             source.enabled = False
             source.health_status = "pending_authorization"
         else:
@@ -244,6 +380,8 @@ async def initiate_oauth(
             redirect_uri=redirect_uri,
             client_type=client_type,
             requested_by=requested_by,
+            user_id=user_id,
+            project_id=project_id,
             status="pending",
             expires_at=datetime.now(UTC) + PENDING_TTL,
         )
@@ -254,11 +392,17 @@ async def initiate_oauth(
             "authorize_url": _authorize_url(provider, redirect_uri, state, code_verifier),
             "state": state,
             "source_id": str(source.id),
-            "expires_at": pending.expires_at.isoformat().replace("+00:00", "Z"),
+            "expires_at": _as_utc(pending.expires_at).isoformat().replace("+00:00", "Z"),
         }
 
 
-async def complete_callback(*, state: str, code: str, requested_by: str | None = None) -> dict[str, Any]:
+async def complete_callback(
+    *,
+    state: str,
+    code: str,
+    requested_by: str | None = None,
+    user_id: str | None = None,
+) -> dict[str, Any]:
     """Validate state, exchange the code, and activate the source."""
     async with async_session_factory() as session:
         await _expire_pending(session)
@@ -269,7 +413,9 @@ async def complete_callback(*, state: str, code: str, requested_by: str | None =
         ).scalar_one_or_none()
         if pending is None or pending.status != "pending":
             raise ValueError("OAuth state is invalid or already used")
-        if pending.expires_at <= datetime.now(UTC):
+        if pending.user_id and user_id and pending.user_id != user_id:
+            raise ValueError("OAuth state belongs to a different API-key user")
+        if _as_utc(pending.expires_at) <= datetime.now(UTC):
             pending.status = "expired"
             await session.commit()
             raise ValueError("OAuth state expired")
@@ -288,15 +434,36 @@ async def complete_callback(*, state: str, code: str, requested_by: str | None =
             raise ValueError("Provider did not return an access token")
 
         account_label = _account_label(source.name, provider, token_payload)
-        token = await session.get(OAuthToken, source.id)
-        if token is None:
-            token = OAuthToken(
-                source_id=source.id,
-                provider_id=provider.id,
-                access_token=_crypt(str(access_token).encode("utf-8")),
-                account_label=account_label,
-            )
-            session.add(token)
+        if pending.user_id:
+            token = (
+                await session.execute(
+                    select(UserOAuthToken).where(
+                        UserOAuthToken.source_id == source.id,
+                        UserOAuthToken.user_id == pending.user_id,
+                        UserOAuthToken.project_id == "",
+                    )
+                )
+            ).scalar_one_or_none()
+            if token is None:
+                token = UserOAuthToken(
+                    source_id=source.id,
+                    provider_id=provider.id,
+                    user_id=pending.user_id,
+                    project_id="",
+                    access_token=_crypt(str(access_token).encode("utf-8")),
+                    account_label=account_label,
+                )
+                session.add(token)
+        else:
+            token = await session.get(OAuthToken, source.id)
+            if token is None:
+                token = OAuthToken(
+                    source_id=source.id,
+                    provider_id=provider.id,
+                    access_token=_crypt(str(access_token).encode("utf-8")),
+                    account_label=account_label,
+                )
+                session.add(token)
         token.provider_id = provider.id
         token.access_token = _crypt(str(access_token).encode("utf-8"))
         token.refresh_token = _encrypted_or_none(token_payload.get("refresh_token"))
@@ -335,7 +502,7 @@ async def list_pending(requested_by: str | None = None) -> list[dict[str, Any]]:
                 "state": row.state,
                 "client_type": row.client_type,
                 "status": row.status,
-                "expires_at": row.expires_at.isoformat().replace("+00:00", "Z"),
+                "expires_at": _as_utc(row.expires_at).isoformat().replace("+00:00", "Z"),
             }
             for row in rows
             if row.status in {"pending", "expired", "failed"}
@@ -348,13 +515,30 @@ async def reauthorize_source(
     redirect_uri: str,
     client_type: str,
     requested_by: str | None = None,
+    user_id: str | None = None,
+    project_id: str | None = None,
 ) -> dict[str, Any]:
     """Restart OAuth for an existing source."""
     async with async_session_factory() as session:
-        token = await session.get(OAuthToken, UUID(source_id))
-        if token is None:
-            raise ValueError("Source does not have OAuth credentials")
-        provider_id = token.provider_id
+        source = await _load_source(session, source_id)
+        if source is None:
+            raise ValueError("Source not found")
+        token = None
+        if user_id:
+            token = (
+                await session.execute(
+                    select(UserOAuthToken).where(
+                        UserOAuthToken.source_id == source.id,
+                        UserOAuthToken.user_id == user_id,
+                        UserOAuthToken.project_id == "",
+                    )
+                )
+            ).scalar_one_or_none()
+        else:
+            token = await session.get(OAuthToken, source.id)
+        provider_id = token.provider_id if token is not None else await _provider_id_for_source(session, source)
+        if provider_id is None:
+            raise ValueError("Source does not have an OAuth provider")
     return await initiate_oauth(
         provider_id=provider_id,
         source_name=None,
@@ -363,16 +547,35 @@ async def reauthorize_source(
         client_type=client_type,
         requested_by=requested_by,
         existing_source_id=source_id,
+        user_id=user_id,
+        project_id=project_id,
     )
 
 
-async def revoke_source(source_id: str, requested_by: str | None = None) -> dict[str, Any]:
+async def revoke_source(
+    source_id: str,
+    requested_by: str | None = None,
+    *,
+    user_id: str | None = None,
+    project_id: str | None = None,
+) -> dict[str, Any]:
     """Revoke provider token if possible and disable the local source."""
     async with async_session_factory() as session:
         source = await _load_source(session, source_id)
         if source is None:
             raise ValueError("Source not found")
-        token = await session.get(OAuthToken, source.id)
+        if user_id:
+            token = (
+                await session.execute(
+                    select(UserOAuthToken).where(
+                        UserOAuthToken.source_id == source.id,
+                        UserOAuthToken.user_id == user_id,
+                        UserOAuthToken.project_id == "",
+                    )
+                )
+            ).scalar_one_or_none()
+        else:
+            token = await session.get(OAuthToken, source.id)
         if token is None:
             raise ValueError("Source does not have OAuth credentials")
         provider = await session.get(OAuthProvider, token.provider_id)
@@ -382,8 +585,13 @@ async def revoke_source(source_id: str, requested_by: str | None = None) -> dict
             except Exception as exc:
                 logger.warning("OAuth revoke request failed", source=source.name, error=str(exc))
         await session.delete(token)
-        source.enabled = False
-        source.health_status = "revoked"
+        if user_id:
+            await session.execute(
+                delete(SourceProjectLink).where(SourceProjectLink.user_oauth_token_id == token.id)
+            )
+        if not user_id:
+            source.enabled = False
+            source.health_status = "revoked"
         await session.commit()
         await _audit("oauth_revoke", source.name, requested_by, True, token.provider_id)
         return {"status": "revoked", "source_id": str(source.id)}
@@ -393,7 +601,7 @@ async def refresh_due_tokens() -> None:
     """Refresh active tokens that are close to expiry."""
     now = datetime.now(UTC)
     async with async_session_factory() as session:
-        rows = (
+        global_rows = (
             await session.execute(
                 select(OAuthToken).where(
                     OAuthToken.status == "active",
@@ -402,12 +610,21 @@ async def refresh_due_tokens() -> None:
                 )
             )
         ).scalars()
-        for token in rows:
+        user_rows = (
+            await session.execute(
+                select(UserOAuthToken).where(
+                    UserOAuthToken.status == "active",
+                    UserOAuthToken.expires_at.is_not(None),
+                    UserOAuthToken.expires_at <= now + timedelta(minutes=10),
+                )
+            )
+        ).scalars()
+        for token in list(global_rows) + list(user_rows):
             provider = await session.get(OAuthProvider, token.provider_id)
             source = await session.get(RegisteredSource, token.source_id)
             if provider is None or source is None or not token.refresh_token:
                 token.status = "needs_reauth"
-                if source is not None:
+                if source is not None and isinstance(token, OAuthToken):
                     source.enabled = False
                     source.health_status = "needs_reauth"
                 continue
@@ -422,8 +639,9 @@ async def refresh_due_tokens() -> None:
             except Exception as exc:
                 logger.warning("OAuth refresh failed", source=source.name, error=str(exc))
                 token.status = "needs_reauth"
-                source.enabled = False
-                source.health_status = "needs_reauth"
+                if isinstance(token, OAuthToken):
+                    source.enabled = False
+                    source.health_status = "needs_reauth"
                 await _audit("oauth_refresh", source.name, None, False, str(exc))
         await session.commit()
 
@@ -550,6 +768,13 @@ def _expires_at(payload: dict[str, Any]) -> datetime | None:
         return None
 
 
+def _as_utc(value: datetime) -> datetime:
+    """Normalize DB-returned datetimes that may lose tzinfo on SQLite."""
+    if value.tzinfo is None:
+        return value.replace(tzinfo=UTC)
+    return value.astimezone(UTC)
+
+
 def _account_label(source_name: str, provider: OAuthProvider, payload: dict[str, Any]) -> str:
     for key in ("account_label", "team_name", "workspace_name", "name", "login", "email"):
         value = payload.get(key)
@@ -581,22 +806,30 @@ async def _load_source(session, source_id_or_name: str) -> RegisteredSource | No
     return (await session.execute(stmt)).scalar_one_or_none()
 
 
+async def _provider_id_for_source(session, source: RegisteredSource) -> str | None:
+    candidates = [source.name]
+    if source.name.endswith("-oauth"):
+        candidates.append(source.name.removesuffix("-oauth"))
+    for candidate in candidates:
+        provider = await session.get(OAuthProvider, candidate)
+        if provider is not None:
+            return provider.id
+    return None
+
+
 async def _expire_pending(session) -> None:
     now = datetime.now(UTC)
     rows = (
         await session.execute(
-            select(PendingOAuthRequest).where(
-                PendingOAuthRequest.status == "pending",
-                PendingOAuthRequest.expires_at <= now,
-            )
+            select(PendingOAuthRequest).where(PendingOAuthRequest.status == "pending")
         )
     ).scalars()
     for row in rows:
-        row.status = "expired"
+        if _as_utc(row.expires_at) <= now:
+            row.status = "expired"
     await session.execute(
         delete(PendingOAuthRequest).where(
             PendingOAuthRequest.status.in_(["completed", "expired", "failed"]),
-            PendingOAuthRequest.expires_at <= now - PENDING_TTL,
         )
     )
 
