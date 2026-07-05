@@ -2,21 +2,22 @@
 
 import asyncio
 import os
-import structlog
 from typing import Any
 
-from mcp.server import Server
+import structlog
 from mcp.server.stdio import stdio_server
 from mcp.types import Tool
 
-from .tools import get_tools
+from mcp.server import Server
+
 from .handlers import (
+    handle_explain_architecture,
     handle_get_context,
     handle_search_codebase,
-    handle_explain_architecture,
-    handle_validate_change
+    handle_validate_change,
 )
 from .middleware import with_logging
+from .tools import get_tools
 
 logger = structlog.get_logger(__name__)
 

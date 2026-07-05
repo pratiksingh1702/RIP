@@ -1,15 +1,12 @@
 """Unit tests for memory components."""
 
-import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
 from datetime import datetime
 from uuid import uuid4
 
 from gateway.core.classifier.models import ClassificationResult, IntentType, RiskLevel
-from gateway.core.memory.store import SessionStore
 from gateway.core.memory.conflict_detector import ConflictDetector
 from gateway.core.memory.context_bridge import ContextBridge
-from gateway.core.memory.models import Session, Conflict
+from gateway.core.memory.models import Session
 
 
 def test_conflict_detector_initialization():

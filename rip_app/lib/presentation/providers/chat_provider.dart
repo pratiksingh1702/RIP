@@ -351,6 +351,7 @@ class ChatNotifier extends Notifier<List<Message>> {
     if (projectId == null &&
         cmd.type != CommandType.indexRepository &&
         cmd.type != CommandType.projects &&
+        cmd.type != CommandType.workflow &&
         cmd.type != CommandType.unknown) {
       throw Exception('No active project selected. Select a project first using @ or drawer.');
     }
@@ -536,6 +537,29 @@ class ChatNotifier extends Notifier<List<Message>> {
           buffer.writeln('| ${p.projectName} | ${p.filesCount} | ${p.entitiesCount} | ${p.gitUrl ?? "Local"} |');
         }
         return buffer.toString();
+
+      case CommandType.workflow:
+        if (cmd.arguments.isEmpty) {
+          return 'Type `/workflow`, pick a workflow, then add the message to run it with.';
+        }
+        final workflowId = cmd.arguments.first;
+        final triggerText = cmd.arguments.skip(1).join(' ').trim();
+        final run = await client.runGatewayWorkflow(
+          draftId: workflowId,
+          query: triggerText.isEmpty ? rawText : triggerText,
+          projectId: projectId,
+          cancelToken: cancelToken,
+        );
+        final runId = run['run_id']?.toString() ?? '';
+        return [
+          'Workflow run started.',
+          '',
+          '- workflow_id: $workflowId',
+          if (runId.isNotEmpty) '- run_id: $runId',
+          '- status: ${run['status'] ?? 'pending'}',
+          '',
+          'Open Workflows to inspect completed, running, waiting, or broken blocks.',
+        ].join('\n');
 
       case CommandType.unknown:
         final projectId = ref.read(activeProjectIdProvider);

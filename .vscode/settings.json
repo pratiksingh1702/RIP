@@ -19,5 +19,8 @@
     "type": "shell",
     "command": "npm run lint",
     "runOn": "folderOpen"
+  },
+  "chat.tools.terminal.autoApprove": {
+    "uv": true
   }
 }

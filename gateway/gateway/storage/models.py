@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from uuid import uuid4, UUID as UUIDType
 from typing import Any
+from uuid import UUID as UUIDType
+from uuid import uuid4
 
 from sqlalchemy import (
     JSON,
@@ -16,8 +17,8 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
-    UniqueConstraint,
     TypeDecorator,
+    UniqueConstraint,
 )
 from sqlalchemy.dialects.postgresql import UUID as PostgresUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -141,6 +142,7 @@ class Feedback(Base):
     missing_context: Mapped[list[str]] = mapped_column(PortableArray(Text), default=list)
     irrelevant_context: Mapped[list[str]] = mapped_column(PortableArray(Text), default=list)
     comment: Mapped[str | None] = mapped_column(Text)
+    prompt_id: Mapped[UUIDType | None] = mapped_column(PortableUUID)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
 
     session: Mapped[Session] = relationship("Session", back_populates="feedback")
@@ -179,7 +181,144 @@ class RegisteredSource(Base):
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     health_status: Mapped[str] = mapped_column(String(30), default="unknown")
     protected: Mapped[bool] = mapped_column(Boolean, default=False)
+    usable_as: Mapped[list[str]] = mapped_column(PortableArray(Text), default=lambda: ["retrieval"])
+    block_display: Mapped[dict | None] = mapped_column(JSON)
     created_by: Mapped[str | None] = mapped_column(String(255))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+    )
+
+
+class EventStore(Base):
+    """Postgres-backed event store."""
+
+    __tablename__ = "events"
+
+    id: Mapped[UUIDType] = mapped_column(PortableUUID, primary_key=True, default=uuid4)
+    org_id: Mapped[str | None] = mapped_column(String(255))
+    project_id: Mapped[str | None] = mapped_column(String(255))
+    session_id: Mapped[str | None] = mapped_column(String(255))
+    workflow_run_id: Mapped[str | None] = mapped_column(String(255))
+    event_type: Mapped[str] = mapped_column(String(100), nullable=False)
+    source_block_id: Mapped[str | None] = mapped_column(String(100))
+    payload: Mapped[dict] = mapped_column(JSON, default=dict)
+    ts: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+
+
+class WorkflowDraft(Base):
+    """Workflow draft for building workflows."""
+
+    __tablename__ = "workflow_drafts"
+
+    id: Mapped[UUIDType] = mapped_column(PortableUUID, primary_key=True, default=uuid4)
+    owner_user_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    scope: Mapped[str] = mapped_column(String(50), nullable=False, default="project")
+    project_id: Mapped[str | None] = mapped_column(String(255))
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text)
+    category: Mapped[str | None] = mapped_column(String(50))
+    version: Mapped[str] = mapped_column(String(20), default="1.0.0")
+    source: Mapped[str] = mapped_column(String(20), default="draft")
+    source_template_id: Mapped[str | None] = mapped_column(String(255))
+    canvas_state: Mapped[dict] = mapped_column(JSON, default=dict)
+    visibility: Mapped[str] = mapped_column(String(20), default="private")
+    status: Mapped[str] = mapped_column(String(50), nullable=False, default="draft")
+    blocks: Mapped[list[dict]] = mapped_column(JSON, default=list)
+    run_count: Mapped[int] = mapped_column(Integer, default=0)
+    last_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    avg_duration_ms: Mapped[int | None] = mapped_column(Integer)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+    )
+
+
+class WorkflowWire(Base):
+    """Canvas wire connecting one workflow block output to another input."""
+
+    __tablename__ = "workflow_wires"
+    __table_args__ = (
+        UniqueConstraint(
+            "workflow_id",
+            "source_step_id",
+            "source_port",
+            "target_step_id",
+            "target_port",
+            name="uq_workflow_wire_ports",
+        ),
+    )
+
+    id: Mapped[UUIDType] = mapped_column(PortableUUID, primary_key=True, default=uuid4)
+    workflow_id: Mapped[UUIDType] = mapped_column(
+        PortableUUID,
+        ForeignKey("workflow_drafts.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    source_step_id: Mapped[str] = mapped_column(String(100), nullable=False)
+    source_port: Mapped[str] = mapped_column(String(50), nullable=False, default="output")
+    target_step_id: Mapped[str] = mapped_column(String(100), nullable=False)
+    target_port: Mapped[str] = mapped_column(String(50), nullable=False)
+    mapping: Mapped[dict] = mapped_column(JSON, default=lambda: {"type": "direct"})
+    wire_color: Mapped[str] = mapped_column(String(7), default="#3B82F6")
+    label: Mapped[str | None] = mapped_column(String(100))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+
+
+class WorkflowRun(Base):
+    """Running or completed workflow."""
+
+    __tablename__ = "workflow_runs"
+
+    id: Mapped[UUIDType] = mapped_column(PortableUUID, primary_key=True, default=uuid4)
+    draft_id: Mapped[UUIDType] = mapped_column(PortableUUID, ForeignKey("workflow_drafts.id", ondelete="CASCADE"), nullable=False)
+    status: Mapped[str] = mapped_column(String(50), nullable=False, default="pending")
+    state: Mapped[dict] = mapped_column(JSON, default=dict)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+    )
+
+
+class WorkflowPolicy(Base):
+    """Single-user workflow policy guard for write actions."""
+
+    __tablename__ = "workflow_policies"
+    __table_args__ = (UniqueConstraint("action", name="uq_workflow_policy_action"),)
+
+    id: Mapped[UUIDType] = mapped_column(PortableUUID, primary_key=True, default=uuid4)
+    action: Mapped[str] = mapped_column(String(120), nullable=False)
+    requires_approval: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    allowed_repos: Mapped[list[str]] = mapped_column(PortableArray(Text), default=list)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+    )
+
+
+class PromptTemplate(Base):
+    """Prompt template for LLM calls."""
+
+    __tablename__ = "prompt_templates"
+
+    id: Mapped[UUIDType] = mapped_column(PortableUUID, primary_key=True, default=uuid4)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    version: Mapped[str] = mapped_column(String(50), nullable=False, default="1.0.0")
+    system_prompt: Mapped[str] = mapped_column(Text, nullable=True)
+    prompt_template: Mapped[str] = mapped_column(Text, nullable=False)
+    variables: Mapped[list[str]] = mapped_column(JSON, default=list)
+    owner_org: Mapped[str | None] = mapped_column(String(255))
+    visibility: Mapped[str] = mapped_column(String(50), nullable=False, default="private")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

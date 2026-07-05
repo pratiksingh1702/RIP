@@ -2,7 +2,6 @@
 
 import asyncio
 import time
-from typing import Any
 
 import structlog
 
@@ -156,7 +155,7 @@ class ExecutorEngine:
                 )
             await self._emit_source_event(response, event_sink)
             return response
-        except asyncio.TimeoutError:
+        except TimeoutError:
             self.circuit_breaker.record_failure(query.source)
             query_end_time = time.time()
             actual_latency_ms = int((query_end_time - query_start_time) * 1000)

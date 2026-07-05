@@ -9,7 +9,6 @@ import re
 import time
 from dataclasses import dataclass
 from typing import Any
-from urllib.parse import urljoin
 
 import httpx
 
@@ -158,8 +157,9 @@ class UniversalMCPClient:
         arguments: dict[str, Any] | None = None,
     ) -> MCPHandshake | MCPCallResult | None:
         try:
-            from mcp import ClientSession
             from mcp.client.sse import sse_client
+
+            from mcp import ClientSession
         except Exception:
             return None
         if not self.endpoint_url:
@@ -198,8 +198,9 @@ class UniversalMCPClient:
         arguments: dict[str, Any] | None = None,
     ) -> MCPHandshake | MCPCallResult | None:
         try:
-            from mcp import ClientSession, StdioServerParameters
             from mcp.client.stdio import stdio_client
+
+            from mcp import ClientSession, StdioServerParameters
         except Exception:
             return None
         command, args, cwd, env = self._stdio_process_config()

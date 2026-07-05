@@ -1,0 +1,2552 @@
+# API & Core Changes Required for Mobile Canvas Workflow Builder
+
+## Overview
+
+The mobile canvas is not just a UI. It requires new API endpoints, new core data models, new execution logic, and extensions to existing systems. Here's everything that needs to change, layer by layer.
+
+---
+
+## Part 1: Database Schema Changes
+
+### 1.1 New Tables
+
+```sql
+-- ============================================
+-- WORKFLOW DEFINITION (Canvas + Template)
+-- ============================================
+
+CREATE TABLE workflow_definitions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    owner_user_id UUID NOT NULL REFERENCES users(id),
+    project_id UUID REFERENCES projects(id),
+    
+    -- Identity
+    name VARCHAR(255) NOT NULL,
+    description TEXT,
+    category VARCHAR(50), -- investigation, implementation, audit, maintenance, onboarding, custom
+    version VARCHAR(20) DEFAULT '1.0.0',
+    
+    -- Source: 'draft' = canvas-built, 'template' = from template, 'imported' = from JSON/YAML
+    source VARCHAR(20) DEFAULT 'draft',
+    source_template_id UUID NULL, -- if cloned from template
+    
+    -- Canvas state (for visual builder)
+    canvas_state JSONB, -- viewport, zoom, scroll position
+    
+    -- Visibility
+    visibility VARCHAR(20) DEFAULT 'private', -- private, shared, public
+    
+    -- Status
+    status VARCHAR(20) DEFAULT 'draft', -- draft, published, archived
+    
+    -- Stats
+    run_count INTEGER DEFAULT 0,
+    last_run_at TIMESTAMP,
+    avg_duration_ms INTEGER,
+    
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE TABLE workflow_blocks (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    workflow_id UUID NOT NULL REFERENCES workflow_definitions(id) ON DELETE CASCADE,
+    
+    -- Block identity
+    step_id VARCHAR(100) NOT NULL, -- step_1, step_2, etc.
+    block_type_id VARCHAR(255) NOT NULL, -- rip.search, github.commits, llm.analyze, approval.gate, etc.
+    
+    -- Canvas positioning
+    position_x FLOAT NOT NULL DEFAULT 0,
+    position_y FLOAT NOT NULL DEFAULT 0,
+    
+    -- Block configuration (type-specific, matches block's config_schema)
+    config JSONB NOT NULL DEFAULT '{}',
+    
+    -- Display
+    display_name VARCHAR(255),
+    display_color VARCHAR(7),
+    
+    -- Execution order (for DAG resolution)
+    execution_order INTEGER,
+    
+    -- Input bindings: how this block gets its inputs
+    -- [
+    --   {
+    --     "input_field": "query",
+    --     "source": "trigger_query" | "step_output" | "fixed",
+    --     "source_step_id": "step_1",           -- only if source=step_output
+    --     "source_field": "top_result.files",    -- JSON path to extract
+    --     "fixed_value": "payment-service",       -- only if source=fixed
+    --     "transform": null | "json_path" | "template" | "custom_expression"
+    --   }
+    -- ]
+    input_bindings JSONB NOT NULL DEFAULT '[]',
+    
+    -- Output schema (derived from block_type, cached here)
+    output_schema JSONB,
+    
+    -- Retry policy
+    max_retries INTEGER DEFAULT 3,
+    retry_delay_ms INTEGER DEFAULT 1000,
+    timeout_ms INTEGER DEFAULT 300000, -- 5 min default
+    
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW(),
+    
+    UNIQUE(workflow_id, step_id)
+);
+
+CREATE TABLE workflow_wires (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    workflow_id UUID NOT NULL REFERENCES workflow_definitions(id) ON DELETE CASCADE,
+    
+    -- Source
+    source_block_id UUID NOT NULL REFERENCES workflow_blocks(id) ON DELETE CASCADE,
+    source_port VARCHAR(50) NOT NULL DEFAULT 'output', -- output port name
+    
+    -- Target
+    target_block_id UUID NOT NULL REFERENCES workflow_blocks(id) ON DELETE CASCADE,
+    target_port VARCHAR(50) NOT NULL, -- input field name this wire feeds
+    
+    -- Field-level mapping (optional, for complex data routing)
+    -- {
+    --   "type": "direct" | "transform" | "pick_fields",
+    --   "field_map": {"source_field": "target_field"} or null,
+    --   "transform_expression": null | "{{value | upper}}"
+    -- }
+    mapping JSONB DEFAULT '{"type": "direct"}',
+    
+    -- Visual
+    wire_color VARCHAR(7) DEFAULT '#3B82F6',
+    label VARCHAR(100),
+    
+    -- Prevent circular dependencies (checked at insert time)
+    created_at TIMESTAMP DEFAULT NOW(),
+    
+    UNIQUE(workflow_id, source_block_id, source_port, target_block_id, target_port)
+);
+
+-- ============================================
+-- TRIGGER CONFIGURATION
+-- ============================================
+
+CREATE TABLE workflow_triggers (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    workflow_id UUID NOT NULL REFERENCES workflow_definitions(id) ON DELETE CASCADE,
+    
+    -- Trigger type
+    trigger_type VARCHAR(50) NOT NULL, -- manual_query, scheduled, webhook, file_watch, event
+    
+    -- Configuration per type
+    config JSONB NOT NULL DEFAULT '{}',
+    -- manual_query: {"extracted_params": [{"name": "query", "source": "full_text"}, ...]}
+    -- scheduled: {"cron": "0 2 * * 1", "timezone": "Asia/Kolkata"}
+    -- webhook: {"path": "/custom-webhook", "secret": "whsec_xxx", "method": "POST"}
+    -- file_watch: {"paths": ["src/services/"], "events": ["modify", "create"]}
+    -- event: {"event_type": "deployment_completed", "filters": {"repo": "payment-service"}}
+    
+    is_active BOOLEAN DEFAULT true,
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
+);
+
+-- ============================================
+-- WORKFLOW PARAMETERS (exposed to trigger)
+-- ============================================
+
+CREATE TABLE workflow_parameters (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    workflow_id UUID NOT NULL REFERENCES workflow_definitions(id) ON DELETE CASCADE,
+    
+    name VARCHAR(100) NOT NULL, -- target_repository, bug_description, priority
+    type VARCHAR(50) NOT NULL, -- string, text, number, boolean, enum, file_list
+    required BOOLEAN DEFAULT false,
+    default_value TEXT,
+    enum_values JSONB, -- ["low", "medium", "high", "critical"]
+    description TEXT,
+    ui_hint VARCHAR(50), -- text_input, dropdown, file_picker, repo_selector, date_picker
+    
+    -- For NL query extraction
+    extract_from_query BOOLEAN DEFAULT false, -- should Intent Classifier try to extract this?
+    extraction_hint TEXT, -- hint for the LLM extractor
+    
+    display_order INTEGER DEFAULT 0,
+    created_at TIMESTAMP DEFAULT NOW()
+);
+
+-- ============================================
+-- APPROVAL GATES
+-- ============================================
+
+CREATE TABLE workflow_approval_gates (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    workflow_id UUID NOT NULL REFERENCES workflow_definitions(id) ON DELETE CASCADE,
+    block_id UUID NOT NULL REFERENCES workflow_blocks(id) ON DELETE CASCADE,
+    
+    -- When to trigger
+    condition_type VARCHAR(50) NOT NULL, -- always, risk_score, lines_changed, protected_paths, role_based
+    condition_config JSONB NOT NULL DEFAULT '{}',
+    -- always: {}
+    -- risk_score: {"operator": ">", "value": 7, "source_step": "step_4", "source_field": "risk_score"}
+    -- lines_changed: {"operator": ">", "value": 100}
+    -- protected_paths: {"paths": ["payment/", "auth/", "pii/"]}
+    -- role_based: {"require_role": "senior"}
+    
+    -- Who can approve (single-user mode: always the owner)
+    approver_type VARCHAR(50) DEFAULT 'owner', -- owner, any_authenticated, specific_role
+    approver_role VARCHAR(50),
+    
+    -- What to show the approver
+    show_diff BOOLEAN DEFAULT true,
+    show_risk_assessment BOOLEAN DEFAULT true,
+    show_dependency_impact BOOLEAN DEFAULT true,
+    show_test_results BOOLEAN DEFAULT true,
+    
+    -- Timeout
+    timeout_hours INTEGER DEFAULT 24,
+    on_timeout VARCHAR(20) DEFAULT 'reject', -- reject, approve, keep_waiting
+    
+    -- Approval method
+    notify_push BOOLEAN DEFAULT true,
+    notify_in_app BOOLEAN DEFAULT true,
+    notify_email BOOLEAN DEFAULT false,
+    
+    created_at TIMESTAMP DEFAULT NOW()
+);
+
+-- ============================================
+-- WORKFLOW EXECUTION (RUNS)
+-- ============================================
+
+CREATE TABLE workflow_runs (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    workflow_id UUID NOT NULL REFERENCES workflow_definitions(id),
+    workflow_version VARCHAR(20) NOT NULL, -- snapshot of version at run time
+    
+    -- Who triggered
+    triggered_by_user_id UUID NOT NULL REFERENCES users(id),
+    trigger_type VARCHAR(50) NOT NULL, -- manual, scheduled, webhook, file_watch
+    
+    -- Trigger input (the raw query/parameters provided)
+    trigger_input JSONB NOT NULL DEFAULT '{}',
+    -- {query: "transfers over $10k failing", repository: "payment-service", priority: "high"}
+    
+    -- Resolved parameters (after extraction)
+    resolved_params JSONB,
+    
+    -- Status
+    status VARCHAR(30) NOT NULL DEFAULT 'pending',
+    -- pending → running → (awaiting_approval | awaiting_input) → running → completed | failed | rejected | cancelled
+    current_step_id VARCHAR(100),
+    
+    -- Timing
+    started_at TIMESTAMP,
+    completed_at TIMESTAMP,
+    duration_ms INTEGER,
+    
+    -- Cost
+    total_tokens_used INTEGER DEFAULT 0,
+    total_cost_cents INTEGER DEFAULT 0,
+    
+    -- Error info
+    error_message TEXT,
+    error_step_id VARCHAR(100),
+    
+    -- Full snapshot of workflow definition at run time (immutable)
+    workflow_snapshot JSONB NOT NULL, -- complete blocks + wires + triggers + approval gates
+    
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE TABLE workflow_run_steps (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    run_id UUID NOT NULL REFERENCES workflow_runs(id) ON DELETE CASCADE,
+    workflow_id UUID NOT NULL REFERENCES workflow_definitions(id),
+    
+    step_id VARCHAR(100) NOT NULL, -- step_1, step_2, etc.
+    block_type_id VARCHAR(255) NOT NULL,
+    
+    -- Status
+    status VARCHAR(30) NOT NULL DEFAULT 'pending',
+    -- pending → running → completed | failed | skipped | suspended
+    
+    -- Input/Output (full snapshot for traceability)
+    resolved_input JSONB, -- what the block actually received
+    output JSONB, -- what the block returned
+    output_schema JSONB,
+    
+    -- LLM-specific (for llm type blocks)
+    llm_provider VARCHAR(50),
+    llm_model VARCHAR(100),
+    llm_tokens_input INTEGER DEFAULT 0,
+    llm_tokens_output INTEGER DEFAULT 0,
+    llm_cost_cents INTEGER DEFAULT 0,
+    llm_temperature FLOAT,
+    llm_system_prompt TEXT,
+    llm_rendered_prompt TEXT,
+    
+    -- Tool-specific (for tool type blocks)
+    tool_name VARCHAR(255),
+    tool_call_id VARCHAR(255),
+    
+    -- Timing
+    started_at TIMESTAMP,
+    completed_at TIMESTAMP,
+    duration_ms INTEGER,
+    retry_count INTEGER DEFAULT 0,
+    
+    -- Error
+    error_message TEXT,
+    error_type VARCHAR(50), -- timeout, connection, auth, validation, llm_error, tool_error
+    
+    -- Events emitted during execution (for replay)
+    events JSONB DEFAULT '[]',
+    
+    -- Approval (for approval type blocks)
+    approval_required BOOLEAN DEFAULT false,
+    approval_status VARCHAR(20), -- pending, approved, rejected
+    approved_by_user_id UUID,
+    approved_at TIMESTAMP,
+    approval_comment TEXT,
+    
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW(),
+    
+    UNIQUE(run_id, step_id)
+);
+
+-- ============================================
+-- PROMPT TEMPLATES
+-- ============================================
+
+CREATE TABLE prompt_templates (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    owner_user_id UUID NOT NULL REFERENCES users(id),
+    project_id UUID REFERENCES projects(id),
+    
+    name VARCHAR(255) NOT NULL,
+    description TEXT,
+    category VARCHAR(50),
+    version VARCHAR(20) DEFAULT '1.0.0',
+    
+    -- Template content
+    system_prompt TEXT,
+    user_prompt_template TEXT, -- Jinja2 style: "Analyze this bug: {{bug_description}}"
+    
+    -- Variables expected in the template
+    variables JSONB DEFAULT '[]',
+    -- [{"name": "bug_description", "type": "string", "required": true, "description": "..."}]
+    
+    -- Default LLM config for this prompt
+    default_llm_provider VARCHAR(50),
+    default_llm_model VARCHAR(100),
+    default_temperature FLOAT DEFAULT 0.3,
+    default_max_tokens INTEGER DEFAULT 4096,
+    
+    -- Output format
+    output_format VARCHAR(20) DEFAULT 'markdown', -- markdown, json, text
+    output_schema JSONB, -- JSON schema if output_format=json
+    
+    -- Stats
+    usage_count INTEGER DEFAULT 0,
+    avg_rating FLOAT,
+    
+    visibility VARCHAR(20) DEFAULT 'private',
+    
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE TABLE prompt_template_versions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    template_id UUID NOT NULL REFERENCES prompt_templates(id) ON DELETE CASCADE,
+    version VARCHAR(20) NOT NULL,
+    
+    system_prompt TEXT,
+    user_prompt_template TEXT,
+    variables JSONB DEFAULT '[]',
+    output_schema JSONB,
+    
+    change_description TEXT,
+    created_by_user_id UUID NOT NULL REFERENCES users(id),
+    created_at TIMESTAMP DEFAULT NOW(),
+    
+    UNIQUE(template_id, version)
+);
+
+-- ============================================
+-- BLOCK REGISTRY (available block types)
+-- ============================================
+
+CREATE TABLE block_type_registry (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    
+    -- Identity
+    block_id VARCHAR(255) UNIQUE NOT NULL, -- rip.search, github.commits, llm.analyze, etc.
+    kind VARCHAR(50) NOT NULL, -- retrieval, tool, llm, prompt, approval, verification, deployment, notification, memory, trigger, custom
+    
+    -- Display
+    display_name VARCHAR(255) NOT NULL,
+    display_icon VARCHAR(50), -- emoji or icon name
+    display_color VARCHAR(7) DEFAULT '#3B82F6',
+    description TEXT,
+    
+    -- Category for palette
+    category VARCHAR(50) NOT NULL, -- RIP, GitHub, AI, Tools, Flow, Custom
+    subcategory VARCHAR(50),
+    
+    -- Schema
+    input_schema JSONB NOT NULL,
+    output_schema JSONB NOT NULL,
+    config_schema JSONB NOT NULL DEFAULT '{}',
+    
+    -- Source (where this block comes from)
+    source_type VARCHAR(50) NOT NULL, -- builtin, mcp_tool, composite, plugin
+    source_id UUID, -- references registered_sources.id or mcp_tools.id
+    source_tool_name VARCHAR(255), -- if mcp_tool: the tool name within that MCP server
+    
+    -- Capabilities required
+    requires_capabilities JSONB DEFAULT '[]', -- ["NETWORK", "GRAPH_STORE", "LLM", "SUBPROCESS"]
+    
+    -- Permissions
+    requires_role VARCHAR(50) DEFAULT 'developer',
+    
+    -- Stats
+    usage_count INTEGER DEFAULT 0,
+    avg_duration_ms INTEGER,
+    avg_rating FLOAT,
+    
+    -- Status
+    is_active BOOLEAN DEFAULT true,
+    is_deprecated BOOLEAN DEFAULT false,
+    deprecated_message TEXT,
+    
+    -- Documentation
+    documentation_url TEXT,
+    example_config JSONB,
+    example_output JSONB,
+    
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
+);
+
+-- ============================================
+-- COMPOSITE BLOCKS (user-created)
+-- ============================================
+
+CREATE TABLE composite_blocks (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    owner_user_id UUID NOT NULL REFERENCES users(id),
+    project_id UUID REFERENCES projects(id),
+    
+    name VARCHAR(255) NOT NULL,
+    description TEXT,
+    
+    -- The internal workflow (blocks + wires that make up this composite)
+    internal_workflow_blocks JSONB NOT NULL,
+    internal_workflow_wires JSONB NOT NULL,
+    
+    -- Which ports are exposed externally
+    exposed_inputs JSONB NOT NULL DEFAULT '[]',
+    exposed_outputs JSONB NOT NULL DEFAULT '[]',
+    
+    -- This creates a block_type_registry entry automatically
+    block_type_registry_id UUID REFERENCES block_type_registry(id),
+    
+    visibility VARCHAR(20) DEFAULT 'private',
+    usage_count INTEGER DEFAULT 0,
+    
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
+);
+
+-- ============================================
+-- NOTIFICATIONS
+-- ============================================
+
+CREATE TABLE notification_subscriptions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES users(id),
+    
+    event_type VARCHAR(50) NOT NULL, -- workflow_completed, workflow_failed, approval_required, conflict_detected
+    
+    channel VARCHAR(20) NOT NULL, -- push, in_app, email
+    is_enabled BOOLEAN DEFAULT true,
+    
+    -- Push-specific
+    device_token VARCHAR(512),
+    device_platform VARCHAR(20), -- ios, android
+    
+    -- Filters (only notify for specific workflows/repos)
+    filter_workflow_id UUID,
+    filter_project_id UUID,
+    
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW(),
+    
+    UNIQUE(user_id, event_type, channel)
+);
+
+CREATE TABLE notifications (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES users(id),
+    
+    type VARCHAR(50) NOT NULL,
+    title VARCHAR(500) NOT NULL,
+    body TEXT,
+    
+    -- Link to relevant entity
+    workflow_id UUID,
+    run_id UUID,
+    step_id VARCHAR(100),
+    
+    -- Actions
+    actions JSONB DEFAULT '[]',
+    -- [{"label": "Approve", "action": "approve", "url": "/runs/xxx/approve"}, ...]
+    
+    -- Status
+    is_read BOOLEAN DEFAULT false,
+    read_at TIMESTAMP,
+    
+    -- Delivery
+    delivered_push BOOLEAN DEFAULT false,
+    delivered_in_app BOOLEAN DEFAULT false,
+    delivered_email BOOLEAN DEFAULT false,
+    
+    created_at TIMESTAMP DEFAULT NOW()
+);
+```
+
+### 1.2 Extensions to Existing Tables
+
+```sql
+-- ============================================
+-- REGISTERED SOURCES (extend for block palette)
+-- ============================================
+ALTER TABLE registered_sources 
+ADD COLUMN usable_as JSONB DEFAULT '["retrieval"]';
+-- ["retrieval"] = only for context engine
+-- ["retrieval", "tool_action"] = also appears in workflow block palette as tool block
+-- ["tool_action"] = only for workflow tool actions, not context
+
+ALTER TABLE registered_sources
+ADD COLUMN block_display JSONB;
+-- {
+--   "display_name": "GitHub Commits",
+--   "display_icon": "🐙",
+--   "display_color": "#2DA44E",
+--   "category": "GitHub",
+--   "description": "Fetch recent commits for specified files"
+-- }
+
+-- ============================================
+-- EXISTING SESSIONS (link to workflow runs)
+-- ============================================
+ALTER TABLE chat_sessions
+ADD COLUMN workflow_run_id UUID REFERENCES workflow_runs(id);
+-- When a chat session is part of a workflow execution, link them
+
+-- ============================================
+-- AUDIT LOGS (extend for workflow events)
+-- ============================================
+ALTER TABLE audit_logs
+ADD COLUMN workflow_id UUID,
+ADD COLUMN workflow_run_id UUID,
+ADD COLUMN workflow_step_id VARCHAR(100);
+
+-- ============================================
+-- FEEDBACK (extend for prompt templates)
+-- ============================================
+ALTER TABLE feedback
+ADD COLUMN prompt_template_id UUID REFERENCES prompt_templates(id),
+ADD COLUMN prompt_template_version VARCHAR(20);
+```
+
+---
+
+## Part 2: Core Engine Changes
+
+### 2.1 Block Base Class (New File)
+
+```python
+# gateway/gateway/core/blocks/base.py
+
+from abc import ABC, abstractmethod
+from dataclasses import dataclass, field
+from enum import Enum
+from typing import Any, Dict, List, Optional
+import uuid
+
+class BlockKind(str, Enum):
+    TRIGGER = "trigger"
+    RETRIEVAL = "retrieval"
+    TOOL = "tool"
+    LLM = "llm"
+    PROMPT = "prompt"
+    APPROVAL = "approval"
+    VERIFICATION = "verification"
+    DEPLOYMENT = "deployment"
+    NOTIFICATION = "notification"
+    MEMORY = "memory"
+    CUSTOM = "custom"
+
+class BlockStatus(str, Enum):
+    PENDING = "pending"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    SKIPPED = "skipped"
+    SUSPENDED = "suspended"  # For approval gates, input required
+
+@dataclass
+class BlockResult:
+    """What every block.run() returns."""
+    ok: bool
+    status: BlockStatus
+    output: Dict[str, Any] = field(default_factory=dict)
+    error: Optional[str] = None
+    error_type: Optional[str] = None  # timeout, connection, auth, validation, llm_error, tool_error
+    suspend_reason: Optional[str] = None  # "awaiting_approval", "awaiting_input", "awaiting_conflict_resolution"
+    events: List[Dict[str, Any]] = field(default_factory=list)
+    tokens_used: int = 0
+    cost_cents: int = 0
+    duration_ms: int = 0
+
+@dataclass
+class ExecutionContext:
+    """Context passed to every block.run() call."""
+    user_id: str
+    project_id: Optional[str]
+    workflow_run_id: str
+    step_id: str
+    session_id: Optional[str]  # Chat session if this is part of one
+    event_bus: "EventBus"  # For emitting events during execution
+    storage: Any  # Database access
+    api_key: str  # For authenticating downstream calls
+
+class Block(ABC):
+    """Every block in the system implements this interface."""
+    
+    id: str  # rip.search, github.commits, llm.analyze, etc.
+    kind: BlockKind
+    display_name: str
+    display_icon: str
+    display_color: str = "#3B82F6"
+    category: str = "Custom"
+    
+    input_schema: Dict[str, Any]
+    output_schema: Dict[str, Any]
+    config_schema: Dict[str, Any] = {}
+    
+    requires_capabilities: List[str] = []
+    requires_role: str = "developer"
+    
+    @abstractmethod
+    async def run(
+        self,
+        ctx: ExecutionContext,
+        inputs: Dict[str, Any],
+        config: Dict[str, Any]
+    ) -> BlockResult:
+        """
+        Execute this block.
+        
+        Args:
+            ctx: Execution context (user, project, event bus, etc.)
+            inputs: Resolved input values (from bindings)
+            config: Static configuration set at workflow design time
+        
+        Returns:
+            BlockResult with status and output
+        """
+        ...
+    
+    def describe(self) -> Dict[str, Any]:
+        """Return block manifest for UI/marketplace."""
+        return {
+            "id": self.id,
+            "kind": self.kind.value,
+            "display_name": self.display_name,
+            "display_icon": self.display_icon,
+            "display_color": self.display_color,
+            "category": self.category,
+            "input_schema": self.input_schema,
+            "output_schema": self.output_schema,
+            "config_schema": self.config_schema,
+            "requires_capabilities": self.requires_capabilities,
+            "requires_role": self.requires_role,
+        }
+    
+    def validate_inputs(self, inputs: Dict[str, Any]) -> List[str]:
+        """Validate inputs against input_schema. Returns list of errors."""
+        errors = []
+        # Validate required fields, types, etc. using input_schema
+        return errors
+    
+    def validate_config(self, config: Dict[str, Any]) -> List[str]:
+        """Validate config against config_schema. Returns list of errors."""
+        errors = []
+        return errors
+```
+
+### 2.2 Block Registry (New File)
+
+```python
+# gateway/gateway/core/blocks/registry.py
+
+from typing import Dict, List, Optional, Type
+from gateway.core.blocks.base import Block, BlockKind
+
+class BlockRegistry:
+    """
+    Central registry of all available block types.
+    Blocks register themselves at startup.
+    The registry is queried by the Workflow Engine and the UI palette.
+    """
+    
+    def __init__(self):
+        self._blocks: Dict[str, Block] = {}  # block_id -> Block instance
+        self._by_kind: Dict[BlockKind, List[str]] = {}  # kind -> [block_ids]
+        self._by_category: Dict[str, List[str]] = {}  # category -> [block_ids]
+    
+    def register(self, block: Block) -> None:
+        """Register a block type."""
+        if block.id in self._blocks:
+            raise ValueError(f"Block {block.id} already registered")
+        
+        self._blocks[block.id] = block
+        
+        # Index by kind
+        if block.kind not in self._by_kind:
+            self._by_kind[block.kind] = []
+        self._by_kind[block.kind].append(block.id)
+        
+        # Index by category
+        if block.category not in self._by_category:
+            self._by_category[block.category] = []
+        self._by_category[block.category].append(block.id)
+        
+        # Also persist to block_type_registry table
+        self._sync_to_db(block)
+    
+    def get(self, block_id: str) -> Optional[Block]:
+        """Get a block by ID."""
+        return self._blocks.get(block_id)
+    
+    def list_all(self) -> List[Dict]:
+        """List all registered blocks (for UI palette)."""
+        return [block.describe() for block in self._blocks.values()]
+    
+    def list_by_kind(self, kind: BlockKind) -> List[Dict]:
+        """List blocks of a specific kind."""
+        block_ids = self._by_kind.get(kind, [])
+        return [self._blocks[bid].describe() for bid in block_ids]
+    
+    def list_by_category(self, category: str) -> List[Dict]:
+        """List blocks in a category."""
+        block_ids = self._by_category.get(category, [])
+        return [self._blocks[bid].describe() for bid in block_ids]
+    
+    def get_block_instance(self, block_id: str) -> Block:
+        """Get a block instance for execution."""
+        block = self._blocks.get(block_id)
+        if not block:
+            raise ValueError(f"Block {block_id} not found")
+        return block
+    
+    def _sync_to_db(self, block: Block):
+        """Ensure block exists in block_type_registry table."""
+        # Upsert into block_type_registry
+        pass
+
+# Global singleton
+block_registry = BlockRegistry()
+```
+
+### 2.3 Built-in Block Implementations (New Files)
+
+```python
+# gateway/gateway/core/blocks/builtins/rip_blocks.py
+
+from gateway.core.blocks.base import Block, BlockResult, ExecutionContext, BlockKind, BlockStatus
+from typing import Any, Dict
+
+class RIPSearchBlock(Block):
+    id = "rip.search"
+    kind = BlockKind.RETRIEVAL
+    display_name = "RIP Semantic Search"
+    display_icon = "🔍"
+    display_color = "#8B5CF6"
+    category = "RIP"
+    
+    input_schema = {
+        "type": "object",
+        "properties": {
+            "query": {"type": "string", "description": "What to search for"},
+            "repository": {"type": "string", "description": "Target repository/project ID"},
+            "max_results": {"type": "integer", "default": 10},
+        },
+        "required": ["query"]
+    }
+    
+    output_schema = {
+        "type": "object",
+        "properties": {
+            "files": {"type": "array", "items": {"type": "object"}},
+            "functions": {"type": "array", "items": {"type": "object"}},
+            "scores": {"type": "array", "items": {"type": "number"}},
+            "top_result": {"type": "object"},
+        }
+    }
+    
+    config_schema = {
+        "type": "object",
+        "properties": {
+            "search_type": {"type": "string", "enum": ["semantic", "hybrid", "keyword"], "default": "hybrid"},
+            "include_code": {"type": "boolean", "default": True},
+        }
+    }
+    
+    async def run(self, ctx: ExecutionContext, inputs: Dict, config: Dict) -> BlockResult:
+        # Calls existing RIP search API
+        # Uses the existing context pipeline's RIP source
+        from gateway.core.sources.builtin.rip import RIPSource
+        
+        source = RIPSource()
+        result = await source.search(
+            query=inputs["query"],
+            project_id=inputs.get("repository", ctx.project_id),
+            max_results=inputs.get("max_results", 10),
+            search_type=config.get("search_type", "hybrid"),
+        )
+        
+        return BlockResult(
+            ok=True,
+            status=BlockStatus.COMPLETED,
+            output={
+                "files": result.files,
+                "functions": result.functions,
+                "scores": result.scores,
+                "top_result": result.top_result,
+            }
+        )
+
+
+class RIPTraceBlock(Block):
+    id = "rip.trace"
+    kind = BlockKind.RETRIEVAL
+    display_name = "RIP Trace Dependencies"
+    display_icon = "📊"
+    display_color = "#8B5CF6"
+    category = "RIP"
+    
+    input_schema = {
+        "type": "object",
+        "properties": {
+            "symbol": {"type": "string", "description": "Function/class to trace"},
+            "repository": {"type": "string"},
+            "depth": {"type": "integer", "default": 3},
+            "direction": {"type": "string", "enum": ["both", "upstream", "downstream"], "default": "both"},
+        },
+        "required": ["symbol"]
+    }
+    
+    output_schema = {
+        "type": "object",
+        "properties": {
+            "callers": {"type": "array"},
+            "callees": {"type": "array"},
+            "dependency_graph": {"type": "object"},
+            "affected_files": {"type": "array"},
+        }
+    }
+    
+    async def run(self, ctx: ExecutionContext, inputs: Dict, config: Dict) -> BlockResult:
+        from gateway.core.sources.builtin.rip import RIPSource
+        
+        source = RIPSource()
+        result = await source.trace_dependencies(
+            symbol=inputs["symbol"],
+            project_id=inputs.get("repository", ctx.project_id),
+            depth=inputs.get("depth", 3),
+            direction=inputs.get("direction", "both"),
+        )
+        
+        return BlockResult(
+            ok=True,
+            status=BlockStatus.COMPLETED,
+            output={
+                "callers": result.callers,
+                "callees": result.callees,
+                "dependency_graph": result.graph,
+                "affected_files": result.affected_files,
+            }
+        )
+```
+
+```python
+# gateway/gateway/core/blocks/builtins/llm_blocks.py
+
+class LLMAnalyzeBlock(Block):
+    id = "llm.analyze"
+    kind = BlockKind.LLM
+    display_name = "AI Analysis"
+    display_icon = "🤖"
+    display_color = "#10B981"
+    category = "AI"
+    
+    input_schema = {
+        "type": "object",
+        "properties": {
+            "prompt": {"type": "string", "description": "Rendered prompt to send to LLM"},
+            "system_prompt": {"type": "string", "description": "System prompt"},
+            "context": {"type": "object", "description": "Additional context"},
+        },
+        "required": ["prompt"]
+    }
+    
+    config_schema = {
+        "type": "object",
+        "properties": {
+            "model_preference": {"type": "string", "description": "Preferred model ID"},
+            "temperature": {"type": "number", "minimum": 0, "maximum": 2, "default": 0.3},
+            "max_tokens": {"type": "integer", "default": 4096},
+            "stream": {"type": "boolean", "default": True},
+            "output_format": {"type": "string", "enum": ["markdown", "json", "text"], "default": "markdown"},
+        }
+    }
+    
+    output_schema = {
+        "type": "object",
+        "properties": {
+            "analysis": {"type": "string", "description": "LLM response"},
+            "tokens_input": {"type": "integer"},
+            "tokens_output": {"type": "integer"},
+            "model_used": {"type": "string"},
+            "cost_cents": {"type": "integer"},
+        }
+    }
+    
+    async def run(self, ctx: ExecutionContext, inputs: Dict, config: Dict) -> BlockResult:
+        from gateway.core.llm_pool.router import route_llm
+        
+        # Resolve which LLM to use
+        llm_config = await route_llm(
+            user_id=ctx.user_id,
+            preferred_model=config.get("model_preference"),
+        )
+        
+        # Call LLM (reuses existing core/llm/client.py)
+        from core.llm.client import LLMClient
+        
+        client = LLMClient(llm_config)
+        
+        # Emit streaming events to event bus
+        async for token in client.stream(
+            system_prompt=inputs.get("system_prompt", ""),
+            user_prompt=inputs["prompt"],
+            temperature=config.get("temperature", 0.3),
+            max_tokens=config.get("max_tokens", 4096),
+        ):
+            ctx.event_bus.emit({
+                "type": "llm_token",
+                "workflow_run_id": ctx.workflow_run_id,
+                "step_id": ctx.step_id,
+                "token": token,
+            })
+        
+        result = await client.get_result()
+        
+        return BlockResult(
+            ok=True,
+            status=BlockStatus.COMPLETED,
+            output={
+                "analysis": result.text,
+                "tokens_input": result.input_tokens,
+                "tokens_output": result.output_tokens,
+                "model_used": llm_config.model,
+                "cost_cents": result.cost_cents,
+            },
+            tokens_used=result.total_tokens,
+            cost_cents=result.cost_cents,
+        )
+```
+
+```python
+# gateway/gateway/core/blocks/builtins/approval_blocks.py
+
+class ApprovalGateBlock(Block):
+    id = "approval.gate"
+    kind = BlockKind.APPROVAL
+    display_name = "Approval Gate"
+    display_icon = "⏸️"
+    display_color = "#F59E0B"
+    category = "Flow"
+    
+    input_schema = {
+        "type": "object",
+        "properties": {
+            "context": {"type": "object", "description": "What to show the approver"},
+        }
+    }
+    
+    config_schema = {
+        "type": "object",
+        "properties": {
+            "condition_type": {"type": "string", "enum": ["always", "risk_score", "lines_changed", "protected_paths"]},
+            "risk_threshold": {"type": "integer"},
+            "lines_threshold": {"type": "integer"},
+            "protected_paths": {"type": "array", "items": {"type": "string"}},
+            "timeout_hours": {"type": "integer", "default": 24},
+            "on_timeout": {"type": "string", "enum": ["reject", "approve"], "default": "reject"},
+            "show_diff": {"type": "boolean", "default": True},
+            "show_risk": {"type": "boolean", "default": True},
+        }
+    }
+    
+    output_schema = {
+        "type": "object",
+        "properties": {
+            "approved": {"type": "boolean"},
+            "approved_by": {"type": "string"},
+            "comment": {"type": "string"},
+        }
+    }
+    
+    async def run(self, ctx: ExecutionContext, inputs: Dict, config: Dict) -> BlockResult:
+        # Check if approval is actually needed based on condition
+        needs_approval = self._evaluate_condition(config, inputs)
+        
+        if not needs_approval:
+            return BlockResult(
+                ok=True,
+                status=BlockStatus.COMPLETED,
+                output={"approved": True, "approved_by": "auto", "comment": "No approval required"}
+            )
+        
+        # Create approval request in database
+        approval_id = await self._create_approval_request(ctx, inputs, config)
+        
+        # Send notifications
+        await self._send_approval_notifications(ctx, approval_id, inputs)
+        
+        # SUSPEND the workflow - this is the key behavior
+        return BlockResult(
+            ok=True,
+            status=BlockStatus.SUSPENDED,
+            output={"approval_id": approval_id},
+            suspend_reason="awaiting_approval"
+        )
+    
+    def _evaluate_condition(self, config, inputs) -> bool:
+        condition_type = config.get("condition_type", "always")
+        if condition_type == "always":
+            return True
+        # ... other conditions
+    
+    async def _create_approval_request(self, ctx, inputs, config) -> str:
+        # Insert into workflow_run_steps, set approval_required=true
+        pass
+    
+    async def _send_approval_notifications(self, ctx, approval_id, inputs):
+        # Emit event on event bus -> Notification Engine picks it up
+        ctx.event_bus.emit({
+            "type": "approval_required",
+            "workflow_run_id": ctx.workflow_run_id,
+            "step_id": ctx.step_id,
+            "approval_id": approval_id,
+        })
+```
+
+### 2.4 Workflow Engine (New File)
+
+```python
+# gateway/gateway/core/workflow/engine.py
+
+from dataclasses import dataclass, field
+from enum import Enum
+from typing import Any, Dict, List, Optional
+import asyncio
+import uuid
+
+class WorkflowRunStatus(str, Enum):
+    PENDING = "pending"
+    RUNNING = "running"
+    AWAITING_APPROVAL = "awaiting_approval"
+    AWAITING_INPUT = "awaiting_input"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    REJECTED = "rejected"
+    CANCELLED = "cancelled"
+
+@dataclass
+class WorkflowRun:
+    id: str
+    workflow_id: str
+    status: WorkflowRunStatus
+    current_step_id: Optional[str]
+    trigger_input: Dict
+    resolved_params: Dict
+    steps: Dict[str, "StepState"]  # step_id -> StepState
+    event_bus: Any
+    
+    def get_step_output(self, step_id: str, field_path: Optional[str] = None) -> Any:
+        """Get a step's output, optionally drilling into a field path."""
+        step = self.steps.get(step_id)
+        if not step or not step.output:
+            return None
+        if field_path:
+            return self._drill(step.output, field_path)
+        return step.output
+    
+    def _drill(self, obj: Any, path: str) -> Any:
+        """Drill into an object using dot notation: 'top_result.files'"""
+        parts = path.split(".")
+        current = obj
+        for part in parts:
+            if isinstance(current, dict):
+                current = current.get(part)
+            elif hasattr(current, part):
+                current = getattr(current, part)
+            else:
+                return None
+        return current
+
+
+class WorkflowEngine:
+    """
+    Executes workflow runs.
+    
+    Responsibilities:
+    - Load workflow definition (blocks + wires + triggers)
+    - Resolve DAG (topological sort of blocks based on wire connections)
+    - Execute each block in order (parallel where possible)
+    - Resolve input bindings before each block
+    - Handle suspension (approval gates, input required)
+    - Handle errors and retries
+    - Emit events at every step
+    """
+    
+    def __init__(self, block_registry, event_bus, storage):
+        self.block_registry = block_registry
+        self.event_bus = event_bus
+        self.storage = storage
+    
+    async def start_run(
+        self,
+        workflow_id: str,
+        trigger_input: Dict[str, Any],
+        user_id: str,
+        project_id: Optional[str] = None,
+    ) -> WorkflowRun:
+        """Start a new workflow run."""
+        
+        # 1. Load workflow definition
+        workflow_def = await self.storage.get_workflow_definition(workflow_id)
+        if not workflow_def:
+            raise ValueError(f"Workflow {workflow_id} not found")
+        
+        # 2. Create run record
+        run = WorkflowRun(
+            id=str(uuid.uuid4()),
+            workflow_id=workflow_id,
+            status=WorkflowRunStatus.PENDING,
+            current_step_id=None,
+            trigger_input=trigger_input,
+            resolved_params={},
+            steps={},
+            event_bus=self.event_bus,
+        )
+        
+        # 3. Snapshot the workflow definition (immutable for this run)
+        workflow_snapshot = {
+            "blocks": workflow_def["blocks"],
+            "wires": workflow_def["wires"],
+            "triggers": workflow_def["triggers"],
+            "approval_gates": workflow_def.get("approval_gates", []),
+        }
+        await self.storage.create_workflow_run(run, workflow_snapshot)
+        
+        # 4. Emit started event
+        self.event_bus.emit({
+            "type": "workflow_started",
+            "workflow_run_id": run.id,
+            "workflow_id": workflow_id,
+            "user_id": user_id,
+        })
+        
+        # 5. Resolve trigger parameters
+        resolved_params = await self._resolve_trigger_params(
+            workflow_def, trigger_input, user_id, project_id
+        )
+        run.resolved_params = resolved_params
+        
+        # 6. Build execution DAG
+        execution_order = self._build_execution_dag(workflow_def["blocks"], workflow_def["wires"])
+        
+        # 7. Initialize step states
+        for step in execution_order:
+            run.steps[step["step_id"]] = StepState(
+                step_id=step["step_id"],
+                block_type_id=step["block_type_id"],
+                status="pending",
+                config=step.get("config", {}),
+                input_bindings=step.get("input_bindings", []),
+            )
+        
+        # 8. Start execution (async, non-blocking)
+        asyncio.create_task(self._execute_run(run, execution_order, user_id, project_id))
+        
+        return run
+    
+    async def _execute_run(
+        self,
+        run: WorkflowRun,
+        execution_order: List[Dict],
+        user_id: str,
+        project_id: Optional[str],
+    ):
+        """Execute all steps in order."""
+        run.status = WorkflowRunStatus.RUNNING
+        await self.storage.update_workflow_run(run)
+        
+        try:
+            # Group steps into parallel batches
+            batches = self._group_parallel_batches(execution_order)
+            
+            for batch in batches:
+                # Execute all steps in this batch in parallel
+                tasks = []
+                for step_def in batch:
+                    task = self._execute_step(run, step_def, user_id, project_id)
+                    tasks.append(task)
+                
+                results = await asyncio.gather(*tasks, return_exceptions=True)
+                
+                # Check results
+                for i, result in enumerate(results):
+                    if isinstance(result, Exception):
+                        # Handle step failure
+                        await self._handle_step_failure(run, batch[i], result)
+                        return
+                    
+                    if result.status == "suspended":
+                        # Approval gate or input required - pause entire workflow
+                        run.status = WorkflowRunStatus.AWAITING_APPROVAL
+                        await self.storage.update_workflow_run(run)
+                        return  # Wait for resume
+            
+            # All steps completed
+            run.status = WorkflowRunStatus.COMPLETED
+            await self.storage.update_workflow_run(run)
+            
+            self.event_bus.emit({
+                "type": "workflow_completed",
+                "workflow_run_id": run.id,
+            })
+            
+        except Exception as e:
+            run.status = WorkflowRunStatus.FAILED
+            run.error_message = str(e)
+            await self.storage.update_workflow_run(run)
+            
+            self.event_bus.emit({
+                "type": "workflow_failed",
+                "workflow_run_id": run.id,
+                "error": str(e),
+            })
+    
+    async def _execute_step(
+        self,
+        run: WorkflowRun,
+        step_def: Dict,
+        user_id: str,
+        project_id: Optional[str],
+    ) -> BlockResult:
+        """Execute a single step."""
+        step_id = step_def["step_id"]
+        step_state = run.steps[step_id]
+        
+        # 1. Update status
+        step_state.status = "running"
+        run.current_step_id = step_id
+        await self.storage.update_workflow_run_step(run.id, step_state)
+        
+        # 2. Emit event
+        self.event_bus.emit({
+            "type": "step_started",
+            "workflow_run_id": run.id,
+            "step_id": step_id,
+            "block_type_id": step_def["block_type_id"],
+        })
+        
+        # 3. Resolve inputs from bindings
+        resolved_inputs = self._resolve_input_bindings(
+            step_def.get("input_bindings", []),
+            run,
+            run.resolved_params,
+        )
+        
+        # 4. Get block instance
+        block = self.block_registry.get_block_instance(step_def["block_type_id"])
+        
+        # 5. Create execution context
+        ctx = ExecutionContext(
+            user_id=user_id,
+            project_id=project_id,
+            workflow_run_id=run.id,
+            step_id=step_id,
+            session_id=None,
+            event_bus=self.event_bus,
+            storage=self.storage,
+            api_key="...",  # From user context
+        )
+        
+        # 6. Execute with retry
+        max_retries = step_def.get("max_retries", 3)
+        for attempt in range(max_retries + 1):
+            try:
+                result = await asyncio.wait_for(
+                    block.run(ctx, resolved_inputs, step_def.get("config", {})),
+                    timeout=step_def.get("timeout_ms", 300000) / 1000,
+                )
+                break
+            except asyncio.TimeoutError:
+                if attempt == max_retries:
+                    result = BlockResult(
+                        ok=False,
+                        status=BlockStatus.FAILED,
+                        error="Step timed out",
+                        error_type="timeout",
+                    )
+                else:
+                    await asyncio.sleep(step_def.get("retry_delay_ms", 1000) / 1000)
+            except Exception as e:
+                if attempt == max_retries:
+                    result = BlockResult(
+                        ok=False,
+                        status=BlockStatus.FAILED,
+                        error=str(e),
+                        error_type="execution_error",
+                    )
+        
+        # 7. Update step state
+        step_state.status = result.status.value
+        step_state.output = result.output
+        step_state.error = result.error
+        step_state.tokens_used = result.tokens_used
+        step_state.cost_cents = result.cost_cents
+        await self.storage.update_workflow_run_step(run.id, step_state)
+        
+        # 8. Emit event
+        self.event_bus.emit({
+            "type": "step_completed" if result.ok else "step_failed",
+            "workflow_run_id": run.id,
+            "step_id": step_id,
+            "result": result,
+        })
+        
+        return result
+    
+    def _resolve_input_bindings(
+        self,
+        bindings: List[Dict],
+        run: WorkflowRun,
+        trigger_params: Dict,
+    ) -> Dict[str, Any]:
+        """
+        Resolve input bindings to actual values.
+        
+        Binding sources:
+        - "trigger_query": value extracted from the user's query
+        - "step_output": value from a previous step's output
+        - "fixed": literal value set at design time
+        - "trigger_param": named parameter from trigger configuration
+        """
+        resolved = {}
+        
+        for binding in bindings:
+            field = binding["input_field"]
+            source = binding["source"]
+            
+            if source == "trigger_query":
+                # The full query text
+                resolved[field] = trigger_params.get("query", "")
+                
+            elif source == "trigger_param":
+                # Named parameter from trigger config
+                param_name = binding.get("param_name", field)
+                resolved[field] = trigger_params.get(param_name)
+                
+            elif source == "step_output":
+                # Output from a previous step
+                source_step = binding["source_step_id"]
+                source_field = binding.get("source_field")
+                value = run.get_step_output(source_step, source_field)
+                resolved[field] = value
+                
+            elif source == "fixed":
+                # Literal value
+                resolved[field] = binding.get("fixed_value")
+        
+        return resolved
+    
+    def _build_execution_dag(
+        self,
+        blocks: List[Dict],
+        wires: List[Dict],
+    ) -> List[Dict]:
+        """
+        Build a topologically sorted execution order from blocks and wires.
+        
+        Wires define dependencies:
+        - A wire from block A to block B means B depends on A
+        - Blocks with no incoming wires are root nodes (depend only on trigger)
+        - Blocks with multiple incoming wires depend on all sources
+        """
+        # Build adjacency list
+        dependencies = {}  # block_id -> [block_ids it depends on]
+        for block in blocks:
+            dependencies[block["step_id"]] = []
+        
+        for wire in wires:
+            target = wire["target_block_id"]
+            source = wire["source_block_id"]
+            # Find step_ids
+            target_step = next(b["step_id"] for b in blocks if b["id"] == target)
+            source_step = next(b["step_id"] for b in blocks if b["id"] == source)
+            if source_step not in dependencies[target_step]:
+                dependencies[target_step].append(source_step)
+        
+        # Topological sort (Kahn's algorithm)
+        in_degree = {step: len(deps) for step, deps in dependencies.items()}
+        queue = [step for step, deg in in_degree.items() if deg == 0]
+        sorted_steps = []
+        
+        while queue:
+            step = queue.pop(0)
+            sorted_steps.append(step)
+            # Reduce in-degree of dependents
+            for dependent, deps in dependencies.items():
+                if step in deps:
+                    in_degree[dependent] -= 1
+                    if in_degree[dependent] == 0:
+                        queue.append(dependent)
+        
+        # Map back to full block definitions
+        block_map = {b["step_id"]: b for b in blocks}
+        return [block_map[step_id] for step_id in sorted_steps]
+    
+    def _group_parallel_batches(self, execution_order: List[Dict]) -> List[List[Dict]]:
+        """
+        Group steps into parallel batches.
+        Steps that don't depend on each other can run in parallel.
+        """
+        # For now, simple implementation: each step is its own batch
+        # Future: detect independent steps and group them
+        return [[step] for step in execution_order]
+    
+    async def resume_run(
+        self,
+        run_id: str,
+        approval_decision: bool,
+        approved_by: str,
+        comment: Optional[str] = None,
+    ) -> WorkflowRun:
+        """Resume a suspended workflow run."""
+        run = await self.storage.get_workflow_run(run_id)
+        
+        if run.status not in [WorkflowRunStatus.AWAITING_APPROVAL, WorkflowRunStatus.AWAITING_INPUT]:
+            raise ValueError(f"Run {run_id} is not awaiting approval/input")
+        
+        # Find the suspended step
+        suspended_step = None
+        for step_id, step_state in run.steps.items():
+            if step_state.status == "suspended":
+                suspended_step = step_state
+                break
+        
+        if suspended_step:
+            suspended_step.output = {
+                "approved": approval_decision,
+                "approved_by": approved_by,
+                "comment": comment or "",
+            }
+            suspended_step.status = "completed"
+            await self.storage.update_workflow_run_step(run.id, suspended_step)
+        
+        # Resume execution from the next step
+        # ... (continue from where we left off)
+        
+        return run
+```
+
+### 2.5 Prompt Engine (New File)
+
+```python
+# gateway/gateway/core/prompts/engine.py
+
+from jinja2 import Environment, BaseLoader, TemplateSyntaxError, UndefinedError
+from typing import Any, Dict, Optional
+import json
+
+class PromptEngine:
+    """
+    Renders prompt templates with variable substitution.
+    
+    Uses Jinja2 for template rendering.
+    Supports:
+    - {{variable}} simple substitution
+    - {{step_1.output.top_result}} drill-down
+    - {% if condition %}...{% endif %} conditionals
+    - {% for item in list %}...{% endfor %} loops
+    - {{ value | filter_name }} filters
+    """
+    
+    def __init__(self):
+        self.env = Environment(
+            loader=BaseLoader(),
+            undefined=lambda: None,  # Return None for undefined vars instead of raising
+        )
+        self._register_filters()
+    
+    def render(
+        self,
+        template: str,
+        context: Dict[str, Any],
+        strict: bool = False,
+    ) -> str:
+        """
+        Render a template with the given context.
+        
+        Args:
+            template: Jinja2 template string
+            context: Variables available in the template
+            strict: If True, raise on undefined variables
+        
+        Returns:
+            Rendered string
+        """
+        if strict:
+            self.env.undefined = UndefinedError
+        
+        try:
+            jinja_template = self.env.from_string(template)
+            return jinja_template.render(**context)
+        except TemplateSyntaxError as e:
+            raise ValueError(f"Template syntax error: {e}")
+        except UndefinedError as e:
+            raise ValueError(f"Undefined variable in template: {e}")
+    
+    def render_prompt_template(
+        self,
+        template_record: Dict,
+        step_outputs: Dict[str, Any],
+        trigger_params: Dict[str, Any],
+        workflow_context: Dict[str, Any],
+    ) -> Dict[str, str]:
+        """
+        Render both system and user prompts from a template record.
+        
+        Returns:
+            {"system_prompt": "...", "user_prompt": "..."}
+        """
+        # Build full context
+        context = {
+            **trigger_params,
+            **workflow_context,
+        }
+        
+        # Add step outputs as step_1, step_2, etc.
+        for step_id, output in step_outputs.items():
+            context[step_id] = output
+        
+        system_prompt = self.render(template_record.get("system_prompt", ""), context)
+        user_prompt = self.render(template_record.get("user_prompt_template", ""), context)
+        
+        return {
+            "system_prompt": system_prompt,
+            "user_prompt": user_prompt,
+        }
+    
+    def extract_variables(self, template: str) -> List[str]:
+        """Extract all variable names from a template."""
+        from jinja2 import meta
+        ast = self.env.parse(template)
+        return list(meta.find_undeclared_variables(ast))
+    
+    def _register_filters(self):
+        """Register custom Jinja2 filters."""
+        self.env.filters['json'] = json.dumps
+        self.env.filters['code_block'] = lambda s, lang="": f"```{lang}\n{s}\n```"
+        self.env.filters['truncate_lines'] = lambda s, n: "\n".join(s.split("\n")[:n])
+        self.env.filters['file_list'] = lambda files: "\n".join(f"- {f}" for f in files)
+```
+
+### 2.6 Event Bus (New File)
+
+```python
+# gateway/gateway/core/events/bus.py
+
+from typing import Any, Callable, Dict, List
+import asyncio
+from datetime import datetime
+import uuid
+
+class EventBus:
+    """
+    Lightweight pub/sub event bus.
+    
+    Subscribers register for event types.
+    When an event is emitted, all matching subscribers are called.
+    
+    Also persists events to the database for replay/audit.
+    """
+    
+    def __init__(self, storage):
+        self.subscribers: Dict[str, List[Callable]] = {}  # event_type -> [callbacks]
+        self.storage = storage
+    
+    def subscribe(self, event_type: str, callback: Callable) -> None:
+        """Register a callback for an event type."""
+        if event_type not in self.subscribers:
+            self.subscribers[event_type] = []
+        self.subscribers[event_type].append(callback)
+    
+    def emit(self, event: Dict[str, Any]) -> None:
+        """Emit an event to all subscribers."""
+        event.setdefault("id", str(uuid.uuid4()))
+        event.setdefault("ts", datetime.utcnow().isoformat())
+        
+        event_type = event.get("type", "unknown")
+        
+        # Notify subscribers (fire and forget)
+        for callback in self.subscribers.get(event_type, []):
+            try:
+                callback(event)
+            except Exception as e:
+                # Log but don't crash
+                print(f"Event subscriber error for {event_type}: {e}")
+        
+        # Notify wildcard subscribers
+        for callback in self.subscribers.get("*", []):
+            try:
+                callback(event)
+            except Exception:
+                pass
+        
+        # Persist to database (async, non-blocking)
+        asyncio.create_task(self._persist_event(event))
+    
+    async def _persist_event(self, event: Dict[str, Any]) -> None:
+        """Persist event to database for audit/replay."""
+        await self.storage.insert_audit_event(event)
+```
+
+### 2.7 Input Binding Resolver (New File)
+
+```python
+# gateway/gateway/core/workflow/input_resolver.py
+
+from typing import Any, Dict, List, Optional
+import re
+
+class InputResolver:
+    """
+    Resolves input bindings to actual values at runtime.
+    
+    Handles:
+    - trigger_query: full text query from user
+    - trigger_param: named parameter from trigger configuration
+    - step_output: value from a completed step's output (with JSON path)
+    - fixed: literal value set at design time
+    - composite: combines multiple sources
+    """
+    
+    def resolve(
+        self,
+        bindings: List[Dict],
+        trigger_params: Dict[str, Any],
+        step_outputs: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """Resolve all input bindings for a block."""
+        resolved = {}
+        
+        for binding in bindings:
+            field = binding["input_field"]
+            source = binding["source"]
+            
+            value = self._resolve_single(binding, trigger_params, step_outputs)
+            resolved[field] = value
+        
+        return resolved
+    
+    def _resolve_single(
+        self,
+        binding: Dict,
+        trigger_params: Dict,
+        step_outputs: Dict,
+    ) -> Any:
+        source = binding["source"]
+        
+        if source == "trigger_query":
+            return trigger_params.get("query", "")
+        
+        elif source == "trigger_param":
+            param_name = binding.get("param_name") or binding["input_field"]
+            value = trigger_params.get(param_name)
+            if value is None and binding.get("default_value"):
+                value = binding["default_value"]
+            return value
+        
+        elif source == "step_output":
+            source_step = binding["source_step_id"]
+            source_field = binding.get("source_field", "")
+            
+            step_output = step_outputs.get(source_step, {})
+            
+            if not source_field or source_field == "*":
+                return step_output
+            
+            # JSON path drilling: "top_result.files[0].path"
+            return self._drill_json_path(step_output, source_field)
+        
+        elif source == "fixed":
+            return binding.get("fixed_value")
+        
+        elif source == "composite":
+            # Combine multiple sub-sources
+            parts = {}
+            for sub_binding in binding.get("parts", []):
+                parts[sub_binding["name"]] = self._resolve_single(
+                    sub_binding, trigger_params, step_outputs
+                )
+            return parts
+        
+        return None
+    
+    def _drill_json_path(self, obj: Any, path: str) -> Any:
+        """
+        Drill into an object using dot/bracket notation.
+        Examples:
+        - "top_result" → obj["top_result"]
+        - "files[0]" → obj["files"][0]
+        - "top_result.files[0].path" → obj["top_result"]["files"][0]["path"]
+        """
+        if not path:
+            return obj
+        
+        # Tokenize: split on dots and brackets
+        tokens = re.findall(r'\w+|\[\d+\]', path)
+        
+        current = obj
+        for token in tokens:
+            if current is None:
+                return None
+            
+            if token.startswith('['):
+                # Array index
+                index = int(token[1:-1])
+                if isinstance(current, list) and index < len(current):
+                    current = current[index]
+                else:
+                    return None
+            else:
+                # Object key
+                if isinstance(current, dict):
+                    current = current.get(token)
+                elif hasattr(current, token):
+                    current = getattr(current, token)
+                else:
+                    return None
+        
+        return current
+```
+
+---
+
+## Part 3: API Endpoint Changes
+
+### 3.1 Workflow CRUD API
+
+```python
+# gateway/gateway/server/routers/workflows.py
+
+from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel, Field
+from typing import Any, Dict, List, Optional
+import uuid
+
+router = APIRouter(prefix="/gateway/api/workflows", tags=["workflows"])
+
+# ============================================
+# REQUEST/RESPONSE MODELS
+# ============================================
+
+class Position(BaseModel):
+    x: float = 0
+    y: float = 0
+
+class InputBinding(BaseModel):
+    input_field: str
+    source: str  # trigger_query, step_output, fixed, trigger_param, composite
+    source_step_id: Optional[str] = None
+    source_field: Optional[str] = None
+    fixed_value: Optional[Any] = None
+    param_name: Optional[str] = None
+    transform: Optional[str] = None  # json_path, template, custom_expression
+    default_value: Optional[Any] = None
+
+class BlockConfig(BaseModel):
+    block_type_id: str
+    step_id: str
+    position: Position = Position()
+    config: Dict[str, Any] = {}
+    input_bindings: List[InputBinding] = []
+    display_name: Optional[str] = None
+    display_color: Optional[str] = None
+    max_retries: int = 3
+    retry_delay_ms: int = 1000
+    timeout_ms: int = 300000
+
+class WireConfig(BaseModel):
+    source_block_id: str
+    source_port: str = "output"
+    target_block_id: str
+    target_port: str
+    mapping: Dict[str, Any] = {"type": "direct"}
+    wire_color: str = "#3B82F6"
+    label: Optional[str] = None
+
+class WorkflowCanvasState(BaseModel):
+    zoom: float = 1.0
+    center_x: float = 500
+    center_y: float = 300
+
+class CreateWorkflowRequest(BaseModel):
+    name: str
+    description: Optional[str] = None
+    category: str = "custom"
+    project_id: Optional[str] = None
+    visibility: str = "private"
+    canvas_state: WorkflowCanvasState = WorkflowCanvasState()
+
+class UpdateWorkflowRequest(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    category: Optional[str] = None
+    visibility: Optional[str] = None
+    canvas_state: Optional[WorkflowCanvasState] = None
+
+class AddBlockRequest(BaseModel):
+    block_type_id: str
+    step_id: str
+    position: Position = Position()
+    config: Dict[str, Any] = {}
+    input_bindings: List[InputBinding] = []
+
+class UpdateBlockRequest(BaseModel):
+    position: Optional[Position] = None
+    config: Optional[Dict[str, Any]] = None
+    input_bindings: Optional[List[InputBinding]] = None
+    display_name: Optional[str] = None
+    display_color: Optional[str] = None
+    max_retries: Optional[int] = None
+    timeout_ms: Optional[int] = None
+
+class AddWireRequest(BaseModel):
+    source_block_id: str
+    source_port: str = "output"
+    target_block_id: str
+    target_port: str
+    mapping: Dict[str, Any] = {"type": "direct"}
+    wire_color: str = "#3B82F6"
+    label: Optional[str] = None
+
+class ReorderBlocksRequest(BaseModel):
+    block_ids: List[str]  # ordered list of block IDs in new order
+
+class WorkflowRunRequest(BaseModel):
+    query: str  # The natural language query
+    params: Optional[Dict[str, Any]] = None  # Additional structured params
+    repository: Optional[str] = None
+    priority: str = "medium"
+    llm_preference: Optional[str] = None
+
+class ApprovalRequest(BaseModel):
+    approved: bool
+    comment: Optional[str] = None
+
+# ============================================
+# ENDPOINTS
+# ============================================
+
+@router.post("")
+async def create_workflow(
+    request: CreateWorkflowRequest,
+    current_user = Depends(get_current_user),
+):
+    """Create a new empty workflow (canvas)."""
+    workflow_id = str(uuid.uuid4())
+    
+    await db.insert_workflow_definition(
+        id=workflow_id,
+        owner_user_id=current_user.id,
+        project_id=request.project_id,
+        name=request.name,
+        description=request.description,
+        category=request.category,
+        visibility=request.visibility,
+        canvas_state=request.canvas_state.dict(),
+    )
+    
+    # Create default trigger block
+    trigger_block_id = str(uuid.uuid4())
+    await db.insert_workflow_block(
+        id=trigger_block_id,
+        workflow_id=workflow_id,
+        step_id="trigger",
+        block_type_id="trigger.query",
+        position_x=250,
+        position_y=100,
+        config={},
+        input_bindings=[],
+    )
+    
+    return {"id": workflow_id, "trigger_block_id": trigger_block_id}
+
+
+@router.get("")
+async def list_workflows(
+    project_id: Optional[str] = None,
+    category: Optional[str] = None,
+    status: str = "published",
+    current_user = Depends(get_current_user),
+):
+    """List workflows for the current user/project."""
+    workflows = await db.list_workflow_definitions(
+        owner_user_id=current_user.id,
+        project_id=project_id,
+        category=category,
+        status=status,
+    )
+    return {"workflows": workflows}
+
+
+@router.get("/{workflow_id}")
+async def get_workflow(
+    workflow_id: str,
+    current_user = Depends(get_current_user),
+):
+    """Get full workflow definition including blocks, wires, triggers."""
+    workflow = await db.get_workflow_definition(workflow_id)
+    if not workflow or workflow["owner_user_id"] != current_user.id:
+        raise HTTPException(404, "Workflow not found")
+    
+    blocks = await db.list_workflow_blocks(workflow_id)
+    wires = await db.list_workflow_wires(workflow_id)
+    triggers = await db.get_workflow_triggers(workflow_id)
+    parameters = await db.list_workflow_parameters(workflow_id)
+    approval_gates = await db.list_workflow_approval_gates(workflow_id)
+    
+    return {
+        **workflow,
+        "blocks": blocks,
+        "wires": wires,
+        "triggers": triggers,
+        "parameters": parameters,
+        "approval_gates": approval_gates,
+    }
+
+
+@router.patch("/{workflow_id}")
+async def update_workflow(
+    workflow_id: str,
+    request: UpdateWorkflowRequest,
+    current_user = Depends(get_current_user),
+):
+    """Update workflow metadata and canvas state."""
+    await db.update_workflow_definition(workflow_id, request.dict(exclude_none=True))
+    return {"ok": True}
+
+
+@router.delete("/{workflow_id}")
+async def delete_workflow(
+    workflow_id: str,
+    current_user = Depends(get_current_user),
+):
+    """Delete a workflow and all its blocks/wires/runs."""
+    await db.delete_workflow_definition(workflow_id)
+    return {"ok": True}
+
+
+# ============================================
+# BLOCK CRUD (within a workflow)
+# ============================================
+
+@router.post("/{workflow_id}/blocks")
+async def add_block(
+    workflow_id: str,
+    request: AddBlockRequest,
+    current_user = Depends(get_current_user),
+):
+    """Add a block to the workflow canvas."""
+    block_id = str(uuid.uuid4())
+    
+    await db.insert_workflow_block(
+        id=block_id,
+        workflow_id=workflow_id,
+        step_id=request.step_id,
+        block_type_id=request.block_type_id,
+        position_x=request.position.x,
+        position_y=request.position.y,
+        config=request.config,
+        input_bindings=[b.dict() for b in request.input_bindings],
+    )
+    
+    return {"id": block_id, "step_id": request.step_id}
+
+
+@router.get("/{workflow_id}/blocks")
+async def list_blocks(
+    workflow_id: str,
+    current_user = Depends(get_current_user),
+):
+    """List all blocks in a workflow."""
+    blocks = await db.list_workflow_blocks(workflow_id)
+    return {"blocks": blocks}
+
+
+@router.get("/{workflow_id}/blocks/{step_id}")
+async def get_block(
+    workflow_id: str,
+    step_id: str,
+    current_user = Depends(get_current_user),
+):
+    """Get a single block's full configuration."""
+    block = await db.get_workflow_block(workflow_id, step_id)
+    if not block:
+        raise HTTPException(404, "Block not found")
+    return block
+
+
+@router.patch("/{workflow_id}/blocks/{step_id}")
+async def update_block(
+    workflow_id: str,
+    step_id: str,
+    request: UpdateBlockRequest,
+    current_user = Depends(get_current_user),
+):
+    """Update a block's configuration, position, or bindings."""
+    updates = request.dict(exclude_none=True)
+    if "input_bindings" in updates:
+        updates["input_bindings"] = [b.dict() for b in request.input_bindings]
+    
+    await db.update_workflow_block(workflow_id, step_id, updates)
+    return {"ok": True}
+
+
+@router.delete("/{workflow_id}/blocks/{step_id}")
+async def delete_block(
+    workflow_id: str,
+    step_id: str,
+    current_user = Depends(get_current_user),
+):
+    """Delete a block and all wires connected to it."""
+    await db.delete_workflow_block(workflow_id, step_id)
+    # Also delete connected wires
+    await db.delete_wires_for_block(workflow_id, step_id)
+    return {"ok": True}
+
+
+# ============================================
+# WIRE CRUD
+# ============================================
+
+@router.post("/{workflow_id}/wires")
+async def add_wire(
+    workflow_id: str,
+    request: AddWireRequest,
+    current_user = Depends(get_current_user),
+):
+    """Add a wire (connection) between two blocks."""
+    # Validate: no circular dependencies
+    has_cycle = await _check_circular_dependency(
+        workflow_id, request.source_block_id, request.target_block_id
+    )
+    if has_cycle:
+        raise HTTPException(400, "Connection would create a circular dependency")
+    
+    wire_id = str(uuid.uuid4())
+    await db.insert_workflow_wire(
+        id=wire_id,
+        workflow_id=workflow_id,
+        source_block_id=request.source_block_id,
+        source_port=request.source_port,
+        target_block_id=request.target_block_id,
+        target_port=request.target_port,
+        mapping=request.mapping,
+        wire_color=request.wire_color,
+        label=request.label,
+    )
+    
+    return {"id": wire_id}
+
+
+@router.get("/{workflow_id}/wires")
+async def list_wires(
+    workflow_id: str,
+    current_user = Depends(get_current_user),
+):
+    """List all wires in a workflow."""
+    wires = await db.list_workflow_wires(workflow_id)
+    return {"wires": wires}
+
+
+@router.delete("/{workflow_id}/wires/{wire_id}")
+async def delete_wire(
+    workflow_id: str,
+    wire_id: str,
+    current_user = Depends(get_current_user),
+):
+    """Delete a wire."""
+    await db.delete_workflow_wire(wire_id)
+    return {"ok": True}
+
+
+# ============================================
+# REORDER BLOCKS
+# ============================================
+
+@router.post("/{workflow_id}/blocks/reorder")
+async def reorder_blocks(
+    workflow_id: str,
+    request: ReorderBlocksRequest,
+    current_user = Depends(get_current_user),
+):
+    """Update execution order of blocks (for linear sequences)."""
+    for i, block_id in enumerate(request.block_ids):
+        await db.update_block_execution_order(workflow_id, block_id, i)
+    return {"ok": True}
+
+
+# ============================================
+# WORKFLOW RUN
+# ============================================
+
+@router.post("/{workflow_id}/run")
+async def run_workflow(
+    workflow_id: str,
+    request: WorkflowRunRequest,
+    current_user = Depends(get_current_user),
+):
+    """Start a workflow run with a natural language query."""
+    run = await workflow_engine.start_run(
+        workflow_id=workflow_id,
+        trigger_input={
+            "query": request.query,
+            **request.dict(exclude={"query"}),
+        },
+        user_id=current_user.id,
+        project_id=request.repository,
+    )
+    
+    return {
+        "run_id": run.id,
+        "status": run.status.value,
+        "ws_url": f"/ws/workflows/{run.id}",  # WebSocket for live events
+    }
+
+
+@router.get("/{workflow_id}/runs")
+async def list_workflow_runs(
+    workflow_id: str,
+    limit: int = 20,
+    status: Optional[str] = None,
+    current_user = Depends(get_current_user),
+):
+    """List past runs of a workflow."""
+    runs = await db.list_workflow_runs(
+        workflow_id=workflow_id,
+        limit=limit,
+        status=status,
+    )
+    return {"runs": runs}
+
+
+@router.get("/{workflow_id}/runs/{run_id}")
+async def get_workflow_run(
+    workflow_id: str,
+    run_id: str,
+    current_user = Depends(get_current_user),
+):
+    """Get a single workflow run with all step states."""
+    run = await db.get_workflow_run(run_id)
+    steps = await db.list_workflow_run_steps(run_id)
+    return {**run, "steps": steps}
+
+
+@router.post("/{workflow_id}/runs/{run_id}/approve")
+async def approve_workflow_step(
+    workflow_id: str,
+    run_id: str,
+    request: ApprovalRequest,
+    current_user = Depends(get_current_user),
+):
+    """Approve or reject a pending approval gate."""
+    run = await workflow_engine.resume_run(
+        run_id=run_id,
+        approval_decision=request.approved,
+        approved_by=current_user.id,
+        comment=request.comment,
+    )
+    return {"status": run.status.value}
+
+
+@router.post("/{workflow_id}/runs/{run_id}/cancel")
+async def cancel_workflow_run(
+    workflow_id: str,
+    run_id: str,
+    current_user = Depends(get_current_user),
+):
+    """Cancel a running workflow."""
+    await workflow_engine.cancel_run(run_id)
+    return {"ok": True}
+
+
+# ============================================
+# BLOCK PALETTE (available block types)
+# ============================================
+
+@router.get("/blocks/palette")
+async def get_block_palette(
+    category: Optional[str] = None,
+    kind: Optional[str] = None,
+    search: Optional[str] = None,
+    current_user = Depends(get_current_user),
+):
+    """Get available blocks for the palette (with usage stats)."""
+    blocks = block_registry.list_all()
+    
+    # Filter by category/kind/search
+    if category:
+        blocks = [b for b in blocks if b.get("category") == category]
+    if kind:
+        blocks = [b for b in blocks if b.get("kind") == kind]
+    if search:
+        search_lower = search.lower()
+        blocks = [
+            b for b in blocks
+            if search_lower in b.get("display_name", "").lower()
+            or search_lower in b.get("description", "").lower()
+        ]
+    
+    # Group by category for the UI
+    grouped = {}
+    for block in blocks:
+        cat = block.get("category", "Other")
+        if cat not in grouped:
+            grouped[cat] = []
+        grouped[cat].append(block)
+    
+    return {"categories": grouped, "total": len(blocks)}
+
+
+@router.get("/blocks/{block_type_id}")
+async def get_block_info(
+    block_type_id: str,
+    current_user = Depends(get_current_user),
+):
+    """Get detailed information about a block type."""
+    block = block_registry.get(block_type_id)
+    if not block:
+        raise HTTPException(404, "Block type not found")
+    return block.describe()
+```
+
+### 3.2 Prompt Template API
+
+```python
+# gateway/gateway/server/routers/prompts.py
+
+router = APIRouter(prefix="/gateway/api/prompts", tags=["prompts"])
+
+class CreatePromptRequest(BaseModel):
+    name: str
+    description: Optional[str] = None
+    category: Optional[str] = None
+    system_prompt: str = ""
+    user_prompt_template: str
+    variables: List[Dict] = []
+    default_llm_provider: Optional[str] = None
+    default_llm_model: Optional[str] = None
+    default_temperature: float = 0.3
+    default_max_tokens: int = 4096
+    output_format: str = "markdown"
+    output_schema: Optional[Dict] = None
+    visibility: str = "private"
+
+class RenderPromptRequest(BaseModel):
+    template_id: str
+    context: Dict[str, Any] = {}
+    step_outputs: Dict[str, Any] = {}
+    trigger_params: Dict[str, Any] = {}
+
+@router.post("")
+async def create_prompt_template(request: CreatePromptRequest, current_user = Depends(get_current_user)):
+    """Create a new prompt template."""
+    # Extract variables from template
+    variables = prompt_engine.extract_variables(request.user_prompt_template)
+    
+    template_id = str(uuid.uuid4())
+    await db.insert_prompt_template(
+        id=template_id,
+        owner_user_id=current_user.id,
+        **request.dict(),
+        variables=[{"name": v} for v in variables],
+    )
+    return {"id": template_id}
+
+@router.get("")
+async def list_prompt_templates(current_user = Depends(get_current_user)):
+    """List prompt templates."""
+    templates = await db.list_prompt_templates(owner_user_id=current_user.id)
+    return {"templates": templates}
+
+@router.get("/{template_id}")
+async def get_prompt_template(template_id: str, current_user = Depends(get_current_user)):
+    """Get a prompt template with all versions."""
+    template = await db.get_prompt_template(template_id)
+    versions = await db.list_prompt_template_versions(template_id)
+    return {**template, "versions": versions}
+
+@router.post("/render")
+async def render_prompt(request: RenderPromptRequest, current_user = Depends(get_current_user)):
+    """Render a prompt template with context."""
+    template = await db.get_prompt_template(request.template_id)
+    result = prompt_engine.render_prompt_template(
+        template,
+        request.step_outputs,
+        request.trigger_params,
+        request.context,
+    )
+    return result
+
+@router.post("/validate")
+async def validate_prompt_template(request: CreatePromptRequest, current_user = Depends(get_current_user)):
+    """Validate a prompt template without saving."""
+    try:
+        variables = prompt_engine.extract_variables(request.user_prompt_template)
+        # Try rendering with sample empty context
+        prompt_engine.render(request.user_prompt_template, {v: f"<{v}>" for v in variables})
+        return {"valid": True, "variables": variables}
+    except Exception as e:
+        return {"valid": False, "error": str(e)}
+```
+
+### 3.3 LLM Pool API
+
+```python
+# gateway/gateway/server/routers/llm_pool.py
+
+router = APIRouter(prefix="/gateway/api/llms", tags=["llm_pool"])
+
+@router.get("")
+async def list_llm_configs(current_user = Depends(get_current_user)):
+    """List configured LLMs with health status."""
+    configs = await llm_pool.list_configs(user_id=current_user.id)
+    return {"llms": configs}
+
+@router.get("/health")
+async def check_llm_health(current_user = Depends(get_current_user)):
+    """Check health of all configured LLMs."""
+    health = await llm_pool.check_all_health()
+    return {"health": health}
+
+@router.post("/{llm_id}/test")
+async def test_llm(llm_id: str, current_user = Depends(get_current_user)):
+    """Test an LLM configuration with a simple prompt."""
+    result = await llm_pool.test_connection(llm_id)
+    return {"ok": result.ok, "latency_ms": result.latency_ms, "error": result.error}
+```
+
+### 3.4 Notification API
+
+```python
+# gateway/gateway/server/routers/notifications.py
+
+router = APIRouter(prefix="/gateway/api/notifications", tags=["notifications"])
+
+class RegisterDeviceRequest(BaseModel):
+    device_token: str
+    platform: str  # ios, android
+
+@router.post("/devices")
+async def register_device(request: RegisterDeviceRequest, current_user = Depends(get_current_user)):
+    """Register a device for push notifications."""
+    await db.register_device_token(
+        user_id=current_user.id,
+        device_token=request.device_token,
+        platform=request.platform,
+    )
+    return {"ok": True}
+
+@router.get("")
+async def list_notifications(
+    limit: int = 50,
+    unread_only: bool = False,
+    current_user = Depends(get_current_user),
+):
+    """List notifications for the current user."""
+    notifications = await db.list_notifications(
+        user_id=current_user.id,
+        limit=limit,
+        unread_only=unread_only,
+    )
+    return {"notifications": notifications, "unread_count": len([n for n in notifications if not n["is_read"]])}
+
+@router.post("/{notification_id}/read")
+async def mark_read(notification_id: str, current_user = Depends(get_current_user)):
+    """Mark a notification as read."""
+    await db.mark_notification_read(notification_id)
+    return {"ok": True}
+```
+
+### 3.5 WebSocket for Live Run Events
+
+```python
+# gateway/gateway/server/websocket/workflow_ws.py
+
+@router.websocket("/ws/workflows/{run_id}")
+async def workflow_run_websocket(websocket: WebSocket, run_id: str):
+    """Stream live workflow execution events."""
+    await websocket.accept()
+    
+    # Subscribe to events for this run
+    event_queue = asyncio.Queue()
+    
+    async def event_handler(event):
+        if event.get("workflow_run_id") == run_id:
+            await event_queue.put(event)
+    
+    event_bus.subscribe("*", event_handler)
+    
+    try:
+        while True:
+            event = await event_queue.get()
+            await websocket.send_json(event)
+    except WebSocketDisconnect:
+        pass
+    finally:
+        event_bus.unsubscribe("*", event_handler)
+```
+
+---
+
+## Part 4: Changes to Existing Code (Minimal, Additive)
+
+### 4.1 Startup: Register Built-in Blocks
+
+```python
+# In gateway startup (where RIP server initializes)
+
+def register_builtin_blocks():
+    """Register all built-in blocks at startup."""
+    from gateway.core.blocks.builtins.rip_blocks import RIPSearchBlock, RIPTraceBlock, RIPArchitectureBlock, RIPImpactBlock, RIPExplainBlock, RIPMetricsBlock, RIPDeadCodeBlock
+    from gateway.core.blocks.builtins.llm_blocks import LLMAnalyzeBlock, LLMGenerateBlock
+    from gateway.core.blocks.builtins.approval_blocks import ApprovalGateBlock
+    from gateway.core.blocks.builtins.tool_blocks import GitHubCommitsBlock, GitHubCreatePRBlock, TerminalRunTestsBlock
+    from gateway.core.blocks.builtins.notification_blocks import PushNotificationBlock
+    from gateway.core.blocks.builtins.memory_blocks import MemorySearchBlock, MemorySaveBlock
+    from gateway.core.blocks.builtins.trigger_blocks import TriggerQueryBlock
+    
+    block_registry.register(TriggerQueryBlock())
+    block_registry.register(RIPSearchBlock())
+    block_registry.register(RIPTraceBlock())
+    block_registry.register(RIPArchitectureBlock())
+    block_registry.register(RIPImpactBlock())
+    block_registry.register(RIPExplainBlock())
+    block_registry.register(RIPMetricsBlock())
+    block_registry.register(RIPDeadCodeBlock())
+    block_registry.register(LLMAnalyzeBlock())
+    block_registry.register(LLMGenerateBlock())
+    block_registry.register(ApprovalGateBlock())
+    block_registry.register(GitHubCommitsBlock())
+    block_registry.register(GitHubCreatePRBlock())
+    block_registry.register(TerminalRunTestsBlock())
+    block_registry.register(PushNotificationBlock())
+    block_registry.register(MemorySearchBlock())
+    block_registry.register(MemorySaveBlock())
+    
+    # Also register blocks from registered MCP sources
+    register_mcp_tool_blocks()
+```
+
+### 4.2 MCP Sources → Block Registry Sync
+
+```python
+def register_mcp_tool_blocks():
+    """
+    For every registered MCP source with usable_as=['tool_action'],
+    create corresponding block entries in the registry.
+    """
+    sources = db.list_registered_sources()
+    
+    for source in sources:
+        if "tool_action" in source.get("usable_as", []):
+            # For each tool in the MCP server, create a block
+            tools = mcp_client.list_tools(source)
+            for tool in tools:
+                block = MCPToolBlock(
+                    source=source,
+                    tool_name=tool["name"],
+                    tool_description=tool.get("description", ""),
+                    input_schema=tool.get("inputSchema", {}),
+                )
+                block_registry.register(block)
+```
+
+### 4.3 Event Bus Subscribers
+
+```python
+def register_event_subscribers():
+    """Register system-level event subscribers."""
+    
+    # Audit Engine subscribes to everything
+    event_bus.subscribe("*", audit_engine.log_event)
+    
+    # Notification Engine subscribes to user-facing events
+    event_bus.subscribe("approval_required", notification_engine.send_approval_notification)
+    event_bus.subscribe("workflow_completed", notification_engine.send_completion_notification)
+    event_bus.subscribe("workflow_failed", notification_engine.send_failure_notification)
+    
+    # Session Engine watches for conflicts
+    event_bus.subscribe("step_started", session_engine.check_conflicts)
+    
+    # Memory Engine saves completed runs
+    event_bus.subscribe("workflow_completed", memory_engine.save_workflow_memory)
+    
+    # Usage Tracker
+    event_bus.subscribe("step_completed", usage_tracker.record_usage)
+```
+
+---
+
+## Summary: What Changes Where
+
+| Layer | Change | Impact |
+|---|---|---|
+| **Database** | 10+ new tables, 5 existing table extensions | Additive migrations only |
+| **Blocks** | New `gateway/core/blocks/` package with base class, registry, 15+ built-in blocks | New code, no existing code touched |
+| **Workflow Engine** | New `gateway/core/workflow/` package | New code |
+| **Prompt Engine** | New `gateway/core/prompts/` package | New code |
+| **Event Bus** | New `gateway/core/events/` package | New code, absorbs existing live-pipeline events |
+| **Input Resolver** | New `gateway/core/workflow/input_resolver.py` | New code |
+| **API** | New routers: workflows, prompts, llm_pool, notifications | Additive, no existing endpoints changed |
+| **WebSocket** | New WS endpoint for workflow run events | Additive |
+| **Startup** | Block registration, event subscriber registration | Additive initialization |
+| **Existing Gateway Pipeline** | Wrapped as `context.retrieve` block | **No changes** |
+| **Existing RIP** | None | **No changes** |
+| **Existing MCP Sources** | Extended with `usable_as` field, auto-register as blocks | Additive schema change, backward compatible |

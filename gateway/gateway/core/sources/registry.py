@@ -1,18 +1,18 @@
 """Source registry to manage available data sources."""
 
-from typing import Dict
 
 import structlog
 
 from gateway.config import settings
-from .base import BaseSource
-from .dynamic_mcp import DynamicMCPSource
-from .rip_client import RIPSource
-from .github import GitHubSource
-from .jira import JiraSource
-from .slack import SlackSource
 from gateway.storage import source_registry as source_store
 from gateway.storage.source_registry import SourceRecord
+
+from .base import BaseSource
+from .dynamic_mcp import DynamicMCPSource
+from .github import GitHubSource
+from .jira import JiraSource
+from .rip_client import RIPSource
+from .slack import SlackSource
 
 logger = structlog.get_logger(__name__)
 
@@ -21,9 +21,9 @@ class SourceRegistry:
     """Registry for all available data sources."""
 
     def __init__(self):
-        self._sources: Dict[str, BaseSource] = {}
-        self._health: Dict[str, bool] = {}
-        self._records: Dict[str, SourceRecord] = {}
+        self._sources: dict[str, BaseSource] = {}
+        self._health: dict[str, bool] = {}
+        self._records: dict[str, SourceRecord] = {}
         self._project_id: str | None = None
         self._user_id: str | None = None
         self._initialize_sources()
@@ -53,9 +53,9 @@ class SourceRegistry:
 
         self._project_id = project_id
         self._user_id = user_id
-        next_sources: Dict[str, BaseSource] = {}
-        next_health: Dict[str, bool] = {}
-        next_records: Dict[str, SourceRecord] = {}
+        next_sources: dict[str, BaseSource] = {}
+        next_health: dict[str, bool] = {}
+        next_records: dict[str, SourceRecord] = {}
         for record in records:
             source = self._source_from_record(record)
             next_sources[record.name] = source
@@ -77,7 +77,7 @@ class SourceRegistry:
         return DynamicMCPSource(record)
 
     @property
-    def sources(self) -> Dict[str, BaseSource]:
+    def sources(self) -> dict[str, BaseSource]:
         """Get all registered sources."""
         return dict(self._sources)
 
@@ -89,11 +89,11 @@ class SourceRegistry:
         """Get persistent metadata for a source by name."""
         return self._records.get(name)
 
-    def list_sources(self) -> Dict[str, BaseSource]:
+    def list_sources(self) -> dict[str, BaseSource]:
         """List all registered sources."""
         return dict(self._sources)
 
-    async def check_all_health(self) -> Dict[str, bool]:
+    async def check_all_health(self) -> dict[str, bool]:
         """Check health of all registered sources."""
         health_results = {}
         for name, source in self._sources.items():
@@ -142,7 +142,7 @@ class SourceRegistry:
         source = self._sources.get(name)
         if source is None or name == "rip":
             return False
-        setattr(source, "enabled", enabled)
+        source.enabled = enabled
         source.available = enabled
         self._health[name] = enabled
         if name in self._records:

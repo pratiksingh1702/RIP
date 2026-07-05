@@ -1,17 +1,17 @@
 """Sessions API router."""
 
-from fastapi import APIRouter, HTTPException
-from typing import List
 
-from gateway.core.memory.store import get_session_store
+from fastapi import APIRouter, HTTPException
+
 from gateway.core.memory.models import Session
+from gateway.core.memory.store import get_session_store
 
 router = APIRouter()
 store = get_session_store()
 
 
-@router.get("", response_model=List[Session])
-@router.get("/", response_model=List[Session])
+@router.get("", response_model=list[Session])
+@router.get("/", response_model=list[Session])
 async def list_sessions():
     """List all active sessions."""
     try:

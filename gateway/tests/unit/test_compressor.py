@@ -1,7 +1,6 @@
 """Unit tests for compressor."""
 
 import pytest
-
 from gateway.core.ranker.compressor import ContextCompressor
 from gateway.core.ranker.models import ScoredItem
 

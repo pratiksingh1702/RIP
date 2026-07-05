@@ -10,6 +10,7 @@ enum CommandType {
   indexRepository,
   projects,
   deadCode,
+  workflow,
   unknown,
 }
 
@@ -96,6 +97,8 @@ class CommandParser {
         return ParsedCommand(type: CommandType.projects, arguments: args, flags: flags);
       case 'dead-code':
         return ParsedCommand(type: CommandType.deadCode, arguments: args, flags: flags);
+      case 'workflow':
+        return ParsedCommand(type: CommandType.workflow, arguments: args, flags: flags);
       default:
         return ParsedCommand(type: CommandType.unknown);
     }
@@ -178,6 +181,7 @@ class CommandParser {
       },
       {'name': '/projects', 'description': 'List all projects'},
       {'name': '/dead-code', 'description': 'Find dead code'},
+      {'name': '/workflow', 'description': 'Attach and run a workflow from this chat message'},
     ];
   }
 }

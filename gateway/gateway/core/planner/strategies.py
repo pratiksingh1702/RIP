@@ -2,7 +2,6 @@
 
 from gateway.core.classifier.models import IntentType
 
-
 STRATEGY_TABLE = {
     IntentType.BUG_FIX: {
         "always_query": [

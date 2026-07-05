@@ -1,6 +1,5 @@
 """Unit tests for tokenizer."""
 
-import pytest
 from gateway.core.tokenizer.counter import TokenCounter, get_token_counter
 
 

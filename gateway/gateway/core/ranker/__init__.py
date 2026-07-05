@@ -1,11 +1,11 @@
 """Ranker module."""
 
-from .models import ScoredItem, CompressedContext
-from .engine import RankerEngine
-from .deduplicator import Deduplicator
 from .compressor import ContextCompressor
+from .deduplicator import Deduplicator
+from .engine import RankerEngine
+from .models import CompressedContext, ScoredItem
+from .scorers import AuthorityScorer, PatternScorer, RecencyScorer, SemanticScorer
 from .summarizer import Summarizer
-from .scorers import SemanticScorer, RecencyScorer, PatternScorer, AuthorityScorer
 
 __all__ = [
     "ScoredItem",

@@ -1,6 +1,5 @@
 """Conflict detector for overlapping sessions."""
 
-from typing import List
 from uuid import UUID
 
 from .models import Conflict, Session
@@ -16,8 +15,8 @@ class ConflictDetector:
     async def detect(
         self,
         current_session_id: UUID,
-        current_files: List[str]
-    ) -> List[Conflict]:
+        current_files: list[str]
+    ) -> list[Conflict]:
         """Detect conflicts with other active sessions."""
         active_sessions = await self.store.get_active_sessions(
             exclude_session_id=current_session_id
@@ -46,7 +45,7 @@ class ConflictDetector:
 
     def _assess_conflict_risk(
         self,
-        overlapping_files: List[str],
+        overlapping_files: list[str],
         other_session: Session
     ) -> str:
         """Assess the risk level of a conflict."""

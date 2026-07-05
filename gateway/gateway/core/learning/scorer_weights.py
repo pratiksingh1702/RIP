@@ -1,8 +1,7 @@
 """Scorer weight adjustment from feedback."""
 
+
 import structlog
-from typing import Dict, Optional
-from gateway.config import settings
 
 logger = structlog.get_logger(__name__)
 
@@ -46,7 +45,7 @@ class ScorerWeights:
         self._normalize()
         logger.info("Adjusted scorer weights from feedback", weights=self._weights)
 
-    def get_weights(self) -> Dict[str, float]:
+    def get_weights(self) -> dict[str, float]:
         """Get current scorer weights."""
         return self._weights.copy()
 
@@ -57,7 +56,7 @@ class ScorerWeights:
         self._weights = {key: value / total for key, value in self._weights.items()}
 
 
-_scorer_weights: Optional[ScorerWeights] = None
+_scorer_weights: ScorerWeights | None = None
 
 
 def get_scorer_weights() -> ScorerWeights:

@@ -1,6 +1,8 @@
 import asyncio
-from gateway.storage.database import ensure_storage_schema
+
 from gateway.core.oauth import ensure_oauth_providers
+from gateway.storage.database import ensure_storage_schema
+
 
 async def main():
     await ensure_storage_schema()

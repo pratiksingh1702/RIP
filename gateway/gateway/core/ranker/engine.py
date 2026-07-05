@@ -1,11 +1,11 @@
 """Main ranker engine."""
 
-from datetime import datetime
 import re
-from typing import List
+from datetime import datetime
 
 from gateway.core.classifier.models import ClassificationResult, IntentType
 from gateway.core.sources.models import SourceResponse
+
 from .compressor import ContextCompressor
 from .deduplicator import Deduplicator
 from .models import CompressedContext, ScoredItem
@@ -70,7 +70,7 @@ class RankerEngine:
 
     async def rank_and_compress(
         self,
-        responses: List[SourceResponse],
+        responses: list[SourceResponse],
         classification: ClassificationResult,
         task: str,
         token_budget: int

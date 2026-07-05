@@ -6,6 +6,7 @@ import '../screens/gateway_activity_screen.dart';
 import '../screens/gateway_audit_screen.dart';
 import '../screens/gateway_sources_screen.dart';
 import '../screens/mcp_export_screen.dart';
+import '../screens/workflows_screen.dart';
 
 final appRouter = GoRouter(
   initialLocation: '/splash',
@@ -29,6 +30,17 @@ final appRouter = GoRouter(
     GoRoute(
       path: '/sources',
       builder: (context, state) => const GatewaySourcesScreen(),
+    ),
+    GoRoute(
+      path: '/workflows',
+      builder: (context, state) {
+        final extra = state.extra;
+        final payload = extra is Map ? Map<String, dynamic>.from(extra) : const <String, dynamic>{};
+        return WorkflowsScreen(
+          initialWorkflowId: payload['workflow_id']?.toString(),
+          initialRunId: payload['run_id']?.toString(),
+        );
+      },
     ),
     GoRoute(
       path: '/audit',

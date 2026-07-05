@@ -1,9 +1,8 @@
 """Unit tests for CLI commands."""
 
 import pytest
-from typer.testing import CliRunner
-
 from gateway.cli.main import app
+from typer.testing import CliRunner
 
 
 @pytest.fixture

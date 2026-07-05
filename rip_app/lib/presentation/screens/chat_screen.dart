@@ -96,6 +96,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   Future<void> _sendMessage() async {
     final text = _textController.text.trim();
     if (text.isEmpty) return;
+    if (text == '/workflow') {
+      await _pickWorkflowForComposer();
+      return;
+    }
 
     HapticFeedback.lightImpact();
     _textController.clear();
@@ -106,8 +110,88 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
   }
 
+  Future<void> _pickWorkflowForComposer() async {
+    HapticFeedback.selectionClick();
+    final projectId = ref.read(activeProjectIdProvider);
+    final selected = await showModalBottomSheet<Map<String, dynamic>>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => FutureBuilder<List<dynamic>>(
+        future: ref.read(ripClientProvider).gatewayWorkflows(projectId: projectId),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState != ConnectionState.done) {
+            return const SizedBox(
+              height: 220,
+              child: Center(child: CircularProgressIndicator()),
+            );
+          }
+          if (snapshot.hasError) {
+            return _WorkflowPickerMessage(
+              icon: Icons.error_outline_rounded,
+              title: 'Could not load workflows',
+              message: '${snapshot.error}',
+            );
+          }
+          final workflows = (snapshot.data ?? const [])
+              .whereType<Map>()
+              .map((item) => Map<String, dynamic>.from(item))
+              .where((item) => _workflowId(item).isNotEmpty)
+              .toList();
+          if (workflows.isEmpty) {
+            return const _WorkflowPickerMessage(
+              icon: Icons.account_tree_outlined,
+              title: 'No workflows yet',
+              message: 'Create a workflow in the canvas, then attach it here with /workflow.',
+            );
+          }
+          return ListView.separated(
+            padding: const EdgeInsets.fromLTRB(14, 4, 14, 18),
+            itemCount: workflows.length + 1,
+            separatorBuilder: (_, __) => const SizedBox(height: 8),
+            itemBuilder: (context, index) {
+              if (index == 0) {
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 4),
+                  child: Text('Attach workflow', style: Theme.of(context).textTheme.titleMedium),
+                );
+              }
+              final workflow = workflows[index - 1];
+              final id = _workflowId(workflow);
+              final blocks = workflow['blocks'] as List? ?? const [];
+              final wires = workflow['wires'] as List? ?? const [];
+              return ListTile(
+                leading: const Icon(Icons.account_tree_rounded),
+                title: Text('${workflow['name'] ?? 'Workflow'}', overflow: TextOverflow.ellipsis),
+                subtitle: Text('${workflow['status'] ?? 'draft'} - ${blocks.length} blocks - ${wires.length} wires'),
+                trailing: const Icon(Icons.add_link_rounded),
+                onTap: () {
+                  workflow['draft_id'] = id;
+                  Navigator.pop(context, workflow);
+                },
+              );
+            },
+          );
+        },
+      ),
+    );
+    if (selected == null) return;
+    if (!mounted) return;
+    final id = _workflowId(selected);
+    if (id.isEmpty) return;
+    _textController.text = '/workflow $id ';
+    _textController.selection = TextSelection.collapsed(offset: _textController.text.length);
+    setState(() => _composerExpanded = false);
+    _focusNode.requestFocus();
+  }
+
   void _insertCommand(String command) {
     HapticFeedback.selectionClick();
+    if (command == '/workflow') {
+      _textController.clear();
+      setState(() => _composerExpanded = false);
+      _pickWorkflowForComposer();
+      return;
+    }
     final next = command.contains('<') ? command : '$command ';
     final start = next.indexOf('<');
     final end = next.indexOf('>');
@@ -260,6 +344,50 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             ],
           );
         },
+      ),
+    );
+  }
+}
+
+String _workflowId(Map<String, dynamic> workflow) {
+  return workflow['draft_id']?.toString() ??
+      workflow['workflow_id']?.toString() ??
+      workflow['id']?.toString() ??
+      '';
+}
+
+class _WorkflowPickerMessage extends StatelessWidget {
+  const _WorkflowPickerMessage({
+    required this.icon,
+    required this.title,
+    required this.message,
+  });
+
+  final IconData icon;
+  final String title;
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return SizedBox(
+      height: 250,
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, size: 34, color: colorScheme.primary),
+            const SizedBox(height: 12),
+            Text(title, textAlign: TextAlign.center, style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 8),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(color: colorScheme.onSurfaceVariant),
+            ),
+          ],
+        ),
       ),
     );
   }

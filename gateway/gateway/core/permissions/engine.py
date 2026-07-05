@@ -1,13 +1,13 @@
 """Permission engine for filtering context."""
 
-import structlog
-from datetime import datetime
-from typing import List
 
-from .models import UserRole, AccessPolicy, AuditLogEntry
-from .roles import DEFAULT_POLICIES, SENSITIVE_DOMAINS
+import structlog
+
 from gateway.core.ranker.models import ScoredItem
 from gateway.storage.audit_store import get_audit_store
+
+from .models import AccessPolicy, UserRole
+from .roles import DEFAULT_POLICIES, SENSITIVE_DOMAINS
 
 logger = structlog.get_logger(__name__)
 
@@ -25,15 +25,15 @@ class PermissionEngine:
 
     async def filter_context(
         self,
-        items: List[ScoredItem],
+        items: list[ScoredItem],
         role: UserRole,
         domain: str | None = None,
         session_id: str = "unknown",
         user_id: str | None = None
-    ) -> List[ScoredItem]:
+    ) -> list[ScoredItem]:
         """Filter items based on role permissions."""
         policy = self.get_policy(role)
-        filtered: List[ScoredItem] = []
+        filtered: list[ScoredItem] = []
 
         for item in items:
             # Check if source is allowed

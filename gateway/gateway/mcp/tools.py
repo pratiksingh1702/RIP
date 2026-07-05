@@ -1,6 +1,5 @@
 """MCP tool definitions."""
 
-from typing import Any
 
 from mcp.types import Tool
 

@@ -4,6 +4,7 @@ import structlog
 
 from gateway.config import settings
 from gateway.core.learning.llm_client import get_llm_client
+
 from .models import ClassificationResult, IntentType, RiskLevel
 from .rules import assess_risk, classify_intent, detect_domain
 

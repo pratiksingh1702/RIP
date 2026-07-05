@@ -32,6 +32,19 @@ final gatewayAuditProvider = FutureProvider.autoDispose<List<dynamic>>((ref) {
   return ref.watch(ripClientProvider).gatewayAudit(role: role);
 });
 
+final gatewayWorkflowsProvider = FutureProvider.autoDispose<List<dynamic>>((ref) {
+  final projectId = ref.watch(activeProjectIdProvider);
+  return ref.watch(ripClientProvider).gatewayWorkflows(projectId: projectId);
+});
+
+final gatewayWorkflowPaletteProvider = FutureProvider.autoDispose<Map<String, dynamic>>((ref) {
+  return ref.watch(ripClientProvider).gatewayWorkflowPalette();
+});
+
+final gatewayPromptTemplatesProvider = FutureProvider.autoDispose<Map<String, dynamic>>((ref) {
+  return ref.watch(ripClientProvider).gatewayPromptTemplates();
+});
+
 final unifiedConnectionSummaryProvider = Provider<Map<String, String?>>((ref) {
   return {
     'serverUrl': ref.watch(serverUrlProvider),

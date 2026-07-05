@@ -1,6 +1,5 @@
 """Tests for the planner engine."""
 
-import pytest
 
 from gateway.core.classifier.models import ClassificationResult, IntentType, RiskLevel
 from gateway.core.planner.engine import plan

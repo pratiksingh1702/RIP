@@ -1,6 +1,5 @@
 """Unit tests for external sources (GitHub, Jira, Slack)."""
 
-import pytest
 from gateway.core.sources.github import GitHubSource
 from gateway.core.sources.jira import JiraSource
 from gateway.core.sources.slack import SlackSource

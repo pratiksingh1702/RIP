@@ -1,6 +1,5 @@
 """Unit tests for deduplicator."""
 
-import pytest
 
 from gateway.core.ranker.deduplicator import Deduplicator
 from gateway.core.ranker.models import ScoredItem

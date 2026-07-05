@@ -1,13 +1,11 @@
 """Unit tests for executor."""
 
-import pytest
-from unittest.mock import AsyncMock, MagicMock
 from datetime import datetime
 
+import pytest
 from gateway.core.classifier.models import ClassificationResult, IntentType, RiskLevel
-from gateway.core.planner.models import Plan, RetrievalStep, SourceQuery
 from gateway.core.executor.engine import ExecutorEngine
-from gateway.core.sources.models import SourceResponse
+from gateway.core.planner.models import Plan
 
 
 def test_executor_initialization():

@@ -1,6 +1,6 @@
 """HTTP request schemas."""
 
-from typing import Any, Optional
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -10,41 +10,42 @@ class GetContextRequest(BaseModel):
     task: str
     max_tokens: int = 12000
     role: str = "developer"
-    session_id: Optional[str] = None
-    project_id: Optional[str] = None
+    session_id: str | None = None
+    project_id: str | None = None
 
 
 class ValidateChangeRequest(BaseModel):
     """Request to validate a code change."""
     diff: str
-    files: Optional[list[str]] = None
+    files: list[str] | None = None
 
 
 class FeedbackRequest(BaseModel):
     """Feedback on a gateway response."""
     session_id: str
-    rating: Optional[int] = None
-    was_helpful: Optional[bool] = None
+    rating: int | None = None
+    was_helpful: bool | None = None
     missing_context: list[str] = []
     irrelevant_context: list[str] = []
-    comment: Optional[str] = None
+    comment: str | None = None
+    prompt_id: str | None = None
 
 
 class SourceCreateRequest(BaseModel):
     """Register a built-in preset or custom MCP source."""
     name: str
-    project_id: Optional[str] = None
+    project_id: str | None = None
     kind: str = "mcp"
     transport: str = "http"
-    endpoint_url: Optional[str] = None
-    stdio_command: Optional[str] = None
+    endpoint_url: str | None = None
+    stdio_command: str | None = None
     stdio_args: list[str] = Field(default_factory=list)
-    stdio_cwd: Optional[str] = None
+    stdio_cwd: str | None = None
     stdio_env: dict[str, str] = Field(default_factory=dict)
     auth_type: str = "none"
-    credential: Optional[str] = None
+    credential: str | None = None
     tool_name: str = "search"
-    tool_arguments_template: Optional[dict[str, Any]] = None
+    tool_arguments_template: dict[str, Any] | None = None
     domain_hints: list[str] = []
     priority_hint: int = 50
     enabled: bool = True
@@ -52,20 +53,20 @@ class SourceCreateRequest(BaseModel):
 
 class SourceUpdateRequest(BaseModel):
     """Patch source metadata editable from mobile Settings."""
-    name: Optional[str] = None
-    project_id: Optional[str] = None
-    transport: Optional[str] = None
-    endpoint_url: Optional[str] = None
-    stdio_command: Optional[str] = None
-    stdio_args: Optional[list[str]] = None
-    stdio_cwd: Optional[str] = None
-    stdio_env: Optional[dict[str, str]] = None
-    auth_type: Optional[str] = None
-    tool_name: Optional[str] = None
-    tool_arguments_template: Optional[dict[str, Any]] = None
-    domain_hints: Optional[list[str]] = None
-    priority_hint: Optional[int] = None
-    enabled: Optional[bool] = None
+    name: str | None = None
+    project_id: str | None = None
+    transport: str | None = None
+    endpoint_url: str | None = None
+    stdio_command: str | None = None
+    stdio_args: list[str] | None = None
+    stdio_cwd: str | None = None
+    stdio_env: dict[str, str] | None = None
+    auth_type: str | None = None
+    tool_name: str | None = None
+    tool_arguments_template: dict[str, Any] | None = None
+    domain_hints: list[str] | None = None
+    priority_hint: int | None = None
+    enabled: bool | None = None
 
 
 class SourceCredentialRequest(BaseModel):
@@ -75,36 +76,36 @@ class SourceCredentialRequest(BaseModel):
 
 class GatewaySettingsRequest(BaseModel):
     """Editable Gateway defaults."""
-    default_max_tokens: Optional[int] = None
-    overhead_reserve_ratio: Optional[float] = None
-    min_tokens_per_source: Optional[int] = None
-    default_role: Optional[str] = None
+    default_max_tokens: int | None = None
+    overhead_reserve_ratio: float | None = None
+    min_tokens_per_source: int | None = None
+    default_role: str | None = None
 
 
 class OAuthInitiateRequest(BaseModel):
     """Start an OAuth authorization flow."""
     provider_id: str
-    source_name: Optional[str] = None
-    project_id: Optional[str] = None
+    source_name: str | None = None
+    project_id: str | None = None
     domain_hints: list[str] = []
     redirect_uri: str
     client_type: str = "mobile"
-    requested_by: Optional[str] = None
+    requested_by: str | None = None
 
 
 class OAuthCallbackRequest(BaseModel):
     """Complete an OAuth authorization flow."""
     state: str
     code: str
-    requested_by: Optional[str] = None
+    requested_by: str | None = None
 
 
 class OAuthReauthorizeRequest(BaseModel):
     """Restart authorization for an existing OAuth source."""
     redirect_uri: str
-    project_id: Optional[str] = None
+    project_id: str | None = None
     client_type: str = "mobile"
-    requested_by: Optional[str] = None
+    requested_by: str | None = None
 
 
 class SourceProjectAllocationRequest(BaseModel):

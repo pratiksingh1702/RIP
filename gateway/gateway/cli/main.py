@@ -1,19 +1,21 @@
 """Typer CLI app for Context Gateway."""
 
-import typer
-import sys
 import asyncio
 import queue
 import socket
+import sys
 import threading
 import webbrowser
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.parse import parse_qs, urlparse
 
+import typer
+
 from gateway.config import settings
 from gateway.core import oauth as oauth_manager
 from gateway.core.sources.registry import get_source_registry
 from gateway.storage import source_registry as source_store
+from gateway.cli.workflow import workflow_app
 
 app = typer.Typer(
     name="gateway",
@@ -23,6 +25,9 @@ app = typer.Typer(
 
 sources_app = typer.Typer(help="Manage data sources")
 app.add_typer(sources_app, name="sources")
+
+workflow_app = typer.Typer(help="Manage and run workflows")
+app.add_typer(workflow_app, name="workflow")
 
 oauth_app = typer.Typer(help="Authorize OAuth-protected sources")
 app.add_typer(oauth_app, name="oauth")
@@ -317,6 +322,7 @@ def mcp_config_group():
 def mcp_server():
     """Run the Context Gateway MCP stdio server."""
     import asyncio
+
     from gateway.mcp.server import main
 
     asyncio.run(main())

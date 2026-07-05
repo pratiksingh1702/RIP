@@ -9,7 +9,6 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
-
 PipelineEventSink = Callable[[dict[str, Any]], Awaitable[None]]
 
 

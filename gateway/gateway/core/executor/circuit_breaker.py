@@ -1,7 +1,6 @@
 """Circuit breaker for unhealthy sources."""
 
 from datetime import datetime, timedelta
-from typing import Dict
 
 import structlog
 
@@ -16,8 +15,8 @@ class CircuitBreaker:
     WINDOW_SECONDS = 60
 
     def __init__(self):
-        self._failures: Dict[str, list[datetime]] = {}
-        self._open_until: Dict[str, datetime] = {}
+        self._failures: dict[str, list[datetime]] = {}
+        self._open_until: dict[str, datetime] = {}
 
     def is_open(self, source_name: str) -> bool:
         """Check if the circuit is open for this source."""

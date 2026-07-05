@@ -8,6 +8,7 @@ from typing import Any
 import structlog
 
 from gateway.config import settings
+
 from .base import BaseSource
 from .models import SourceResponse
 

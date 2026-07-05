@@ -1,9 +1,8 @@
 """Rate limiting middleware."""
 
-import time
-from fastapi import Request, HTTPException
-from starlette.middleware.base import BaseHTTPMiddleware
 import structlog
+from fastapi import HTTPException, Request
+from starlette.middleware.base import BaseHTTPMiddleware
 
 from gateway.core.cache.redis_store import get_redis_store
 

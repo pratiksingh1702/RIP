@@ -1,7 +1,7 @@
 """Audit logging utilities."""
 
+
 import structlog
-from typing import List
 
 from .models import AuditLogEntry
 
@@ -12,7 +12,7 @@ class AuditLogger:
     """Audit logger for tracking access decisions."""
 
     def __init__(self):
-        self._logs: List[AuditLogEntry] = []
+        self._logs: list[AuditLogEntry] = []
 
     def log(self, entry: AuditLogEntry):
         """Log an audit entry."""
@@ -25,7 +25,7 @@ class AuditLogger:
             allowed=entry.allowed
         )
 
-    def get_logs(self, session_id: str | None = None) -> List[AuditLogEntry]:
+    def get_logs(self, session_id: str | None = None) -> list[AuditLogEntry]:
         """Get audit logs, optionally filtered by session ID."""
         if session_id:
             return [log for log in self._logs if log.session_id == session_id]

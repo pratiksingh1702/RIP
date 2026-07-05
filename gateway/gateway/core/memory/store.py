@@ -1,7 +1,6 @@
 """Session store backed by database."""
 
 from datetime import datetime, timedelta
-from typing import List, Optional
 from uuid import UUID, uuid4
 
 import structlog
@@ -11,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from gateway.core.classifier.models import ClassificationResult
 from gateway.storage.database import async_session_factory
 from gateway.storage.models import Session as DbSession
+
 from .models import Session
 
 logger = structlog.get_logger(__name__)
@@ -65,7 +65,7 @@ class SessionStore:
     async def update_files_accessed(
         self,
         session_id: UUID,
-        files: List[str]
+        files: list[str]
     ) -> None:
         """Update files accessed by session."""
         db = await self._get_db()
@@ -84,7 +84,7 @@ class SessionStore:
         self,
         session_id: UUID,
         *,
-        sources_used: List[str],
+        sources_used: list[str],
         tokens_retrieved: int,
         tokens_delivered: int,
     ) -> None:
@@ -107,7 +107,7 @@ class SessionStore:
         self,
         session_id: UUID,
         outcome: str,
-        files_modified: List[str]
+        files_modified: list[str]
     ) -> None:
         """Mark session as complete."""
         db = await self._get_db()
@@ -126,8 +126,8 @@ class SessionStore:
 
     async def get_active_sessions(
         self,
-        exclude_session_id: Optional[UUID] = None
-    ) -> List[Session]:
+        exclude_session_id: UUID | None = None
+    ) -> list[Session]:
         """Get all in-progress sessions."""
         db = await self._get_db()
         query = select(DbSession).where(DbSession.status == "in_progress")
@@ -146,7 +146,7 @@ class SessionStore:
         self,
         domain: str,
         hours: int = 24
-    ) -> List[Session]:
+    ) -> list[Session]:
         """Get recent sessions for a domain."""
         db = await self._get_db()
         cutoff = datetime.utcnow() - timedelta(hours=hours)

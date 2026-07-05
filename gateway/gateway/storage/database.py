@@ -19,10 +19,18 @@ class Base(DeclarativeBase):
     pass
 
 
-async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
+async def get_async_session() -> AsyncGenerator[AsyncSession, None]:
     """Dependency injection or utility provider for db sessions."""
     async with async_session_factory() as session:
         yield session
+
+
+async def get_session() -> AsyncSession:
+    """Get a new async session (for use in async with blocks)."""
+    return async_session_factory()
+
+
+__all__ = ["Base", "async_session_factory", "get_async_session", "get_session", "engine"]
 
 
 async def ensure_storage_schema() -> None:

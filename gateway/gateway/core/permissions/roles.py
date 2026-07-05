@@ -1,7 +1,6 @@
 """Role definitions and policies."""
 
-from .models import UserRole, AccessPolicy
-
+from .models import AccessPolicy, UserRole
 
 # Default access policies
 DEFAULT_POLICIES = {

@@ -1,8 +1,7 @@
 """Context bridge between related sessions."""
 
-from typing import Optional
 
-from .models import BridgedContext, Session
+from .models import BridgedContext
 from .store import get_session_store
 
 
@@ -16,7 +15,7 @@ class ContextBridge:
         self,
         domain: str,
         current_task: str
-    ) -> Optional[BridgedContext]:
+    ) -> BridgedContext | None:
         """Get context from a recent related session."""
         recent = await self.store.get_recent_sessions(domain, hours=24)
 

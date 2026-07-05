@@ -1,9 +1,7 @@
 """Feedback handling and learning loop."""
 
-import structlog
-from typing import Dict, Optional
 
-from gateway.config import settings
+import structlog
 
 logger = structlog.get_logger(__name__)
 
@@ -12,7 +10,7 @@ class FeedbackStore:
     """Store for feedback on context quality."""
 
     def __init__(self):
-        self._feedback: Dict[str, list] = {}
+        self._feedback: dict[str, list] = {}
 
     async def add_feedback(self, session_id: str, feedback: dict):
         """Add feedback for a session."""
@@ -22,7 +20,7 @@ class FeedbackStore:
         logger.info("Received feedback", session_id=session_id, feedback=feedback)
 
 
-_feedback_store: Optional[FeedbackStore] = None
+_feedback_store: FeedbackStore | None = None
 
 
 def get_feedback_store() -> FeedbackStore:

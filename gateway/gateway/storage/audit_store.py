@@ -1,16 +1,15 @@
 """Audit log storage."""
 
-from datetime import datetime, UTC
-from typing import List, Optional
+from datetime import UTC, datetime
 from uuid import uuid4
 
 import structlog
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from gateway.core.permissions.models import UserRole
 from gateway.storage.database import async_session_factory
 from gateway.storage.models import AuditLog
-from gateway.core.permissions.models import UserRole
 
 logger = structlog.get_logger(__name__)
 
@@ -36,9 +35,9 @@ class AuditStore:
         role: UserRole,
         action: str,
         allowed: bool,
-        user_id: Optional[str] = None,
-        source: Optional[str] = None,
-        reason: Optional[str] = None
+        user_id: str | None = None,
+        source: str | None = None,
+        reason: str | None = None
     ) -> None:
         """Create a new audit log entry."""
         db = await self._get_db()

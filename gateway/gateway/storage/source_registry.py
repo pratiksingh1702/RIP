@@ -10,15 +10,14 @@ from dataclasses import dataclass
 from itertools import cycle
 from uuid import UUID, uuid4
 
-from sqlalchemy import delete, select
-from sqlalchemy import or_
+from sqlalchemy import delete, or_, select
 
 from gateway.config import settings
 from gateway.storage.database import async_session_factory
 from gateway.storage.models import (
     GatewaySetting,
-    OAuthToken,
     OAuthProvider,
+    OAuthToken,
     RegisteredSource,
     SourceCredential,
     SourceProjectLink,

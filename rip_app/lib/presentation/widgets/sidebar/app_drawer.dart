@@ -140,6 +140,16 @@ class AppDrawer extends ConsumerWidget {
                       title: 'Repository Tools',
                       children: [
                         _CompactRow(
+                          icon: Icons.account_tree_rounded,
+                          title: 'Workflows',
+                          subtitle: 'Build and run block flows',
+                          onTap: () {
+                            HapticFeedback.selectionClick();
+                            Navigator.pop(context);
+                            context.push('/workflows');
+                          },
+                        ),
+                        _CompactRow(
                           icon: Icons.route_rounded,
                           title: 'Activity',
                           subtitle: 'Sessions and conflicts',

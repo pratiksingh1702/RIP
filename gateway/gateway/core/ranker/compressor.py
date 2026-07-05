@@ -1,8 +1,8 @@
 """Context compressor to fit token budget."""
 
-from typing import List
 
 from gateway.core.tokenizer.counter import get_token_counter
+
 from .models import CompressedContext, ScoredItem
 from .summarizer import Summarizer
 
@@ -16,7 +16,7 @@ class ContextCompressor:
 
     async def compress(
         self,
-        items: List[ScoredItem],
+        items: list[ScoredItem],
         token_budget: int
     ) -> CompressedContext:
         """Compress items to fit token budget, keeping highest scoring."""

@@ -1,6 +1,5 @@
 """MCP server tests (Phase 9)."""
 
-import pytest
 from gateway.mcp import get_tools
 
 

@@ -10,6 +10,7 @@ from gateway.core import oauth as oauth_manager
 from gateway.core.permissions.models import UserRole
 from gateway.core.sources.dynamic_mcp import DynamicMCPSource
 from gateway.core.sources.registry import get_source_registry
+from gateway.server.request_context import gateway_user_id
 from gateway.server.schemas.requests import (
     GatewaySettingsRequest,
     OAuthReauthorizeRequest,
@@ -19,9 +20,8 @@ from gateway.server.schemas.requests import (
     SourceUpdateRequest,
 )
 from gateway.server.schemas.responses import SourceListResponse
-from gateway.server.request_context import gateway_user_id
-from gateway.storage.audit_store import get_audit_store
 from gateway.storage import source_registry as source_store
+from gateway.storage.audit_store import get_audit_store
 from gateway.storage.source_registry import SourceRecord
 
 router = APIRouter()

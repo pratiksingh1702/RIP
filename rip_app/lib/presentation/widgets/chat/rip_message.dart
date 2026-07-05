@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../../../core/design/app_colors.dart';
 import '../../../core/design/app_text_styles.dart';
 import '../../../data/models/message.dart';
@@ -73,6 +74,10 @@ class RipMessage extends ConsumerWidget {
                   data: message.content,
                   styleSheet: _markdownStyle(),
                 ),
+              if (_workflowRunIds(message.content) != null) ...[
+                const SizedBox(height: 10),
+                _WorkflowRunOpenButton(ids: _workflowRunIds(message.content)!),
+              ],
               const SizedBox(height: 10),
               _RepositorySearchFooter(
                 project: project,
@@ -117,6 +122,16 @@ class RipMessage extends ConsumerWidget {
             ],
           ),
     );
+  }
+
+  Map<String, String>? _workflowRunIds(String content) {
+    final workflowMatch = RegExp(r'workflow_id:\s*([^\s]+)').firstMatch(content);
+    final runMatch = RegExp(r'run_id:\s*([^\s]+)').firstMatch(content);
+    if (workflowMatch == null) return null;
+    return {
+      'workflow_id': workflowMatch.group(1)!,
+      if (runMatch != null) 'run_id': runMatch.group(1)!,
+    };
   }
 
   Widget _buildBlockWidget(BuildContext context, WidgetRef ref, RipResponseBlock block) {
@@ -219,6 +234,27 @@ class RipMessage extends ConsumerWidget {
       tableHead: AppTextStyles.bodyMdBold,
       tableBody: AppTextStyles.bodyMd,
       tableBorder: TableBorder.all(color: Colors.white.withValues(alpha: 0.07)),
+    );
+  }
+}
+
+class _WorkflowRunOpenButton extends StatelessWidget {
+  const _WorkflowRunOpenButton({required this.ids});
+
+  final Map<String, String> ids;
+
+  @override
+  Widget build(BuildContext context) {
+    return OutlinedButton.icon(
+      onPressed: () {
+        HapticFeedback.selectionClick();
+        context.push('/workflows', extra: ids);
+      },
+      icon: const Icon(Icons.account_tree_rounded, size: 18),
+      label: Text(
+        ids['run_id'] == null ? 'Open workflow' : 'Open flow run',
+        overflow: TextOverflow.ellipsis,
+      ),
     );
   }
 }

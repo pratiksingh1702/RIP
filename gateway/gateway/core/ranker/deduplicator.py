@@ -1,7 +1,6 @@
 """Deduplicate overlapping source results."""
 
 import hashlib
-from typing import List
 
 from .models import ScoredItem
 
@@ -9,7 +8,7 @@ from .models import ScoredItem
 class Deduplicator:
     """Removes duplicate items from the results."""
 
-    def deduplicate(self, items: List[ScoredItem]) -> List[ScoredItem]:
+    def deduplicate(self, items: list[ScoredItem]) -> list[ScoredItem]:
         """Deduplicate items by content hash, keeping highest score."""
         seen = {}
         for item in items:

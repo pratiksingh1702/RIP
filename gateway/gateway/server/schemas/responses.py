@@ -1,7 +1,8 @@
 """HTTP response schemas."""
 
+from typing import Any
+
 from pydantic import BaseModel
-from typing import List, Optional, Any
 
 from gateway.server.schemas.common import ContextItem
 
@@ -18,27 +19,27 @@ class GetContextResponse(BaseModel):
     session_id: str
     intent: str
     domain: str
-    context: List[ContextItem]
+    context: list[ContextItem]
     tokens_used: int
     tokens_retrieved: int = 0
     token_allocation: dict[str, int] = {}
-    score_summary: List[dict[str, Any]] = []
-    conflicts: List[dict]
-    warnings: List[str]
+    score_summary: list[dict[str, Any]] = []
+    conflicts: list[dict]
+    warnings: list[str]
 
 
 class ValidateChangeResponse(BaseModel):
     """Response to validate change request."""
     risk_level: str
-    affected_files: List[str]
+    affected_files: list[str]
     impact_summary: str
-    warnings: List[str]
-    error: Optional[str] = None
+    warnings: list[str]
+    error: str | None = None
 
 
 class SourceListResponse(BaseModel):
     """Response with list of sources."""
-    sources: List[dict[str, Any]]
+    sources: list[dict[str, Any]]
 
 
 class MetricsResponse(BaseModel):
@@ -48,7 +49,7 @@ class MetricsResponse(BaseModel):
     tokens_retrieved: int
     tokens_delivered: int
     active_conflicts: int = 0
-    source_health: List[dict[str, Any]] = []
+    source_health: list[dict[str, Any]] = []
 
 
 class FeedbackResponse(BaseModel):

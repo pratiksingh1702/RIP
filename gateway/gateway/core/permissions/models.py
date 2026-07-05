@@ -1,8 +1,8 @@
 """Permission models."""
 
 from enum import StrEnum
+
 from pydantic import BaseModel
-from typing import List
 
 
 class UserRole(StrEnum):
@@ -16,7 +16,7 @@ class UserRole(StrEnum):
 class AccessPolicy(BaseModel):
     """Access policy definition."""
     role: UserRole
-    allowed_sources: List[str]
+    allowed_sources: list[str]
     max_token_budget: int
     can_access_sensitive_domains: bool
 

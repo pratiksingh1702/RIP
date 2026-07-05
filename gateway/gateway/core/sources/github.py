@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import time
+import base64
 from typing import Any
 from urllib.parse import urlparse
 
@@ -84,7 +85,13 @@ class GitHubSource(BaseSource):
                 headers["Authorization"] = f"Bearer {self.token}"
 
             async with httpx.AsyncClient(timeout=10.0, headers=headers) as client:
-                if query_type in {"recent_commits", "commits"}:
+                if query_type in {"create_branch"}:
+                    content, metadata = await self._create_branch(client, params)
+                elif query_type in {"commit_files"}:
+                    content, metadata = await self._commit_files(client, params)
+                elif query_type in {"open_pr", "open_pull_request"}:
+                    content, metadata = await self._open_pr(client, params)
+                elif query_type in {"recent_commits", "commits"}:
                     content, metadata = await self._recent_commits(client)
                 elif query_type in {"similar_prs", "pr_descriptions", "open_prs"}:
                     content, metadata = await self._pull_requests(client, params)
@@ -246,6 +253,116 @@ class GitHubSource(BaseSource):
         for item in items:
             lines.append(f"- {item.get('path')} {item.get('html_url', '')}")
         return "\n".join(lines), {"repo": self.repo, "files": files, "query": query}
+
+    async def _default_branch(self, client: httpx.AsyncClient) -> str:
+        response = await client.get(f"{self.api_url}/repos/{self.repo}")
+        response.raise_for_status()
+        return response.json().get("default_branch") or "main"
+
+    async def _branch_sha(self, client: httpx.AsyncClient, branch: str) -> str:
+        response = await client.get(f"{self.api_url}/repos/{self.repo}/git/ref/heads/{branch}")
+        response.raise_for_status()
+        return response.json()["object"]["sha"]
+
+    async def _create_branch(
+        self,
+        client: httpx.AsyncClient,
+        params: dict[str, Any],
+    ) -> tuple[str, dict[str, Any]]:
+        branch = str(params.get("branch") or params.get("branch_name") or "").strip()
+        if not branch:
+            raise ValueError("branch is required")
+        base_branch = str(params.get("base_branch") or "").strip() or await self._default_branch(client)
+        base_sha = str(params.get("base_sha") or "").strip() or await self._branch_sha(client, base_branch)
+        response = await client.post(
+            f"{self.api_url}/repos/{self.repo}/git/refs",
+            json={"ref": f"refs/heads/{branch}", "sha": base_sha},
+        )
+        response.raise_for_status()
+        return f"Created GitHub branch {branch} from {base_branch}.", {
+            "repo": self.repo,
+            "branch": branch,
+            "base_branch": base_branch,
+            "sha": response.json().get("object", {}).get("sha", base_sha),
+        }
+
+    async def _commit_files(
+        self,
+        client: httpx.AsyncClient,
+        params: dict[str, Any],
+    ) -> tuple[str, dict[str, Any]]:
+        branch = str(params.get("branch") or "").strip()
+        files = params.get("files") or []
+        message = str(params.get("message") or "Update files from RIP workflow").strip()
+        if not branch:
+            raise ValueError("branch is required")
+        if not isinstance(files, list) or not files:
+            raise ValueError("files must be a non-empty list")
+
+        committed: list[str] = []
+        for item in files:
+            if not isinstance(item, dict):
+                raise ValueError("each file must be an object with path and content")
+            path = str(item.get("path") or "").strip().lstrip("/")
+            content = item.get("content")
+            if not path or content is None:
+                raise ValueError("each file requires path and content")
+            existing_sha = None
+            get_response = await client.get(
+                f"{self.api_url}/repos/{self.repo}/contents/{path}",
+                params={"ref": branch},
+            )
+            if get_response.status_code == 200:
+                existing_sha = get_response.json().get("sha")
+            elif get_response.status_code != 404:
+                get_response.raise_for_status()
+            encoded = base64.b64encode(str(content).encode("utf-8")).decode("ascii")
+            payload: dict[str, Any] = {
+                "message": message,
+                "content": encoded,
+                "branch": branch,
+            }
+            if existing_sha:
+                payload["sha"] = existing_sha
+            response = await client.put(
+                f"{self.api_url}/repos/{self.repo}/contents/{path}",
+                json=payload,
+            )
+            response.raise_for_status()
+            committed.append(path)
+
+        return f"Committed {len(committed)} file(s) to {branch}.", {
+            "repo": self.repo,
+            "branch": branch,
+            "files": committed,
+        }
+
+    async def _open_pr(
+        self,
+        client: httpx.AsyncClient,
+        params: dict[str, Any],
+    ) -> tuple[str, dict[str, Any]]:
+        branch = str(params.get("branch") or params.get("head") or "").strip()
+        title = str(params.get("title") or "").strip()
+        body = str(params.get("body") or "").strip()
+        base_branch = str(params.get("base_branch") or params.get("base") or "").strip() or await self._default_branch(client)
+        if not branch:
+            raise ValueError("branch is required")
+        if not title:
+            raise ValueError("title is required")
+        response = await client.post(
+            f"{self.api_url}/repos/{self.repo}/pulls",
+            json={"title": title, "head": branch, "base": base_branch, "body": body},
+        )
+        response.raise_for_status()
+        pr = response.json()
+        return f"Opened PR #{pr.get('number')} {title}.", {
+            "repo": self.repo,
+            "number": pr.get("number"),
+            "url": pr.get("html_url"),
+            "branch": branch,
+            "base_branch": base_branch,
+        }
 
     def _error(self, query_type: str, message: str, start: float) -> SourceResponse:
         return SourceResponse(

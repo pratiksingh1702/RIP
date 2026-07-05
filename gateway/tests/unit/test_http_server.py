@@ -1,11 +1,9 @@
 """Unit tests for HTTP server components."""
 
-import pytest
-from unittest.mock import patch, AsyncMock, MagicMock
-from fastapi.testclient import TestClient
 
+import pytest
+from fastapi.testclient import TestClient
 from gateway.server.main import create_app
-from gateway.core.memory.models import Session
 
 
 @pytest.fixture

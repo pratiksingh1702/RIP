@@ -1,21 +1,23 @@
 """End-to-end pipeline orchestrator (Phase 10)."""
 
 import re
-import structlog
 from typing import Any
+
+import structlog
 
 from gateway.config import settings
 from gateway.core.classifier.engine import ClassifierEngine
 from gateway.core.events import PipelineEventSink, get_pipeline_event_bus
-from gateway.core.planner.engine import PlannerEngine
+from gateway.core.events.bus import get_event_bus
 from gateway.core.executor.engine import ExecutorEngine
-from gateway.core.ranker.engine import RankerEngine
-from gateway.core.permissions import PermissionEngine, UserRole
-from gateway.core.memory.store import SessionStore
 from gateway.core.memory.conflict_detector import ConflictDetector
-from gateway.core.sources.registry import get_source_registry
+from gateway.core.memory.store import SessionStore
+from gateway.core.permissions import PermissionEngine, UserRole
+from gateway.core.planner.engine import PlannerEngine
+from gateway.core.ranker.engine import RankerEngine
 from gateway.core.sources.models import SourceResponse
-from gateway.server.schemas.common import ContextPackage, ContextItem
+from gateway.core.sources.registry import get_source_registry
+from gateway.server.schemas.common import ContextItem, ContextPackage
 from gateway.storage.source_registry import get_gateway_settings
 
 logger = structlog.get_logger(__name__)
@@ -54,10 +56,31 @@ class GatewayPipeline:
         if role == "developer":
             role = str(editable_settings["default_role"])
 
+        # Step 1: Classify intent (no session yet)
+        logger.info("Starting intent classification")
+        classification = await self.classifier.classify_async(task)
+        logger.info(
+            "Classification complete",
+            intent=classification.intent,
+            domain=classification.domain,
+            confidence=classification.confidence,
+            risk_level=classification.risk_level
+        )
+
+        # Step 2: Create session first, so emit can use session_id
+        logger.info("Creating session")
+        session = await self.session_store.create_session(
+            agent_type="mcp_agent",
+            task=task,
+            classification=classification
+        )
+        session_id = str(session.id)
+        logger.info("Session created", session_id=session_id)
+
         async def emit(event: dict[str, Any]) -> None:
+            # First, handle existing pipeline event sink/old bus
             if event_sink is not None:
                 await event_sink(event)
-                return
             if trace_session_id:
                 await get_pipeline_event_bus().emit(
                     trace_session_id,
@@ -67,16 +90,27 @@ class GatewayPipeline:
                     source=event.get("source"),
                     meta=event.get("meta") or {},
                 )
+            # Now publish to new event bus
+            event_bus = get_event_bus()
+            await event_bus.publish(
+                event_type=str(event["stage"]),
+                project_id=project_id,
+                session_id=session_id,
+                payload={
+                    "status": event["status"],
+                    "detail": event["detail"],
+                    "source": event.get("source"),
+                    "meta": event.get("meta") or {},
+                },
+            )
 
-        # Step 1: Classify intent
-        logger.info("Starting intent classification")
+        # Now emit the intent events now that session exists
         await emit({
             "stage": "intent",
             "status": "started",
             "detail": "Reading your request",
             "meta": {},
         })
-        classification = await self.classifier.classify_async(task)
         await emit({
             "stage": "intent",
             "status": "done",
@@ -91,23 +125,6 @@ class GatewayPipeline:
                 "risk": classification.risk_level.value,
             },
         })
-        logger.info(
-            "Classification complete",
-            intent=classification.intent,
-            domain=classification.domain,
-            confidence=classification.confidence,
-            risk_level=classification.risk_level
-        )
-
-        # Step 2: Create session
-        logger.info("Creating session")
-        session = await self.session_store.create_session(
-            agent_type="mcp_agent",
-            task=task,
-            classification=classification
-        )
-        session_id = str(session.id)
-        logger.info("Session created", session_id=session_id)
 
         # Step 3: Plan retrieval
         logger.info("Starting retrieval planning")
@@ -352,3 +369,16 @@ class GatewayPipeline:
         if files:
             return f"{files[0]} is being edited in another active session"
         return "A file conflict was found with another active session"
+
+
+# Global pipeline instance
+_pipeline: GatewayPipeline | None = None
+
+
+def get_context_pipeline() -> GatewayPipeline:
+    """Get the global context pipeline."""
+    global _pipeline
+    if _pipeline is None:
+        _pipeline = GatewayPipeline()
+    return _pipeline
+

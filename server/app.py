@@ -46,8 +46,13 @@ from gateway.server.routers import (
     sessions as gateway_sessions,
     sources as gateway_sources,
     validate as gateway_validate,
+    workflows as gateway_workflows,
 )
+from gateway.core.blocks import register_all_blocks
+from gateway.core.llm_pool import seed_llm_configs
+from gateway.core.prompts import seed_prompt_templates
 from gateway.core.sources.registry import get_source_registry as get_gateway_source_registry
+from gateway.core.workflow import seed_workflows
 from gateway.storage.database import ensure_storage_schema as ensure_gateway_storage_schema
 
 
@@ -56,7 +61,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     runtime = ServerRuntime(get_settings())
     app.state.runtime = runtime
     await runtime.startup()
+    register_all_blocks()
+    seed_llm_configs()
     await ensure_gateway_storage_schema()
+    await seed_prompt_templates()
+    await seed_workflows()
     await get_gateway_source_registry().refresh()
     try:
         yield
@@ -144,6 +153,12 @@ def create_app() -> FastAPI:
         gateway_feedback.router,
         prefix="/gateway/api/feedback",
         tags=["gateway-feedback"],
+        dependencies=[Depends(verify_api_key)],
+    )
+    app.include_router(
+        gateway_workflows.router,
+        prefix="/gateway/api/workflows",
+        tags=["gateway-workflows"],
         dependencies=[Depends(verify_api_key)],
     )
     app.include_router(ws_router)

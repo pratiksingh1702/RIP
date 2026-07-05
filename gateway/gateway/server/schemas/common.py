@@ -1,7 +1,7 @@
 """Common schemas shared across routers."""
 
+
 from pydantic import BaseModel
-from typing import List
 
 
 class ContextItem(BaseModel):
@@ -18,10 +18,10 @@ class ContextPackage(BaseModel):
     session_id: str
     intent: str
     domain: str
-    context: List[ContextItem]
+    context: list[ContextItem]
     tokens_used: int
     tokens_retrieved: int = 0
     token_allocation: dict[str, int] = {}
-    score_summary: List[dict] = []
-    conflicts: List[dict]
-    warnings: List[str]
+    score_summary: list[dict] = []
+    conflicts: list[dict]
+    warnings: list[str]

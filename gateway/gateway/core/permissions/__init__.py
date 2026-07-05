@@ -1,9 +1,9 @@
 """Permission filtering and audit logging."""
 
-from .models import UserRole, AccessPolicy, AuditLogEntry
-from .roles import DEFAULT_POLICIES, SENSITIVE_DOMAINS
-from .engine import PermissionEngine
 from .audit import AuditLogger
+from .engine import PermissionEngine
+from .models import AccessPolicy, AuditLogEntry, UserRole
+from .roles import DEFAULT_POLICIES, SENSITIVE_DOMAINS
 
 __all__ = [
     "UserRole",

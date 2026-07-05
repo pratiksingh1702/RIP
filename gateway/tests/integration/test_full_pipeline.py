@@ -28,6 +28,6 @@ async def test_pipeline_get_context_simple():
         # This will likely fail because RIP isn't running, but that's okay
         # We just want to ensure the pipeline orchestrates correctly
         pass
-    except Exception as e:
+    except Exception:
         # Expected if RIP MCP isn't running locally
         pass

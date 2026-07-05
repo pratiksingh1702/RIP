@@ -1,8 +1,7 @@
 """Memory data models."""
 
 from datetime import datetime
-from typing import List, Optional
-from uuid import UUID, uuid4
+from uuid import UUID
 
 from pydantic import BaseModel, Field
 
@@ -15,20 +14,20 @@ class Session(BaseModel):
     agent_type: str
     task_description: str
     classification: ClassificationResult
-    files_accessed: List[str] = Field(default_factory=list)
-    nodes_accessed: List[str] = Field(default_factory=list)
-    sources_used: List[str] = Field(default_factory=list)
+    files_accessed: list[str] = Field(default_factory=list)
+    nodes_accessed: list[str] = Field(default_factory=list)
+    sources_used: list[str] = Field(default_factory=list)
     tokens_retrieved: int = 0
     tokens_delivered: int = 0
     tokens_saved: int = 0
     status: str = "in_progress"
-    outcome: Optional[str] = None
-    files_modified: List[str] = Field(default_factory=list)
+    outcome: str | None = None
+    files_modified: list[str] = Field(default_factory=list)
     started_at: datetime
-    ended_at: Optional[datetime] = None
-    git_branch: Optional[str] = None
-    project_id: Optional[UUID] = None
-    user_id: Optional[str] = None
+    ended_at: datetime | None = None
+    git_branch: str | None = None
+    project_id: UUID | None = None
+    user_id: str | None = None
 
 
 class Conflict(BaseModel):
@@ -36,7 +35,7 @@ class Conflict(BaseModel):
     session_id: UUID
     agent_type: str
     task_description: str
-    overlapping_files: List[str]
+    overlapping_files: list[str]
     started_at: datetime
     risk_level: str
 
@@ -44,7 +43,7 @@ class Conflict(BaseModel):
 class BridgedContext(BaseModel):
     """Context bridged from a previous session."""
     from_session_id: UUID
-    files_previously_accessed: List[str]
+    files_previously_accessed: list[str]
     task_summary: str
     completed_at: datetime
     suggestion: str

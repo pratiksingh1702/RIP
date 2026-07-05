@@ -1,12 +1,6 @@
 """Unit tests for permissions."""
 
-import pytest
-from gateway.core.permissions import (
-    UserRole,
-    PermissionEngine,
-    DEFAULT_POLICIES,
-    SENSITIVE_DOMAINS
-)
+from gateway.core.permissions import PermissionEngine, UserRole
 from gateway.core.ranker.models import ScoredItem
 
 

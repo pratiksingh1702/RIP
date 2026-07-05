@@ -40,6 +40,7 @@ async def submit_feedback(request: FeedbackRequest):
             feedback.missing_context = request.missing_context
             feedback.irrelevant_context = request.irrelevant_context
             feedback.comment = request.comment
+            feedback.prompt_id = UUID(request.prompt_id) if request.prompt_id else None
             await db.commit()
 
         await get_feedback_store().add_feedback(request.session_id, feedback_payload)

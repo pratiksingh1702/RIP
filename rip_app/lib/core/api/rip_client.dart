@@ -609,6 +609,7 @@ class RipClient {
     List<String> missingContext = const [],
     List<String> irrelevantContext = const [],
     String? comment,
+    String? promptId,
     CancelToken? cancelToken,
   }) async {
     await _dio.post('/gateway/api/feedback', data: {
@@ -618,7 +619,256 @@ class RipClient {
       'missing_context': missingContext,
       'irrelevant_context': irrelevantContext,
       if (comment != null) 'comment': comment,
+      if (promptId != null) 'prompt_id': promptId,
     }, cancelToken: cancelToken);
+  }
+
+  Future<List<dynamic>> gatewayWorkflows({String? projectId, CancelToken? cancelToken}) async {
+    final response = await _dio.get(
+      '/gateway/api/workflows',
+      queryParameters: {
+        if (projectId != null) 'project_id': projectId,
+      },
+      cancelToken: cancelToken,
+    );
+    final data = response.data;
+    if (data is Map<String, dynamic>) {
+      return (data['data'] as List?) ?? (data['workflows'] as List?) ?? const [];
+    }
+    return data as List? ?? const [];
+  }
+
+  Future<Map<String, dynamic>> gatewayWorkflowPalette({CancelToken? cancelToken}) async {
+    final response = await _dio.get('/gateway/api/workflows/palette/blocks', cancelToken: cancelToken);
+    final data = response.data as Map<String, dynamic>;
+    return data['data'] as Map<String, dynamic>? ?? data;
+  }
+
+  Future<Map<String, dynamic>> gatewayPromptTemplates({CancelToken? cancelToken}) async {
+    final response = await _dio.get('/gateway/api/workflows/prompt-templates', cancelToken: cancelToken);
+    final data = response.data as Map<String, dynamic>;
+    return data['data'] as Map<String, dynamic>? ?? data;
+  }
+
+  Future<Map<String, dynamic>> createGatewayWorkflow({
+    required String name,
+    String scope = 'project',
+    String? projectId,
+    CancelToken? cancelToken,
+  }) async {
+    final response = await _dio.post(
+      '/gateway/api/workflows',
+      queryParameters: {
+        'name': name,
+        'scope': scope,
+        if (projectId != null) 'project_id': projectId,
+      },
+      cancelToken: cancelToken,
+    );
+    return response.data as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> appendGatewayWorkflowBlock({
+    required String draftId,
+    required String blockId,
+    required Map<String, dynamic> config,
+    required Map<String, dynamic> inputBindings,
+    Map<String, double>? position,
+    CancelToken? cancelToken,
+  }) async {
+    final response = await _dio.post(
+      '/gateway/api/workflows/$draftId/blocks',
+      data: {
+        'block_id': blockId,
+        'config': config,
+        'input_bindings': inputBindings,
+        if (position != null) 'position': position,
+      },
+      cancelToken: cancelToken,
+    );
+    return response.data as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> patchGatewayWorkflowBlock({
+    required String draftId,
+    required String stepId,
+    String? blockId,
+    Map<String, dynamic>? config,
+    Map<String, dynamic>? inputBindings,
+    Map<String, double>? position,
+    CancelToken? cancelToken,
+  }) async {
+    final response = await _dio.patch(
+      '/gateway/api/workflows/$draftId/blocks/$stepId',
+      data: {
+        if (blockId != null) 'block_id': blockId,
+        if (config != null) 'config': config,
+        if (inputBindings != null) 'input_bindings': inputBindings,
+        if (position != null) 'position': position,
+      },
+      cancelToken: cancelToken,
+    );
+    return response.data as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> gatewayWorkflowCanvas({
+    required String draftId,
+    CancelToken? cancelToken,
+  }) async {
+    final response = await _dio.get('/gateway/api/workflows/$draftId/canvas', cancelToken: cancelToken);
+    final data = response.data as Map<String, dynamic>;
+    return data['data'] as Map<String, dynamic>? ?? data;
+  }
+
+  Future<Map<String, dynamic>> updateGatewayWorkflow({
+    required String draftId,
+    String? name,
+    String? description,
+    String? category,
+    String? visibility,
+    Map<String, dynamic>? canvasState,
+    CancelToken? cancelToken,
+  }) async {
+    final response = await _dio.patch(
+      '/gateway/api/workflows/$draftId',
+      data: {
+        if (name != null) 'name': name,
+        if (description != null) 'description': description,
+        if (category != null) 'category': category,
+        if (visibility != null) 'visibility': visibility,
+        if (canvasState != null) 'canvas_state': canvasState,
+      },
+      cancelToken: cancelToken,
+    );
+    return response.data as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> addGatewayWorkflowWire({
+    required String draftId,
+    required String sourceStepId,
+    required String targetStepId,
+    required String targetPort,
+    String sourcePort = 'output',
+    Map<String, dynamic>? mapping,
+    CancelToken? cancelToken,
+  }) async {
+    final response = await _dio.post(
+      '/gateway/api/workflows/$draftId/wires',
+      data: {
+        'source_step_id': sourceStepId,
+        'source_port': sourcePort,
+        'target_step_id': targetStepId,
+        'target_port': targetPort,
+        if (mapping != null) 'mapping': mapping,
+      },
+      cancelToken: cancelToken,
+    );
+    return response.data as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> deleteGatewayWorkflowWire({
+    required String draftId,
+    required String wireId,
+    CancelToken? cancelToken,
+  }) async {
+    final response = await _dio.delete('/gateway/api/workflows/$draftId/wires/$wireId', cancelToken: cancelToken);
+    return response.data as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> reorderGatewayWorkflowBlocks({
+    required String draftId,
+    required List<String> stepOrder,
+    CancelToken? cancelToken,
+  }) async {
+    final response = await _dio.post(
+      '/gateway/api/workflows/$draftId/blocks/reorder',
+      data: {'step_order': stepOrder},
+      cancelToken: cancelToken,
+    );
+    return response.data as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> deleteGatewayWorkflowBlock({
+    required String draftId,
+    required String stepId,
+    CancelToken? cancelToken,
+  }) async {
+    final response = await _dio.delete('/gateway/api/workflows/$draftId/blocks/$stepId', cancelToken: cancelToken);
+    return response.data as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> publishGatewayWorkflow(String draftId, {CancelToken? cancelToken}) async {
+    final response = await _dio.post('/gateway/api/workflows/$draftId/publish', cancelToken: cancelToken);
+    return response.data as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> runGatewayWorkflow({
+    required String draftId,
+    required String query,
+    String? projectId,
+    CancelToken? cancelToken,
+  }) async {
+    final response = await _dio.post(
+      '/gateway/api/workflows/$draftId/run',
+      data: {
+        'query': query,
+        if (projectId != null) 'project_id': projectId,
+      },
+      cancelToken: cancelToken,
+    );
+    return response.data as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> gatewayWorkflowRunState({
+    required String draftId,
+    required String runId,
+    CancelToken? cancelToken,
+  }) async {
+    final response = await _dio.get('/gateway/api/workflows/$draftId/runs/$runId', cancelToken: cancelToken);
+    return response.data as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> answerGatewayWorkflowInput({
+    required String draftId,
+    required String runId,
+    required String stepId,
+    required dynamic value,
+    CancelToken? cancelToken,
+  }) async {
+    final response = await _dio.post(
+      '/gateway/api/workflows/$draftId/runs/$runId/answer_missing_input',
+      data: {'step_id': stepId, 'value': value},
+      cancelToken: cancelToken,
+    );
+    return response.data as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> approveGatewayWorkflowRun({
+    required String draftId,
+    required String runId,
+    String? comment,
+    CancelToken? cancelToken,
+  }) async {
+    final response = await _dio.post(
+      '/gateway/api/workflows/$draftId/runs/$runId/approve',
+      data: {'approved': true, if (comment != null) 'comment': comment},
+      cancelToken: cancelToken,
+    );
+    return response.data as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> rejectGatewayWorkflowRun({
+    required String draftId,
+    required String runId,
+    String? comment,
+    CancelToken? cancelToken,
+  }) async {
+    final response = await _dio.post(
+      '/gateway/api/workflows/$draftId/runs/$runId/reject',
+      data: {'approved': false, if (comment != null) 'comment': comment},
+      cancelToken: cancelToken,
+    );
+    return response.data as Map<String, dynamic>;
   }
 
   Uri chatPipelineWebSocketUri(String sessionId, {int afterSeq = 0}) {

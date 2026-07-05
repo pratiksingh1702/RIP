@@ -1,9 +1,10 @@
 """Debug the classifier."""
 import sys
+
 sys.path.insert(0, '.')
 
-from gateway.core.classifier.rules import classify_intent
 from gateway.core.classifier.models import IntentType
+from gateway.core.classifier.rules import classify_intent
 
 test_tasks = [
     ("Add retry logic to Stripe integration", IntentType.FEATURE_ADDITION),

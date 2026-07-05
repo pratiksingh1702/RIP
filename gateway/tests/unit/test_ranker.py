@@ -1,11 +1,9 @@
 """Unit tests for ranker."""
 
-import pytest
-from datetime import datetime
 
+import pytest
 from gateway.core.classifier.models import ClassificationResult, IntentType, RiskLevel
 from gateway.core.ranker.engine import RankerEngine
-from gateway.core.ranker.models import ScoredItem
 from gateway.core.sources.models import SourceResponse
 
 
