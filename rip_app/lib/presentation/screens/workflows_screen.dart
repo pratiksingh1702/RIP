@@ -1,22 +1,21 @@
 import 'dart:async';
-
+import 'dart:convert';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-
 import '../../data/models/pipeline_trace.dart';
 import '../providers/connection_provider.dart';
 import '../providers/gateway_provider.dart';
 import '../providers/project_provider.dart';
 import '../widgets/chat/pipeline_trace_widgets.dart';
 
-class WorkflowsScreen extends ConsumerStatefulWidget {
-  const WorkflowsScreen({
-    super.key,
-    this.initialWorkflowId,
-    this.initialRunId,
-  });
+// ============================================================
+// MAIN SCREEN
+// ============================================================
 
+class WorkflowsScreen extends ConsumerStatefulWidget {
+  const WorkflowsScreen({super.key, this.initialWorkflowId, this.initialRunId});
   final String? initialWorkflowId;
   final String? initialRunId;
 
@@ -31,12 +30,66 @@ class _WorkflowsScreenState extends ConsumerState<WorkflowsScreen> {
   Timer? _poller;
   bool _loadedInitialRun = false;
   final _answerController = TextEditingController();
+  final _runQueryController = TextEditingController();
+
+  // Undo/Redo stack
+  final List<Map<String, dynamic>> _undoStack = [];
+  final List<Map<String, dynamic>> _redoStack = [];
+  static const _maxUndo = 50;
+
+  // Multi-select
+  final Set<String> _selectedBlockIds = {};
+
+  // Clipboard
+  List<Map<String, dynamic>>? _clipboard;
+
+  // Wire drawing mode
+  bool _wireMode = false;
+
+  // Canvas settings
+  bool _showGrid = true;
+  bool _showMinimap = true;
+  bool _snapToGrid = false;
+  double _gridSize = 20;
 
   @override
   void dispose() {
     _poller?.cancel();
     _answerController.dispose();
+    _runQueryController.dispose();
     super.dispose();
+  }
+
+  void _pushUndo() {
+    if (_selected == null) return;
+    _undoStack.add(Map<String, dynamic>.from(_selected!));
+    if (_undoStack.length > _maxUndo) _undoStack.removeAt(0);
+    _redoStack.clear();
+  }
+
+  void _undo() {
+    if (_undoStack.isEmpty || _selected == null) return;
+    _redoStack.add(Map<String, dynamic>.from(_selected!));
+    final previous = _undoStack.removeLast();
+    _refresh(previous);
+  }
+
+  void _redo() {
+    if (_redoStack.isEmpty || _selected == null) return;
+    _undoStack.add(Map<String, dynamic>.from(_selected!));
+    final next = _redoStack.removeLast();
+    _refresh(next);
+  }
+
+  Map<String, dynamic>? _initialSelected(List<dynamic> items) {
+    if (items.isEmpty) return null;
+    if (widget.initialWorkflowId != null) {
+      for (final item in items) {
+        final w = Map<String, dynamic>.from(item as Map);
+        if ((w['draft_id'] ?? w['workflow_id'])?.toString() == widget.initialWorkflowId) return w;
+      }
+    }
+    return Map<String, dynamic>.from(items.first as Map);
   }
 
   @override
@@ -46,1726 +99,1373 @@ class _WorkflowsScreenState extends ConsumerState<WorkflowsScreen> {
       extendBodyBehindAppBar: true,
       body: workflows.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, _) => Center(child: Text('Workflows unavailable: $error')),
+        error: (e, _) => Center(child: Text('Workflows unavailable: $e')),
         data: (items) {
-          final selected = _selected ?? _initialSelectedWorkflow(items);
-          if (selected == null) {
-            return _EmptyCanvasBuilder(onCreate: _createWorkflow);
-          }
-          if (!_loadedInitialRun &&
-              widget.initialWorkflowId != null &&
-              widget.initialRunId != null) {
+          final selected = _selected ?? _initialSelected(items);
+          if (selected == null) return _EmptyCanvas(onCreate: _createWorkflow);
+          if (!_loadedInitialRun && widget.initialWorkflowId != null && widget.initialRunId != null) {
             _loadedInitialRun = true;
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              _loadInitialRun(selected, widget.initialRunId!);
-            });
+            WidgetsBinding.instance.addPostFrameCallback((_) => _loadRun(selected, widget.initialRunId!));
           }
-          return _WorkflowCanvasShell(
+          return _CanvasShell(
             workflow: selected,
             workflows: items,
             runId: _runId,
             runState: _runState,
             answerController: _answerController,
+            runQueryController: _runQueryController,
+            undoStack: _undoStack,
+            redoStack: _redoStack,
+            selectedBlockIds: _selectedBlockIds,
+            wireMode: _wireMode,
+            showGrid: _showGrid,
+            showMinimap: _showMinimap,
+            snapToGrid: _snapToGrid,
+            gridSize: _gridSize,
             onBack: () => Navigator.of(context).maybePop(),
-            onSwitchWorkflow: () => _showWorkflowSwitcher(items),
-            onCreateWorkflow: _createWorkflow,
-            onAddBlock: () => _showPalette(selected),
+            onSwitch: () => _switchWorkflow(items),
+            onCreate: _createWorkflow,
+            onAddBlock: () => _addBlock(selected),
             onPublish: () => _publish(selected),
-            onDeleteStep: (stepId) => _deleteStep(selected, stepId),
-            onMoveBlock: (stepId, position) => _moveBlock(selected, stepId, position),
-            onConnectBlocks: (source, target) => _connectBlocks(selected, source, target),
-            onDeleteWire: (wireId) => _deleteWire(selected, wireId),
-            onAnswer: () => _answerMissingInput(selected),
+            onRun: () => _runWorkflow(selected),
+            onUndo: _undoStack.isEmpty ? null : _undo,
+            onRedo: _redoStack.isEmpty ? null : _redo,
+            onDeleteStep: (id) { _pushUndo(); _deleteStep(selected, id); },
+            onMoveBlock: (id, pos) { _pushUndo(); _moveBlock(selected, id, pos); },
+            onConnect: (src, tgt) { _pushUndo(); _connect(selected, src, tgt); },
+            onDeleteWire: (id) { _pushUndo(); _deleteWire(selected, id); },
+            onAnswer: () => _answerMissing(selected),
             onApprove: () => _approve(selected),
             onReject: () => _reject(selected),
+            onToggleGrid: () => setState(() => _showGrid = !_showGrid),
+            onToggleMinimap: () => setState(() => _showMinimap = !_showMinimap),
+            onToggleSnap: () => setState(() => _snapToGrid = !_snapToGrid),
+            onToggleWireMode: () => setState(() => _wireMode = !_wireMode),
+            onAutoLayout: () { _pushUndo(); _autoLayout(selected); },
+            onSelectAll: () => setState(() => _selectedBlockIds.addAll(_blocks(selected).map((b) => b['step_id']?.toString() ?? ''))),
+            onClearSelection: () => setState(() => _selectedBlockIds.clear()),
+            onDeleteSelected: () { _pushUndo(); for (final id in _selectedBlockIds.toList()) _deleteStep(selected, id); _selectedBlockIds.clear(); },
+            onCopySelected: () => _copySelected(selected),
+            onPaste: () => _paste(selected),
+            onDuplicateWorkflow: () => _duplicateWorkflow(selected),
+            onExport: () => _exportWorkflow(selected),
+            onImport: () => _importWorkflow(),
+            onBulkMove: (dx, dy) { _pushUndo(); for (final id in _selectedBlockIds) { final b = _findBlock(selected, id); if (b != null) _moveBlock(selected, id, _pos(b) + Offset(dx, dy)); } },
           );
         },
       ),
     );
   }
 
-  Map<String, dynamic>? _initialSelectedWorkflow(List<dynamic> items) {
-    if (items.isEmpty) return null;
-    if (widget.initialWorkflowId != null) {
-      for (final item in items) {
-        final workflow = Map<String, dynamic>.from(item as Map);
-        final id = workflow['draft_id']?.toString() ?? workflow['workflow_id']?.toString();
-        if (id == widget.initialWorkflowId) {
-          return workflow;
-        }
-      }
+  Map<String, dynamic>? _findBlock(Map<String, dynamic> w, String stepId) {
+    for (final b in _blocks(w)) {
+      if (b['step_id']?.toString() == stepId) return b;
     }
-    return Map<String, dynamic>.from(items.first as Map);
+    return null;
   }
 
-  Future<void> _loadInitialRun(Map<String, dynamic> workflow, String runId) async {
-    final workflowId = workflow['draft_id']?.toString() ?? workflow['workflow_id']?.toString();
-    if (workflowId == null || !mounted) return;
-    final canvas = await ref.read(ripClientProvider).gatewayWorkflowCanvas(draftId: workflowId);
-    final state = await ref.read(ripClientProvider).gatewayWorkflowRunState(draftId: workflowId, runId: runId);
-    if (!mounted) return;
-    setState(() {
-      _selected = canvas;
-      _runId = runId;
-      _runState = state;
-    });
-    _startPolling(workflowId, runId);
+  void _copySelected(Map<String, dynamic> w) {
+    _clipboard = [];
+    for (final id in _selectedBlockIds) {
+      final b = _findBlock(w, id);
+      if (b != null) _clipboard!.add(Map<String, dynamic>.from(b));
+    }
   }
 
-  Future<void> _showWorkflowSwitcher(List<dynamic> items) async {
-    final selected = await showModalBottomSheet<Map<String, dynamic>>(
-      context: context,
-      showDragHandle: true,
-      builder: (context) => _WorkflowList(
-        items: items,
-        selectedId: _selected?['draft_id']?.toString(),
-        onSelect: (item) => Navigator.pop(context, Map<String, dynamic>.from(item as Map)),
-      ),
+  Future<void> _paste(Map<String, dynamic> w) async {
+    if (_clipboard == null || _clipboard!.isEmpty) return;
+    _pushUndo();
+    for (final b in _clipboard!) {
+      final pos = _pos(b);
+      final newPos = {'x': pos.dx + 50, 'y': pos.dy + 50};
+      final updated = await ref.read(ripClientProvider).appendGatewayWorkflowBlock(
+        draftId: w['draft_id'].toString(),
+        blockId: b['block_id']?.toString() ?? '',
+        config: b['config'] ?? {},
+        inputBindings: b['input_bindings'] ?? {},
+        position: newPos,
+      );
+      _refresh(updated);
+    }
+  }
+
+  Future<void> _duplicateWorkflow(Map<String, dynamic> w) async {
+    final pid = ref.read(activeProjectIdProvider);
+    final created = await ref.read(ripClientProvider).createGatewayWorkflow(
+      name: '${w['name'] ?? 'Workflow'} (copy)',
+      projectId: pid,
     );
-    if (selected == null) return;
-    setState(() {
-      _selected = selected;
-      _runId = null;
-      _runState = null;
-    });
+    ref.invalidate(gatewayWorkflowsProvider);
+    // Copy all blocks
+    for (final b in _blocks(w)) {
+      await ref.read(ripClientProvider).appendGatewayWorkflowBlock(
+        draftId: created['draft_id'].toString(),
+        blockId: b['block_id']?.toString() ?? '',
+        config: b['config'] ?? {},
+        inputBindings: b['input_bindings'] ?? {},
+        position: b['position'] ?? _nextPos(created),
+      );
+    }
+    setState(() => _selected = created);
+  }
+
+  void _exportWorkflow(Map<String, dynamic> w) {
+    final json = jsonEncode(w);
+    Clipboard.setData(ClipboardData(text: json));
+    if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Workflow copied to clipboard')));
+  }
+
+  Future<void> _importWorkflow() async {
+    final data = await Clipboard.getData(Clipboard.kTextPlain);
+    if (data?.text == null) return;
+    try {
+      final imported = jsonDecode(data!.text!) as Map<String, dynamic>;
+      final pid = ref.read(activeProjectIdProvider);
+      final created = await ref.read(ripClientProvider).createGatewayWorkflow(
+        name: '${imported['name'] ?? 'Imported'}',
+        projectId: pid,
+      );
+      for (final b in (imported['blocks'] as List?) ?? []) {
+        await ref.read(ripClientProvider).appendGatewayWorkflowBlock(
+          draftId: created['draft_id'].toString(),
+          blockId: b['block_id']?.toString() ?? '',
+          config: b['config'] ?? {},
+          inputBindings: b['input_bindings'] ?? {},
+          position: b['position'] ?? _nextPos(created),
+        );
+      }
+      ref.invalidate(gatewayWorkflowsProvider);
+      setState(() => _selected = created);
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Invalid workflow JSON: $e')));
+    }
+  }
+
+  void _autoLayout(Map<String, dynamic> w) {
+    final blocks = _blocks(w);
+    if (blocks.isEmpty) return;
+    double x = 160, y = 220;
+    for (final b in blocks) {
+      b['position'] = {'x': x, 'y': y};
+      _moveBlock(w, b['step_id']?.toString() ?? '', Offset(x, y));
+      x += 280;
+      if (x > 16000) { x = 160; y += 200; }
+    }
+  }
+
+  Future<void> _loadRun(Map<String, dynamic> w, String runId) async {
+    final wid = (w['draft_id'] ?? w['workflow_id'])?.toString();
+    if (wid == null || !mounted) return;
+    final canvas = await ref.read(ripClientProvider).gatewayWorkflowCanvas(draftId: wid);
+    final state = await ref.read(ripClientProvider).gatewayWorkflowRunState(draftId: wid, runId: runId);
+    if (!mounted) return;
+    setState(() { _selected = canvas; _runId = runId; _runState = state; });
+    _startPolling(wid, runId);
+  }
+
+  Future<void> _switchWorkflow(List<dynamic> items) async {
+    final picked = await showModalBottomSheet<Map<String, dynamic>>(
+      context: context, showDragHandle: true,
+      builder: (_) => _WorkflowPicker(items: items, selectedId: _selected?['draft_id']?.toString()),
+    );
+    if (picked == null) return;
+    _poller?.cancel();
+    _undoStack.clear();
+    _redoStack.clear();
+    _selectedBlockIds.clear();
+    setState(() { _selected = picked; _runId = null; _runState = null; });
   }
 
   Future<void> _createWorkflow() async {
-    final nameController = TextEditingController();
+    final ctrl = TextEditingController();
     final name = await showDialog<String>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (ctx) => AlertDialog(
         title: const Text('New Workflow'),
-        content: TextField(
-          controller: nameController,
-          autofocus: true,
-          decoration: const InputDecoration(labelText: 'Name'),
-          textInputAction: TextInputAction.done,
-          onSubmitted: (value) => Navigator.pop(context, value),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, nameController.text),
-            child: const Text('Create'),
-          ),
-        ],
+        content: TextField(controller: ctrl, autofocus: true, decoration: const InputDecoration(labelText: 'Name'), textInputAction: TextInputAction.done, onSubmitted: (v) => Navigator.pop(ctx, v)),
+        actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')), FilledButton(onPressed: () => Navigator.pop(ctx, ctrl.text), child: const Text('Create'))],
       ),
     );
-    nameController.dispose();
+    ctrl.dispose();
     if (name == null || name.trim().isEmpty) return;
-    final projectId = ref.read(activeProjectIdProvider);
-    final created = await ref.read(ripClientProvider).createGatewayWorkflow(
-          name: name.trim(),
-          projectId: projectId,
-        );
+    final pid = ref.read(activeProjectIdProvider);
+    final created = await ref.read(ripClientProvider).createGatewayWorkflow(name: name.trim(), projectId: pid);
     ref.invalidate(gatewayWorkflowsProvider);
-    setState(() {
-      _selected = created;
-    });
+    setState(() => _selected = created);
   }
 
-  Future<void> _showPalette(Map<String, dynamic> workflow) async {
+  Future<void> _addBlock(Map<String, dynamic> w) async {
     final palette = await ref.read(ripClientProvider).gatewayWorkflowPalette();
     if (!mounted) return;
-    final blocks = (palette['blocks'] as List? ?? const [])
-        .whereType<Map>()
-        .map((item) => Map<String, dynamic>.from(item))
-        .toList();
-    final block = await showModalBottomSheet<Map<String, dynamic>>(
-      context: context,
-      showDragHandle: true,
-      builder: (context) => _BlockPalette(blocks: blocks),
-    );
-    if (block == null || !mounted) return;
-    final configured = await showModalBottomSheet<_ConfiguredBlock>(
-      context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
-      builder: (context) => _BlockConfigSheet(block: block, existingBlocks: _blocks(workflow), ref: ref),
-    );
+    final blocks = ((palette['blocks'] as List?) ?? []).whereType<Map>().map((m) => Map<String, dynamic>.from(m)).toList();
+    final picked = await showModalBottomSheet<Map<String, dynamic>>(context: context, showDragHandle: true, builder: (_) => _BlockPalette(blocks: blocks));
+    if (picked == null || !mounted) return;
+    final configured = await _QuickConfigSheet.show(context, picked, _blocks(w), ref);
     if (configured == null) return;
-    final updated = await ref.read(ripClientProvider).appendGatewayWorkflowBlock(
-          draftId: workflow['draft_id'].toString(),
-          blockId: block['id'].toString(),
-          config: configured.config,
-          inputBindings: configured.inputBindings,
-          position: _nextBlockPosition(workflow),
-        );
-    _refreshSelected(updated);
+    _pushUndo();
+    final updated = await ref.read(ripClientProvider).appendGatewayWorkflowBlock(draftId: w['draft_id'].toString(), blockId: picked['id'].toString(), config: configured.config, inputBindings: configured.bindings, position: _nextPos(w));
+    _refresh(updated);
   }
 
-  Future<void> _publish(Map<String, dynamic> workflow) async {
-    final updated = await ref.read(ripClientProvider).publishGatewayWorkflow(workflow['draft_id'].toString());
-    _refreshSelected({...workflow, 'status': updated['status']});
+  Future<void> _publish(Map<String, dynamic> w) async {
+    final u = await ref.read(ripClientProvider).publishGatewayWorkflow(w['draft_id'].toString());
+    _refresh({...w, 'status': u['status']});
   }
 
-  void _startPolling(String draftId, String runId) {
-    _poller?.cancel();
-    _poller = Timer.periodic(const Duration(seconds: 2), (_) async {
-      final state = await ref.read(ripClientProvider).gatewayWorkflowRunState(draftId: draftId, runId: runId);
-      if (!mounted) return;
-      setState(() => _runState = state);
-      final statuses = (state['step_states'] as Map? ?? const {})
-          .values
-          .whereType<Map>()
-          .map((step) => step['status']?.toString() ?? '')
-          .toSet();
-      if (statuses.contains('awaiting_approval') ||
-          statuses.contains('failed') ||
-          state['final_output'] != null) {
-        _poller?.cancel();
-      }
-    });
-  }
-
-  Future<void> _deleteStep(Map<String, dynamic> workflow, String stepId) async {
-    final updated = await ref.read(ripClientProvider).deleteGatewayWorkflowBlock(
-          draftId: workflow['draft_id'].toString(),
-          stepId: stepId,
-        );
-    _refreshSelected(updated);
-  }
-
-  Future<void> _reorder(Map<String, dynamic> workflow, int oldIndex, int newIndex) async {
-    final blocks = _blocks(workflow);
-    if (newIndex > oldIndex) newIndex -= 1;
-    final moved = blocks.removeAt(oldIndex);
-    blocks.insert(newIndex, moved);
-    final updated = await ref.read(ripClientProvider).reorderGatewayWorkflowBlocks(
-          draftId: workflow['draft_id'].toString(),
-          stepOrder: blocks.map((block) => block['step_id'].toString()).toList(),
-        );
-    _refreshSelected(updated);
-  }
-
-  Future<void> _moveBlock(Map<String, dynamic> workflow, String stepId, Offset position) async {
-    final updated = await ref.read(ripClientProvider).patchGatewayWorkflowBlock(
-          draftId: workflow['draft_id'].toString(),
-          stepId: stepId,
-          position: {'x': position.dx, 'y': position.dy},
-        );
-    _refreshSelected(updated);
-  }
-
-  Future<void> _connectBlocks(Map<String, dynamic> workflow, String sourceStepId, String targetStepId) async {
-    await ref.read(ripClientProvider).addGatewayWorkflowWire(
-          draftId: workflow['draft_id'].toString(),
-          sourceStepId: sourceStepId,
-          targetStepId: targetStepId,
-          targetPort: _defaultTargetPort(_blocks(workflow), targetStepId),
-        );
-    final updated = await ref.read(ripClientProvider).gatewayWorkflowCanvas(draftId: workflow['draft_id'].toString());
-    _refreshSelected(updated);
-  }
-
-  Future<void> _deleteWire(Map<String, dynamic> workflow, String wireId) async {
-    final response = await ref.read(ripClientProvider).deleteGatewayWorkflowWire(
-          draftId: workflow['draft_id'].toString(),
-          wireId: wireId,
-        );
-    _refreshSelected({...workflow, 'wires': response['wires'] ?? const []});
-  }
-
-  Future<void> _answerMissingInput(Map<String, dynamic> workflow) async {
-    final missing = _missingStepId(_runState);
-    if (missing == null || _runId == null || _answerController.text.trim().isEmpty) return;
-    final state = await ref.read(ripClientProvider).answerGatewayWorkflowInput(
-          draftId: workflow['draft_id'].toString(),
-          runId: _runId!,
-          stepId: missing,
-          value: _answerController.text.trim(),
-        );
-    setState(() => _runState = state);
-    _answerController.clear();
-    _startPolling(workflow['draft_id'].toString(), _runId!);
-  }
-
-  Future<void> _approve(Map<String, dynamic> workflow) async {
-    if (_runId == null) return;
-    final response = await ref.read(ripClientProvider).approveGatewayWorkflowRun(
-          draftId: workflow['draft_id'].toString(),
-          runId: _runId!,
-        );
-    setState(() => _runState = Map<String, dynamic>.from(response['state'] as Map? ?? const {}));
-    _startPolling(workflow['draft_id'].toString(), _runId!);
-  }
-
-  Future<void> _reject(Map<String, dynamic> workflow) async {
-    if (_runId == null) return;
-    final response = await ref.read(ripClientProvider).rejectGatewayWorkflowRun(
-          draftId: workflow['draft_id'].toString(),
-          runId: _runId!,
-        );
-    setState(() => _runState = Map<String, dynamic>.from(response['state'] as Map? ?? const {}));
-  }
-
-  void _refreshSelected(Map<String, dynamic> updated) {
-    ref.invalidate(gatewayWorkflowsProvider);
-    setState(() {
-      _selected = {...?_selected, ...updated};
-    });
-  }
-}
-
-class _WorkflowList extends StatelessWidget {
-  const _WorkflowList({required this.items, required this.selectedId, required this.onSelect});
-
-  final List<dynamic> items;
-  final String? selectedId;
-  final ValueChanged<dynamic> onSelect;
-
-  @override
-  Widget build(BuildContext context) {
-    if (items.isEmpty) {
-      return const Center(child: Text('No workflows yet.'));
-    }
-    return ListView.separated(
-      padding: const EdgeInsets.all(12),
-      itemCount: items.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 8),
-      itemBuilder: (context, index) {
-        final item = Map<String, dynamic>.from(items[index] as Map);
-        final id = item['draft_id']?.toString() ?? '';
-        final blocks = item['blocks'] as List? ?? const [];
-        return ListTile(
-          selected: id == selectedId,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-          tileColor: Theme.of(context).colorScheme.surface,
-          leading: const Icon(Icons.account_tree_rounded),
-          title: Text('${item['name'] ?? 'Workflow'}', overflow: TextOverflow.ellipsis),
-          subtitle: Text('${item['status'] ?? 'draft'} - ${blocks.length} blocks'),
-          onTap: () {
-            HapticFeedback.selectionClick();
-            onSelect(item);
-          },
+  Future<void> _runWorkflow(Map<String, dynamic> w) async {
+    final wid = (w['draft_id'] ?? w['workflow_id'])?.toString();
+    if (wid == null) return;
+    final query = await showDialog<String>(
+      context: context,
+      builder: (ctx) {
+        final ctrl = TextEditingController(text: _runQueryController.text);
+        return AlertDialog(
+          title: const Text('Run Workflow'),
+          content: TextField(controller: ctrl, autofocus: true, maxLines: 3, decoration: const InputDecoration(hintText: 'Describe what you want...', border: OutlineInputBorder()), textInputAction: TextInputAction.done, onSubmitted: (v) => Navigator.pop(ctx, v)),
+          actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')), FilledButton(onPressed: () => Navigator.pop(ctx, ctrl.text), child: const Text('Run'))],
         );
       },
     );
+    if (query == null || query.trim().isEmpty || !mounted) return;
+    _runQueryController.text = query.trim();
+    try {
+      final result = await ref.read(ripClientProvider).runGatewayWorkflow(draftId: wid, query: query.trim());
+      final runId = result['run_id']?.toString();
+      if (runId != null && mounted) {
+        setState(() { _runId = runId; _runState = result; });
+        _startPolling(wid, runId);
+      }
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Run failed: $e')));
+    }
+  }
+
+  void _startPolling(String wid, String rid) {
+    _poller?.cancel();
+    _poller = Timer.periodic(const Duration(seconds: 2), (_) async {
+      try {
+        final s = await ref.read(ripClientProvider).gatewayWorkflowRunState(draftId: wid, runId: rid);
+        if (!mounted) return;
+        setState(() => _runState = s);
+        final stepStates = s['step_states'] as Map? ?? {};
+        final hasCompleted = stepStates.values.any((st) => st is Map && (st['status'] == 'completed' || st['status'] == 'failed'));
+        if (s['final_output'] != null || hasCompleted) _poller?.cancel();
+      } catch (_) { _poller?.cancel(); }
+    });
+  }
+
+  Future<void> _deleteStep(Map<String, dynamic> w, String id) async {
+    _refresh(await ref.read(ripClientProvider).deleteGatewayWorkflowBlock(draftId: w['draft_id'].toString(), stepId: id));
+  }
+
+  Future<void> _moveBlock(Map<String, dynamic> w, String id, Offset pos) async {
+    _refresh(await ref.read(ripClientProvider).patchGatewayWorkflowBlock(draftId: w['draft_id'].toString(), stepId: id, position: {'x': pos.dx, 'y': pos.dy}));
+  }
+
+  Future<void> _connect(Map<String, dynamic> w, String src, String tgt) async {
+    await ref.read(ripClientProvider).addGatewayWorkflowWire(draftId: w['draft_id'].toString(), sourceStepId: src, targetStepId: tgt, targetPort: _defaultPort(_blocks(w), tgt));
+    _refresh(await ref.read(ripClientProvider).gatewayWorkflowCanvas(draftId: w['draft_id'].toString()));
+  }
+
+  Future<void> _deleteWire(Map<String, dynamic> w, String id) async {
+    final r = await ref.read(ripClientProvider).deleteGatewayWorkflowWire(draftId: w['draft_id'].toString(), wireId: id);
+    _refresh({...w, 'wires': r['wires'] ?? []});
+  }
+
+  Future<void> _answerMissing(Map<String, dynamic> w) async {
+    final missing = _missingStep(_runState);
+    if (missing == null || _runId == null || _answerController.text.trim().isEmpty) return;
+    final s = await ref.read(ripClientProvider).answerGatewayWorkflowInput(draftId: w['draft_id'].toString(), runId: _runId!, stepId: missing, value: _answerController.text.trim());
+    setState(() => _runState = s);
+    _answerController.clear();
+    _startPolling(w['draft_id'].toString(), _runId!);
+  }
+
+  Future<void> _approve(Map<String, dynamic> w) async {
+    if (_runId == null) return;
+    final r = await ref.read(ripClientProvider).approveGatewayWorkflowRun(draftId: w['draft_id'].toString(), runId: _runId!);
+    setState(() => _runState = Map<String, dynamic>.from(r['state'] as Map? ?? {}));
+    _startPolling(w['draft_id'].toString(), _runId!);
+  }
+
+  Future<void> _reject(Map<String, dynamic> w) async {
+    if (_runId == null) return;
+    final r = await ref.read(ripClientProvider).rejectGatewayWorkflowRun(draftId: w['draft_id'].toString(), runId: _runId!);
+    setState(() => _runState = Map<String, dynamic>.from(r['state'] as Map? ?? {}));
+  }
+
+  void _refresh(Map<String, dynamic> u) {
+    ref.invalidate(gatewayWorkflowsProvider);
+    if (mounted) setState(() { _selected = {...?_selected, ...u}; });
   }
 }
 
-class _WorkflowCanvasShell extends StatelessWidget {
-  const _WorkflowCanvasShell({
-    required this.workflow,
-    required this.workflows,
-    required this.runId,
-    required this.runState,
-    required this.answerController,
-    required this.onBack,
-    required this.onSwitchWorkflow,
-    required this.onCreateWorkflow,
-    required this.onAddBlock,
-    required this.onPublish,
-    required this.onDeleteStep,
-    required this.onMoveBlock,
-    required this.onConnectBlocks,
-    required this.onDeleteWire,
-    required this.onAnswer,
-    required this.onApprove,
-    required this.onReject,
+// ============================================================
+// CANVAS SHELL
+// ============================================================
+
+class _CanvasShell extends StatelessWidget {
+  const _CanvasShell({
+    required this.workflow, required this.workflows, required this.runId, required this.runState,
+    required this.answerController, required this.runQueryController,
+    required this.undoStack, required this.redoStack,
+    required this.selectedBlockIds, required this.wireMode,
+    required this.showGrid, required this.showMinimap, required this.snapToGrid, required this.gridSize,
+    required this.onBack, required this.onSwitch, required this.onCreate, required this.onAddBlock,
+    required this.onPublish, required this.onRun, required this.onUndo, required this.onRedo,
+    required this.onDeleteStep, required this.onMoveBlock, required this.onConnect, required this.onDeleteWire,
+    required this.onAnswer, required this.onApprove, required this.onReject,
+    required this.onToggleGrid, required this.onToggleMinimap, required this.onToggleSnap,
+    required this.onToggleWireMode, required this.onAutoLayout,
+    required this.onSelectAll, required this.onClearSelection, required this.onDeleteSelected,
+    required this.onCopySelected, required this.onPaste, required this.onDuplicateWorkflow,
+    required this.onExport, required this.onImport, required this.onBulkMove,
   });
 
   final Map<String, dynamic> workflow;
   final List<dynamic> workflows;
   final String? runId;
   final Map<String, dynamic>? runState;
-  final TextEditingController answerController;
-  final VoidCallback onBack;
-  final VoidCallback onSwitchWorkflow;
-  final VoidCallback onCreateWorkflow;
-  final VoidCallback onAddBlock;
-  final VoidCallback onPublish;
-  final ValueChanged<String> onDeleteStep;
-  final void Function(String stepId, Offset position) onMoveBlock;
-  final void Function(String sourceStepId, String targetStepId) onConnectBlocks;
-  final ValueChanged<String> onDeleteWire;
-  final VoidCallback onAnswer;
-  final VoidCallback onApprove;
-  final VoidCallback onReject;
+  final TextEditingController answerController, runQueryController;
+  final List<Map<String, dynamic>> undoStack, redoStack;
+  final Set<String> selectedBlockIds;
+  final bool wireMode, showGrid, showMinimap, snapToGrid;
+  final double gridSize;
+  final VoidCallback onBack, onSwitch, onCreate, onAddBlock, onPublish, onRun, onAnswer, onApprove, onReject;
+  final VoidCallback? onUndo, onRedo;
+  final ValueChanged<String> onDeleteStep, onDeleteWire;
+  final void Function(String, Offset) onMoveBlock;
+  final void Function(String, String) onConnect;
+  final VoidCallback onToggleGrid, onToggleMinimap, onToggleSnap, onToggleWireMode, onAutoLayout;
+  final VoidCallback onSelectAll, onClearSelection, onDeleteSelected, onCopySelected, onPaste, onDuplicateWorkflow, onExport, onImport;
+  final void Function(double dx, double dy) onBulkMove;
 
   @override
   Widget build(BuildContext context) {
     final blocks = _blocks(workflow);
+    final wires = _wires(workflow);
     final state = runState;
     final top = MediaQuery.paddingOf(context).top;
+    final bottom = MediaQuery.paddingOf(context).bottom;
+    final isRunning = state != null && runId != null;
+
     return Stack(
       children: [
         Positioned.fill(
-          child: _WorkflowCanvas(
+          child: _Canvas(
             blocks: blocks,
-            wires: _wires(workflow),
+            wires: wires,
             runState: state,
+            selectedBlockIds: selectedBlockIds,
+            wireMode: wireMode,
+            showGrid: showGrid,
+            snapToGrid: snapToGrid,
+            gridSize: gridSize,
             onMoveBlock: onMoveBlock,
-            onConnectBlocks: onConnectBlocks,
+            onConnect: onConnect,
             onDeleteBlock: onDeleteStep,
             onDeleteWire: onDeleteWire,
+            onToggleSelect: (id) {}, // handled in canvas via callback
+            onBulkMove: onBulkMove,
           ),
         ),
-        Positioned(
-          top: top + 10,
-          left: 12,
-          right: 12,
-          child: _FloatingCanvasHeader(
-            title: '${workflow['name'] ?? 'Workflow'}',
-            status: '${workflow['status'] ?? 'draft'}',
-            blockCount: blocks.length,
-            wireCount: _wires(workflow).length,
-            onBack: onBack,
-            onSwitchWorkflow: onSwitchWorkflow,
-            onCreateWorkflow: onCreateWorkflow,
-          ),
-        ),
-        Positioned(
-          right: 14,
-          bottom: MediaQuery.paddingOf(context).bottom + 18,
-          child: _CanvasActionDock(
-            canPublish: blocks.isNotEmpty,
-            onAddBlock: onAddBlock,
-            onPublish: onPublish,
-          ),
-        ),
-        if (state != null)
-          Positioned(
-            left: 12,
-            right: 12,
-            bottom: MediaQuery.paddingOf(context).bottom + 92,
-            child: _FloatingRunPanel(
-              runId: runId,
-              state: state,
-              answerController: answerController,
-              onAnswer: onAnswer,
-              onApprove: onApprove,
-              onReject: onReject,
-            ),
-          ),
+        // Top bar
+        Positioned(top: top + 10, left: 12, right: 12, child: _CanvasTopBar(
+          title: '${workflow['name'] ?? 'Workflow'}',
+          status: '${workflow['status'] ?? 'draft'}',
+          blockCount: blocks.length, wireCount: wires.length,
+          isRunning: isRunning, selectedCount: selectedBlockIds.length,
+          canUndo: undoStack.isNotEmpty, canRedo: redoStack.isNotEmpty,
+          onBack: onBack, onSwitch: onSwitch, onCreate: onCreate,
+          onUndo: onUndo, onRedo: onRedo,
+          onToggleGrid: onToggleGrid, onToggleMinimap: onToggleMinimap,
+          onToggleSnap: onToggleSnap, onToggleWireMode: onToggleWireMode,
+          onAutoLayout: onAutoLayout, showGrid: showGrid, showMinimap: showMinimap,
+          snapToGrid: snapToGrid, wireMode: wireMode,
+        )),
+        // Selection toolbar
+        if (selectedBlockIds.isNotEmpty)
+          Positioned(top: top + 70, left: 12, right: 12, child: _SelectionToolbar(
+            count: selectedBlockIds.length,
+            onClear: onClearSelection,
+            onDelete: onDeleteSelected,
+            onCopy: onCopySelected,
+            onMoveLeft: () => onBulkMove(-gridSize, 0),
+            onMoveRight: () => onBulkMove(gridSize, 0),
+            onMoveUp: () => onBulkMove(0, -gridSize),
+            onMoveDown: () => onBulkMove(0, gridSize),
+          )),
+        // Right dock
+        Positioned(right: 14, bottom: bottom + (isRunning ? 140 : 18), child: _CanvasDock(
+          hasBlocks: blocks.isNotEmpty, onAddBlock: onAddBlock, onPublish: onPublish, onRun: onRun,
+          onPaste: onPaste, onDuplicate: onDuplicateWorkflow, onExport: onExport, onImport: onImport,
+        )),
+        // Run panel
+        if (isRunning) Positioned(left: 12, right: 12, bottom: bottom + 14, child: _RunPanel(
+          runId: runId, state: state!, answerController: answerController,
+          onAnswer: onAnswer, onApprove: onApprove, onReject: onReject,
+        )),
+        // Minimap
+        if (showMinimap && blocks.isNotEmpty)
+          Positioned(left: 8, bottom: bottom + 100, child: _Minimap(blocks: blocks, wires: wires, canvasSize: const Size(18000, 12000))),
       ],
     );
   }
 }
 
-class _FloatingCanvasHeader extends StatelessWidget {
-  const _FloatingCanvasHeader({
-    required this.title,
-    required this.status,
-    required this.blockCount,
-    required this.wireCount,
-    required this.onBack,
-    required this.onSwitchWorkflow,
-    required this.onCreateWorkflow,
+// ============================================================
+// TOP BAR with tools
+// ============================================================
+
+class _CanvasTopBar extends StatelessWidget {
+  const _CanvasTopBar({
+    required this.title, required this.status, required this.blockCount, required this.wireCount,
+    required this.isRunning, required this.selectedCount,
+    required this.canUndo, required this.canRedo,
+    required this.onBack, required this.onSwitch, required this.onCreate,
+    required this.onUndo, required this.onRedo,
+    required this.onToggleGrid, required this.onToggleMinimap,
+    required this.onToggleSnap, required this.onToggleWireMode,
+    required this.onAutoLayout,
+    required this.showGrid, required this.showMinimap,
+    required this.snapToGrid, required this.wireMode,
   });
 
-  final String title;
-  final String status;
-  final int blockCount;
-  final int wireCount;
-  final VoidCallback onBack;
-  final VoidCallback onSwitchWorkflow;
-  final VoidCallback onCreateWorkflow;
+  final String title, status;
+  final int blockCount, wireCount, selectedCount;
+  final bool isRunning, canUndo, canRedo;
+  final VoidCallback onBack, onSwitch, onCreate;
+  final VoidCallback? onUndo, onRedo;
+  final VoidCallback onToggleGrid, onToggleMinimap, onToggleSnap, onToggleWireMode, onAutoLayout;
+  final bool showGrid, showMinimap, snapToGrid, wireMode;
 
   @override
-  Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    return Material(
-      color: colorScheme.surface.withValues(alpha: 0.92),
-      elevation: 10,
-      shadowColor: Colors.black.withValues(alpha: 0.2),
-      borderRadius: BorderRadius.circular(18),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
-        child: Row(
-          children: [
-            IconButton(
-              tooltip: 'Back',
-              onPressed: onBack,
-              icon: const Icon(Icons.arrow_back_rounded),
-            ),
-            Expanded(
-              child: InkWell(
-                borderRadius: BorderRadius.circular(12),
-                onTap: onSwitchWorkflow,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.titleMedium),
-                      Text('$status - $blockCount blocks - $wireCount wires', maxLines: 1, overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.labelSmall),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-            IconButton(
-              tooltip: 'Switch workflow',
-              onPressed: onSwitchWorkflow,
-              icon: const Icon(Icons.keyboard_arrow_down_rounded),
-            ),
-            IconButton(
-              tooltip: 'New workflow',
-              onPressed: onCreateWorkflow,
-              icon: const Icon(Icons.add_rounded),
-            ),
+Widget build(BuildContext context) {
+  final cs = Theme.of(context).colorScheme;
+  return Material(
+    color: cs.surface.withValues(alpha: 0.94), elevation: 12, borderRadius: BorderRadius.circular(18),
+    shadowColor: Colors.black.withValues(alpha: 0.25),
+    child: Padding(padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4), child: Row(children: [
+      IconButton(tooltip: 'Back', onPressed: onBack, icon: const Icon(Icons.arrow_back_rounded, size: 20)),
+      Expanded(child: InkWell(borderRadius: BorderRadius.circular(12), onTap: onSwitch, child: Padding(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4), child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+        Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.titleSmall),
+        Row(children: [
+          Text('$status \u2022 $blockCount \u2022 $wireCount', style: Theme.of(context).textTheme.labelSmall),
+          if (isRunning) ...[
+            const SizedBox(width: 6),
+            Container(width: 7, height: 7, decoration: const BoxDecoration(color: Colors.green, shape: BoxShape.circle)),
+            const SizedBox(width: 3),
+            const Text('Live', style: TextStyle(color: Colors.green, fontSize: 10)),
           ],
-        ),
+          if (selectedCount > 0) ...[
+            const SizedBox(width: 6),
+            Text('$selectedCount selected', style: const TextStyle(color: Colors.blue, fontSize: 10)),
+          ],
+        ]),
+      ])))),
+      IconButton(tooltip: 'Undo', onPressed: onUndo, icon: const Icon(Icons.undo_rounded, size: 18), visualDensity: VisualDensity.compact),
+      IconButton(tooltip: 'Redo', onPressed: onRedo, icon: const Icon(Icons.redo_rounded, size: 18), visualDensity: VisualDensity.compact),
+      PopupMenuButton<String>(
+        icon: const Icon(Icons.more_vert_rounded, size: 18),
+        padding: EdgeInsets.zero,
+        onSelected: (v) {
+          switch (v) {
+            case 'grid': onToggleGrid(); break;
+            case 'snap': onToggleSnap(); break;
+            case 'minimap': onToggleMinimap(); break;
+            case 'wire': onToggleWireMode(); break;
+            case 'layout': onAutoLayout(); break;
+          }
+        },
+        itemBuilder: (_) => [
+          PopupMenuItem(value: 'grid', child: Row(children: [Icon(showGrid ? Icons.check_box_rounded : Icons.check_box_outline_blank_rounded, size: 18), const SizedBox(width: 8), const Text('Show Grid')])),
+          PopupMenuItem(value: 'snap', child: Row(children: [Icon(snapToGrid ? Icons.check_box_rounded : Icons.check_box_outline_blank_rounded, size: 18), const SizedBox(width: 8), const Text('Snap to Grid')])),
+          PopupMenuItem(value: 'minimap', child: Row(children: [Icon(showMinimap ? Icons.check_box_rounded : Icons.check_box_outline_blank_rounded, size: 18), const SizedBox(width: 8), const Text('Minimap')])),
+          PopupMenuItem(value: 'wire', child: Row(children: [Icon(wireMode ? Icons.check_box_rounded : Icons.check_box_outline_blank_rounded, size: 18), const SizedBox(width: 8), const Text('Wire Mode')])),
+          const PopupMenuDivider(),
+          PopupMenuItem(value: 'layout', child: Row(children: [const Icon(Icons.auto_fix_high_rounded, size: 18), const SizedBox(width: 8), const Text('Auto Layout')])),
+        ],
       ),
-    );
-  }
+      IconButton(tooltip: 'Switch', onPressed: onSwitch, icon: const Icon(Icons.keyboard_arrow_down_rounded, size: 20)),
+      IconButton(tooltip: 'New', onPressed: onCreate, icon: const Icon(Icons.add_rounded, size: 20)),
+    ])),
+  );
+}
 }
 
-class _CanvasActionDock extends StatelessWidget {
-  const _CanvasActionDock({
-    required this.canPublish,
-    required this.onAddBlock,
-    required this.onPublish,
-  });
+// ============================================================
+// SELECTION TOOLBAR
+// ============================================================
 
-  final bool canPublish;
-  final VoidCallback onAddBlock;
-  final VoidCallback onPublish;
+class _SelectionToolbar extends StatelessWidget {
+  const _SelectionToolbar({required this.count, required this.onClear, required this.onDelete, required this.onCopy, required this.onMoveLeft, required this.onMoveRight, required this.onMoveUp, required this.onMoveDown});
+  final int count;
+  final VoidCallback onClear, onDelete, onCopy, onMoveLeft, onMoveRight, onMoveUp, onMoveDown;
 
   @override
-  Widget build(BuildContext context) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        FloatingActionButton.small(
-          heroTag: 'publish_workflow',
-          tooltip: 'Publish',
-          onPressed: canPublish ? onPublish : null,
-          child: const Icon(Icons.publish_rounded),
-        ),
-        const SizedBox(height: 10),
-        FloatingActionButton(
-          heroTag: 'add_workflow_block',
-          tooltip: 'Add block',
-          onPressed: onAddBlock,
-          child: const Icon(Icons.add_rounded),
-        ),
+  Widget build(BuildContext context) => Material(
+    color: Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.95), elevation: 8, borderRadius: BorderRadius.circular(12),
+    child: Padding(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), child: Row(children: [
+      Text('$count selected', style: Theme.of(context).textTheme.labelMedium),
+      const Spacer(),
+      IconButton(tooltip: 'Move left', onPressed: onMoveLeft, icon: const Icon(Icons.arrow_left_rounded, size: 20), visualDensity: VisualDensity.compact),
+      IconButton(tooltip: 'Move right', onPressed: onMoveRight, icon: const Icon(Icons.arrow_right_rounded, size: 20), visualDensity: VisualDensity.compact),
+      IconButton(tooltip: 'Move up', onPressed: onMoveUp, icon: const Icon(Icons.arrow_upward_rounded, size: 20), visualDensity: VisualDensity.compact),
+      IconButton(tooltip: 'Move down', onPressed: onMoveDown, icon: const Icon(Icons.arrow_downward_rounded, size: 20), visualDensity: VisualDensity.compact),
+      const SizedBox(width: 8),
+      IconButton(tooltip: 'Copy', onPressed: onCopy, icon: const Icon(Icons.copy_rounded, size: 20), visualDensity: VisualDensity.compact),
+      IconButton(tooltip: 'Delete', onPressed: onDelete, icon: const Icon(Icons.delete_outline_rounded, size: 20), visualDensity: VisualDensity.compact),
+      IconButton(tooltip: 'Clear selection', onPressed: onClear, icon: const Icon(Icons.close_rounded, size: 20), visualDensity: VisualDensity.compact),
+    ])),
+  );
+}
+
+// ============================================================
+// DOCK
+// ============================================================
+
+class _CanvasDock extends StatelessWidget {
+  const _CanvasDock({required this.hasBlocks, required this.onAddBlock, required this.onPublish, required this.onRun, required this.onPaste, required this.onDuplicate, required this.onExport, required this.onImport});
+  final bool hasBlocks;
+  final VoidCallback onAddBlock, onPublish, onRun, onPaste, onDuplicate, onExport, onImport;
+
+  @override
+  Widget build(BuildContext context) => Column(mainAxisSize: MainAxisSize.min, children: [
+    FloatingActionButton.small(heroTag: 'run', tooltip: 'Run workflow', onPressed: hasBlocks ? onRun : null, child: const Icon(Icons.play_arrow_rounded)),
+    const SizedBox(height: 8),
+    FloatingActionButton.small(heroTag: 'publish', tooltip: 'Publish', onPressed: hasBlocks ? onPublish : null, child: const Icon(Icons.publish_rounded)),
+    const SizedBox(height: 8),
+    FloatingActionButton(heroTag: 'add_block', tooltip: 'Add block', onPressed: onAddBlock, child: const Icon(Icons.add_rounded)),
+    const SizedBox(height: 8),
+    PopupMenuButton<String>(
+      icon: const Icon(Icons.more_horiz_rounded),
+      tooltip: 'More actions',
+      onSelected: (v) {
+        switch (v) {
+          case 'paste': onPaste(); break;
+          case 'duplicate': onDuplicate(); break;
+          case 'export': onExport(); break;
+          case 'import': onImport(); break;
+        }
+      },
+      itemBuilder: (_) => const [
+        PopupMenuItem(value: 'paste', child: ListTile(leading: Icon(Icons.paste_rounded), title: Text('Paste'), dense: true)),
+        PopupMenuItem(value: 'duplicate', child: ListTile(leading: Icon(Icons.copy_rounded), title: Text('Duplicate'), dense: true)),
+        PopupMenuItem(value: 'export', child: ListTile(leading: Icon(Icons.upload_rounded), title: Text('Export JSON'), dense: true)),
+        PopupMenuItem(value: 'import', child: ListTile(leading: Icon(Icons.download_rounded), title: Text('Import JSON'), dense: true)),
       ],
-    );
-  }
+    ),
+  ]);
 }
 
-class _FloatingRunPanel extends StatelessWidget {
-  const _FloatingRunPanel({
-    required this.runId,
-    required this.state,
-    required this.answerController,
-    required this.onAnswer,
-    required this.onApprove,
-    required this.onReject,
-  });
+// ============================================================
+// MINIMAP
+// ============================================================
 
-  final String? runId;
-  final Map<String, dynamic> state;
-  final TextEditingController answerController;
-  final VoidCallback onAnswer;
-  final VoidCallback onApprove;
-  final VoidCallback onReject;
+class _Minimap extends StatelessWidget {
+  const _Minimap({required this.blocks, required this.wires, required this.canvasSize});
+  final List<Map<String, dynamic>> blocks, wires;
+  final Size canvasSize;
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     return Material(
-      color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.94),
-      elevation: 12,
-      borderRadius: BorderRadius.circular(16),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: _RunStatePanel(
-          runId: runId,
-          state: state,
-          answerController: answerController,
-          onAnswer: onAnswer,
-          onApprove: onApprove,
-          onReject: onReject,
+      color: cs.surface.withValues(alpha: 0.9), elevation: 6, borderRadius: BorderRadius.circular(10),
+      child: Container(
+        width: 140, height: 100, padding: const EdgeInsets.all(6),
+        child: CustomPaint(
+          size: const Size(128, 88),
+          painter: _MinimapPainter(blocks: blocks, wires: wires, canvasSize: canvasSize, cs: cs),
         ),
       ),
     );
   }
 }
 
-class _EmptyCanvasBuilder extends StatelessWidget {
-  const _EmptyCanvasBuilder({required this.onCreate});
-
-  final VoidCallback onCreate;
+class _MinimapPainter extends CustomPainter {
+  const _MinimapPainter({required this.blocks, required this.wires, required this.canvasSize, required this.cs});
+  final List<Map<String, dynamic>> blocks, wires;
+  final Size canvasSize;
+  final ColorScheme cs;
 
   @override
-  Widget build(BuildContext context) {
-    return Stack(
-      children: [
-        const Positioned.fill(child: ColoredBox(color: Colors.black12)),
-        Center(
-          child: FilledButton.icon(
-            onPressed: onCreate,
-            icon: const Icon(Icons.add_rounded),
-            label: const Text('Create workflow'),
-          ),
-        ),
-      ],
-    );
+  void paint(Canvas canvas, Size size) {
+    final sx = size.width / canvasSize.width, sy = size.height / canvasSize.height;
+    // Draw blocks
+    final blockPaint = Paint()..color = cs.primary.withValues(alpha: 0.5);
+    for (final b in blocks) {
+      final p = _pos(b);
+      canvas.drawRect(Rect.fromLTWH(p.dx * sx, p.dy * sy, 230 * sx, 150 * sy), blockPaint);
+    }
+    // Draw wires
+    final wirePaint = Paint()..color = cs.outline.withValues(alpha: 0.4)..strokeWidth = 0.5;
+    final map = {for (final b in blocks) b['step_id']?.toString(): b};
+    for (final w in wires) {
+      final src = map[w['source_step_id']?.toString()], tgt = map[w['target_step_id']?.toString()];
+      if (src == null || tgt == null) continue;
+      final a = _pos(src), b = _pos(tgt);
+      canvas.drawLine(Offset(a.dx * sx + 115 * sx, a.dy * sy + 75 * sy), Offset(b.dx * sx + 115 * sx, b.dy * sy + 75 * sy), wirePaint);
+    }
   }
+
+  @override
+  bool shouldRepaint(covariant _MinimapPainter o) => o.blocks != blocks || o.wires != wires;
 }
 
-class _RunStatePanel extends StatelessWidget {
-  const _RunStatePanel({
-    required this.runId,
-    required this.state,
-    required this.answerController,
-    required this.onAnswer,
-    required this.onApprove,
-    required this.onReject,
-  });
+// ============================================================
+// RUN PANEL
+// ============================================================
 
+class _RunPanel extends StatelessWidget {
+  const _RunPanel({required this.runId, required this.state, required this.answerController, required this.onAnswer, required this.onApprove, required this.onReject});
   final String? runId;
   final Map<String, dynamic> state;
   final TextEditingController answerController;
-  final VoidCallback onAnswer;
-  final VoidCallback onApprove;
-  final VoidCallback onReject;
+  final VoidCallback onAnswer, onApprove, onReject;
+
+  @override
+  Widget build(BuildContext context) => Material(
+    color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.94), elevation: 12, borderRadius: BorderRadius.circular(16),
+    child: Padding(padding: const EdgeInsets.all(12), child: _RunState(runId: runId, state: state, answerController: answerController, onAnswer: onAnswer, onApprove: onApprove, onReject: onReject)),
+  );
+}
+
+class _RunState extends StatelessWidget {
+  const _RunState({required this.runId, required this.state, required this.answerController, required this.onAnswer, required this.onApprove, required this.onReject});
+  final String? runId;
+  final Map<String, dynamic> state;
+  final TextEditingController answerController;
+  final VoidCallback onAnswer, onApprove, onReject;
 
   @override
   Widget build(BuildContext context) {
-    final trace = _traceFromRunState(runId ?? '', state);
-    final awaitingApproval = _hasStepStatus(state, 'awaiting_approval');
-    final missingStep = _missingStepId(state);
-    final complete = state['final_output'] != null || _hasStepStatus(state, 'failed');
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        complete ? PipelineSummaryChip(trace: trace) : PipelineStepList(trace: trace),
-        if (missingStep != null) ...[
-          const SizedBox(height: 12),
-          TextField(
-            controller: answerController,
-            decoration: InputDecoration(
-              labelText: 'Missing input',
-              suffixIcon: IconButton(
-                tooltip: 'Submit',
-                icon: const Icon(Icons.send_rounded),
-                onPressed: onAnswer,
-              ),
-            ),
-          ),
-        ],
-        if (awaitingApproval) ...[
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: FilledButton.icon(
-                  onPressed: onApprove,
-                  icon: const Icon(Icons.check_rounded),
-                  label: const Text('Approve'),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: onReject,
-                  icon: const Icon(Icons.close_rounded),
-                  label: const Text('Reject'),
-                ),
-              ),
-            ],
-          ),
-        ],
-        if (state['final_output'] != null) ...[
-          const SizedBox(height: 12),
-          SelectableText('${state['final_output']}'),
-        ],
-      ],
-    );
+    final trace = _makeTrace(runId ?? '', state);
+    final awaiting = _hasStatus(state, 'awaiting_approval');
+    final missing = _missingStep(state);
+    final done = state['final_output'] != null || _hasStatus(state, 'failed') || _hasStatus(state, 'completed');
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+      done ? PipelineSummaryChip(trace: trace) : PipelineStepList(trace: trace),
+      if (missing != null) ...[const SizedBox(height: 8), TextField(controller: answerController, decoration: InputDecoration(labelText: 'Missing input', suffixIcon: IconButton(tooltip: 'Submit', icon: const Icon(Icons.send_rounded), onPressed: onAnswer)), onSubmitted: (_) => onAnswer())],
+      if (awaiting) ...[const SizedBox(height: 8), Row(children: [Expanded(child: FilledButton.icon(onPressed: onApprove, icon: const Icon(Icons.check_rounded), label: const Text('Approve'))), const SizedBox(width: 8), Expanded(child: OutlinedButton.icon(onPressed: onReject, icon: const Icon(Icons.close_rounded), label: const Text('Reject')))])],
+      if (state['final_output'] != null) ...[const SizedBox(height: 8), SelectableText('${state['final_output']}', style: Theme.of(context).textTheme.bodySmall)],
+    ]);
   }
 }
 
-class _WorkflowCanvas extends StatefulWidget {
-  const _WorkflowCanvas({
-    required this.blocks,
-    required this.wires,
-    required this.runState,
-    required this.onMoveBlock,
-    required this.onConnectBlocks,
-    required this.onDeleteBlock,
-    required this.onDeleteWire,
-  });
+// ============================================================
+// CANVAS
+// ============================================================
 
-  final List<Map<String, dynamic>> blocks;
-  final List<Map<String, dynamic>> wires;
+class _Canvas extends StatefulWidget {
+  const _Canvas({required this.blocks, required this.wires, required this.runState, required this.selectedBlockIds, required this.wireMode, required this.showGrid, required this.snapToGrid, required this.gridSize, required this.onMoveBlock, required this.onConnect, required this.onDeleteBlock, required this.onDeleteWire, required this.onToggleSelect, required this.onBulkMove});
+  final List<Map<String, dynamic>> blocks, wires;
   final Map<String, dynamic>? runState;
-  final void Function(String stepId, Offset position) onMoveBlock;
-  final void Function(String sourceStepId, String targetStepId) onConnectBlocks;
-  final ValueChanged<String> onDeleteBlock;
-  final ValueChanged<String> onDeleteWire;
+  final Set<String> selectedBlockIds;
+  final bool wireMode, showGrid, snapToGrid;
+  final double gridSize;
+  final void Function(String, Offset) onMoveBlock;
+  final void Function(String, String) onConnect;
+  final ValueChanged<String> onDeleteBlock, onDeleteWire;
+  final ValueChanged<String> onToggleSelect;
+  final void Function(double, double) onBulkMove;
 
   @override
-  State<_WorkflowCanvas> createState() => _WorkflowCanvasState();
+  State<_Canvas> createState() => _CanvasState();
 }
 
-class _WorkflowCanvasState extends State<_WorkflowCanvas> {
-  static const _canvasSize = Size(18000, 12000);
-  static const _blockSize = Size(230, 150);
+class _CanvasState extends State<_Canvas> {
+  static const _cw = 18000.0, _ch = 12000.0, _bw = 230.0, _bh = 150.0;
+  String? _selWire, _wireSrc;
+  Offset? _lassoStart, _lassoEnd;
+  bool _isLassoing = false;
+  final _canvasKey = GlobalKey();
+  final TransformationController _transformationController = TransformationController();
 
-  String? _selectedStepId;
-  String? _wireSourceStepId;
-  String? _selectedWireId;
-
-  @override
-  Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    return ColoredBox(
-      color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
-      child: Stack(
-          children: [
-            InteractiveViewer(
-              minScale: 0.35,
-              maxScale: 2.4,
-              boundaryMargin: const EdgeInsets.all(2600),
-              constrained: false,
-              child: SizedBox(
-                width: _canvasSize.width,
-                height: _canvasSize.height,
-                child: Stack(
-                  children: [
-                    Positioned(
-                      left: 80,
-                      top: 220,
-                      child: _CanvasEndpoint(
-                        icon: Icons.login_rounded,
-                        title: 'ENTRY',
-                        subtitle: 'Chat trigger',
-                        color: colorScheme.primary,
-                      ),
-                    ),
-                    Positioned(
-                      left: _canvasSize.width - 340,
-                      top: 220,
-                      child: _CanvasEndpoint(
-                        icon: Icons.logout_rounded,
-                        title: 'EXIT',
-                        subtitle: 'Chat response',
-                        color: const Color(0xFF22C55E),
-                      ),
-                    ),
-                    GestureDetector(
-                      behavior: HitTestBehavior.translucent,
-                      onTapDown: (details) => _selectWireAt(details.localPosition),
-                      child: CustomPaint(
-                        size: _canvasSize,
-                        painter: _WirePainter(
-                          blocks: widget.blocks,
-                          wires: widget.wires,
-                          runState: widget.runState,
-                          colorScheme: colorScheme,
-                          selectedWireId: _selectedWireId,
-                        ),
-                      ),
-                    ),
-                    for (final block in widget.blocks)
-                      _CanvasBlockCard(
-                        block: block,
-                        status: _stepStatus(widget.runState, block['step_id']?.toString()),
-                        selected: block['step_id']?.toString() == _selectedStepId,
-                        wireSource: block['step_id']?.toString() == _wireSourceStepId,
-                        onSelected: () {
-                          setState(() {
-                            _selectedStepId = block['step_id']?.toString();
-                            _selectedWireId = null;
-                          });
-                          _showBlockDetails(block);
-                        },
-                        onDrag: (position) => setState(() {
-                          block['position'] = {
-                            'x': position.dx.clamp(80, _canvasSize.width - _blockSize.width - 240),
-                            'y': position.dy.clamp(120, _canvasSize.height - _blockSize.height - 240),
-                          };
-                        }),
-                        onMove: widget.onMoveBlock,
-                        onDelete: widget.onDeleteBlock,
-                        onDeleteConnectedWires: _deleteConnectedWires,
-                        onWireTap: _handleWireTap,
-                      ),
-                  ],
-                ),
-              ),
-            ),
-            if (_wireSourceStepId != null)
-              Positioned(
-                left: 12,
-                right: 12,
-                bottom: 12,
-                child: Material(
-                  color: colorScheme.inverseSurface,
-                  borderRadius: BorderRadius.circular(8),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            'Tap another block to connect from $_wireSourceStepId',
-                            style: TextStyle(color: colorScheme.onInverseSurface),
-                          ),
-                        ),
-                        IconButton(
-                          tooltip: 'Cancel connection',
-                          onPressed: () => setState(() => _wireSourceStepId = null),
-                          icon: Icon(Icons.close_rounded, color: colorScheme.onInverseSurface),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            if (_selectedWireId != null)
-              Positioned(
-                left: 12,
-                right: 12,
-                bottom: _wireSourceStepId == null ? 12 : 78,
-                child: _SelectedWireBar(
-                  wire: widget.wires.firstWhere(
-                    (wire) => wire['id']?.toString() == _selectedWireId,
-                    orElse: () => const <String, dynamic>{},
-                  ),
-                  onDelete: () {
-                    final wireId = _selectedWireId;
-                    if (wireId != null) {
-                      widget.onDeleteWire(wireId);
-                    }
-                    setState(() => _selectedWireId = null);
-                  },
-                  onClear: () => setState(() => _selectedWireId = null),
-                ),
-              ),
-          ],
-        ),
-    );
+  Offset _snap(Offset p) {
+    if (!widget.snapToGrid) return p;
+    return Offset((p.dx / widget.gridSize).round() * widget.gridSize, (p.dy / widget.gridSize).round() * widget.gridSize);
   }
 
-  void _selectWireAt(Offset point) {
-    for (final wire in widget.wires.reversed) {
-      final source = _blockForStep(wire['source_step_id']?.toString());
-      final target = _blockForStep(wire['target_step_id']?.toString());
-      if (source == null || target == null) continue;
-      final sourcePos = _blockPosition(source) + Offset(_blockSize.width, 108);
-      final targetPos = _blockPosition(target) + const Offset(0, 108);
-      if (_pointNearWire(point, sourcePos, targetPos)) {
-        setState(() {
-          _selectedWireId = wire['id']?.toString();
-          _selectedStepId = null;
-          _wireSourceStepId = null;
-        });
+  void _onBlockTap(String sid) {
+    if (widget.wireMode) {
+      if (_wireSrc == null) { setState(() => _wireSrc = sid); return; }
+      if (_wireSrc != sid) widget.onConnect(_wireSrc!, sid);
+      setState(() => _wireSrc = null);
+      return;
+    }
+    setState(() {
+      if (widget.selectedBlockIds.contains(sid)) {
+        widget.selectedBlockIds.remove(sid);
+      } else {
+        widget.selectedBlockIds.add(sid);
+      }
+      widget.onToggleSelect(sid);
+    });
+  }
+
+  void _onBlockLongPress(String sid) {
+    setState(() => _wireSrc = sid);
+  }
+
+  void _hitWire(Offset p) {
+    final map = {for (final b in widget.blocks) b['step_id']?.toString(): b};
+    for (final w in widget.wires.reversed) {
+      final s = map[w['source_step_id']?.toString()], t = map[w['target_step_id']?.toString()];
+      if (s == null || t == null) continue;
+      if (_nearWire(p, _pos(s) + Offset(_bw, 108), _pos(t) + const Offset(0, 108))) {
+        setState(() { _selWire = w['id']?.toString(); _wireSrc = null; });
+        _showWireDetails(w);
         return;
       }
     }
-    setState(() => _selectedWireId = null);
+    setState(() => _selWire = null);
   }
 
-  Map<String, dynamic>? _blockForStep(String? stepId) {
-    if (stepId == null) return null;
-    for (final block in widget.blocks) {
-      if (block['step_id']?.toString() == stepId) {
-        return block;
-      }
-    }
-    return null;
-  }
-
-  bool _pointNearWire(Offset point, Offset source, Offset target) {
-    for (var i = 0; i <= 20; i++) {
-      final t = i / 20;
-      final sample = Offset(
-        _cubic(source.dx, source.dx + 110, target.dx - 110, target.dx, t),
-        _cubic(source.dy, source.dy, target.dy, target.dy, t),
-      );
-      if ((sample - point).distance <= 24) return true;
+  bool _nearWire(Offset p, Offset a, Offset b) {
+    for (var i = 0; i <= 16; i++) {
+      final t = i / 16;
+      if ((Offset(_cub(a.dx, a.dx + 110, b.dx - 110, b.dx, t), _cub(a.dy, a.dy, b.dy, b.dy, t)) - p).distance <= 28) return true;
     }
     return false;
   }
 
-  double _cubic(double a, double b, double c, double d, double t) {
-    final mt = 1 - t;
-    return mt * mt * mt * a + 3 * mt * mt * t * b + 3 * mt * t * t * c + t * t * t * d;
+  double _cub(double a, double b, double c, double d, double t) { final mt = 1 - t; return mt * mt * mt * a + 3 * mt * mt * t * b + 3 * mt * t * t * c + t * t * t * d; }
+
+  void _showWireDetails(Map<String, dynamic> w) {
+    showModalBottomSheet<void>(context: context, showDragHandle: true, builder: (_) => Padding(padding: const EdgeInsets.all(16), child: Column(mainAxisSize: MainAxisSize.min, children: [
+      Text('Wire: ${w['source_step_id'] ?? '?'} \u2192 ${w['target_step_id'] ?? '?'}', style: Theme.of(context).textTheme.titleMedium),
+      const SizedBox(height: 12),
+      if (w['label'] != null) Text('Label: ${w['label']}'),
+      Text('Port: ${w['target_port'] ?? 'default'}'),
+      const SizedBox(height: 12),
+      Row(children: [
+        Expanded(child: OutlinedButton.icon(onPressed: () { Navigator.pop(context); widget.onDeleteWire(w['id']?.toString() ?? ''); }, icon: const Icon(Icons.link_off_rounded), label: const Text('Disconnect'))),
+        const SizedBox(width: 8),
+        Expanded(child: FilledButton.icon(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.check_rounded), label: const Text('Close'))),
+      ]),
+    ])));
   }
 
-  void _handleWireTap(String stepId) {
-    final source = _wireSourceStepId;
-    if (source == null) {
-      setState(() => _wireSourceStepId = stepId);
-      return;
-    }
-    if (source != stepId) {
-      widget.onConnectBlocks(source, stepId);
-    }
-    setState(() => _wireSourceStepId = null);
+  void _showBlockDetails(Map<String, dynamic> b) {
+    showModalBottomSheet<void>(context: context, isScrollControlled: true, showDragHandle: true, builder: (_) => _BlockDetails(
+      block: b, status: _stepStatus(widget.runState, b['step_id']?.toString()),
+      output: _stepOutput(widget.runState, b['step_id']?.toString()),
+      wires: widget.wires.where((w) => w['source_step_id'] == b['step_id'] || w['target_step_id'] == b['step_id']).map((w) => Map<String, dynamic>.from(w)).toList(),
+      onConnect: () { Navigator.pop(context); setState(() => _wireSrc = b['step_id']?.toString()); },
+      onDelWires: () { Navigator.pop(context); for (final w in widget.wires) { if ((w['source_step_id'] == b['step_id'] || w['target_step_id'] == b['step_id']) && w['id'] != null) { widget.onDeleteWire(w['id'].toString()); } } },
+      onDel: () { Navigator.pop(context); widget.onDeleteBlock(b['step_id']?.toString() ?? ''); },
+      onAddNote: (note) { b['note'] = note; setState(() {}); },
+    ));
   }
 
-  void _deleteConnectedWires(String stepId) {
-    for (final wire in widget.wires) {
-      final isConnected = wire['source_step_id']?.toString() == stepId ||
-          wire['target_step_id']?.toString() == stepId;
-      final wireId = wire['id']?.toString();
-      if (isConnected && wireId != null) {
-        widget.onDeleteWire(wireId);
-      }
-    }
+  @override
+  void dispose() {
+    _transformationController.dispose();
+    super.dispose();
   }
 
-  void _showBlockDetails(Map<String, dynamic> block) {
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
-      builder: (context) => _BlockDetailsSheet(
-        block: block,
-        status: _stepStatus(widget.runState, block['step_id']?.toString()),
-        output: _stepOutput(widget.runState, block['step_id']?.toString()),
-        connectedWires: widget.wires
-            .where((wire) =>
-                wire['source_step_id']?.toString() == block['step_id']?.toString() ||
-                wire['target_step_id']?.toString() == block['step_id']?.toString())
-            .map((wire) => Map<String, dynamic>.from(wire))
-            .toList(),
-        onConnect: () {
-          Navigator.pop(context);
-          _handleWireTap(block['step_id']?.toString() ?? '');
-        },
-        onDeleteWires: () {
-          Navigator.pop(context);
-          _deleteConnectedWires(block['step_id']?.toString() ?? '');
-        },
-        onDeleteBlock: () {
-          Navigator.pop(context);
-          widget.onDeleteBlock(block['step_id']?.toString() ?? '');
-        },
-      ),
-    );
+  Offset _transformPointer(Offset globalPosition) {
+    final renderBox = _canvasKey.currentContext?.findRenderObject() as RenderBox?;
+    if (renderBox == null) return globalPosition;
+    final localPosition = renderBox.globalToLocal(globalPosition);
+    return _transformationController.toScene(localPosition);
   }
-}
-
-class _CanvasBlockCard extends StatelessWidget {
-  const _CanvasBlockCard({
-    required this.block,
-    required this.status,
-    required this.selected,
-    required this.wireSource,
-    required this.onSelected,
-    required this.onDrag,
-    required this.onMove,
-    required this.onDelete,
-    required this.onDeleteConnectedWires,
-    required this.onWireTap,
-  });
-
-  final Map<String, dynamic> block;
-  final String status;
-  final bool selected;
-  final bool wireSource;
-  final VoidCallback onSelected;
-  final ValueChanged<Offset> onDrag;
-  final void Function(String stepId, Offset position) onMove;
-  final ValueChanged<String> onDelete;
-  final ValueChanged<String> onDeleteConnectedWires;
-  final ValueChanged<String> onWireTap;
 
   @override
   Widget build(BuildContext context) {
-    final stepId = block['step_id']?.toString() ?? '';
-    final position = _blockPosition(block);
-    final colorScheme = Theme.of(context).colorScheme;
-    final statusColor = _statusColor(colorScheme, status);
-    return Positioned(
-      left: position.dx,
-      top: position.dy,
-      width: 230,
-      height: 150,
-      child: GestureDetector(
-        onTap: onSelected,
-        onPanEnd: (_) => onMove(stepId, _blockPosition(block)),
-        onPanUpdate: (details) {
-          final current = _blockPosition(block);
-          onDrag(current + details.delta);
-        },
-        child: Material(
-          color: colorScheme.surface,
-          elevation: selected || wireSource ? 6 : 1,
-          borderRadius: BorderRadius.circular(8),
-          child: Container(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(
-                color: wireSource ? colorScheme.primary : selected ? statusColor : colorScheme.outlineVariant,
-                width: selected || wireSource ? 2 : 1,
-              ),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(10),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Icon(_iconForBlock(block), size: 18, color: statusColor),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          block['display_name']?.toString().isNotEmpty == true
-                              ? block['display_name'].toString()
-                              : block['block_id']?.toString() ?? 'Block',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.titleSmall,
-                        ),
-                      ),
-                      PopupMenuButton<String>(
-                        padding: EdgeInsets.zero,
-                        icon: const Icon(Icons.more_horiz_rounded, size: 18),
-                        onSelected: (value) {
-                          if (value == 'delete') onDelete(stepId);
-                          if (value == 'delete_wires') onDeleteConnectedWires(stepId);
-                          if (value == 'wire') onWireTap(stepId);
-                        },
-                        itemBuilder: (context) => const [
-                          PopupMenuItem(value: 'wire', child: Text('Connect')),
-                          PopupMenuItem(value: 'delete_wires', child: Text('Delete wires')),
-                          PopupMenuItem(value: 'delete', child: Text('Delete')),
-                        ],
-                      ),
-                    ],
-                  ),
-                  const Divider(height: 14),
-                  Row(
-                    children: [
-                      _PortDot(color: colorScheme.primary),
-                      const SizedBox(width: 6),
-                      Text('ENTRY', style: Theme.of(context).textTheme.labelSmall),
-                      const Spacer(),
-                      Text('EXIT', style: Theme.of(context).textTheme.labelSmall),
-                      const SizedBox(width: 6),
-                      InkWell(
-                        borderRadius: BorderRadius.circular(14),
-                        onTap: () => onWireTap(stepId),
-                        child: Padding(
-                          padding: const EdgeInsets.all(4),
-                          child: _PortDot(color: statusColor),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    _bindingPreview(block),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                  const Spacer(),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          status,
-                          overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.labelSmall?.copyWith(color: statusColor),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
+    final cs = Theme.of(context).colorScheme;
+    final map = {for (final b in widget.blocks) b['step_id']?.toString(): b};
+    return ColoredBox(color: cs.surfaceContainerHighest.withValues(alpha: 0.35), child: Stack(children: [
+      InteractiveViewer(
+        transformationController: _transformationController,
+        minScale: 0.25, maxScale: 3.0, boundaryMargin: const EdgeInsets.all(3000), constrained: false,
+        child: SizedBox(key: _canvasKey, width: _cw, height: _ch, child: Stack(children: [
+          if (widget.showGrid) CustomPaint(size: const Size(_cw, _ch), painter: _GridPainter(gridSize: widget.gridSize, cs: cs)),
+          Positioned(left: 80, top: 220, child: _EndPoint(icon: Icons.login_rounded, title: 'TRIGGER', subtitle: 'Chat query starts here', color: cs.primary)),
+          Positioned(left: _cw - 340, top: 220, child: _EndPoint(icon: Icons.logout_rounded, title: 'RESPONSE', subtitle: 'Final output', color: const Color(0xFF22C55E))),
+          GestureDetector(
+            behavior: HitTestBehavior.translucent,
+            onTapDown: (d) => _hitWire(d.localPosition),
+            child: CustomPaint(size: const Size(_cw, _ch), painter: _WirePainter(blocks: widget.blocks, wires: widget.wires, runState: widget.runState, cs: cs, selWire: _selWire)),
           ),
-        ),
+          ...widget.blocks.map((b) {
+            final sid = b['step_id']?.toString() ?? '';
+            final sel = widget.selectedBlockIds.contains(sid);
+            return Positioned(
+              left: _pos(b).dx, top: _pos(b).dy, width: _bw, height: _bh,
+              child: GestureDetector(
+                onTap: () => _onBlockTap(sid),
+                onLongPress: () { _onBlockLongPress(sid); _showBlockDetails(b); },
+                onDoubleTap: () => _showBlockDetails(b),
+                onPanEnd: (d) => widget.onMoveBlock(sid, _snap(_pos(b))),
+                onPanUpdate: (d) { final p = _snap(_pos(b) + d.delta); b['position'] = {'x': p.dx.clamp(80, _cw - _bw - 240), 'y': p.dy.clamp(120, _ch - _bh - 240)}; setState(() {}); },
+                child: _BlockCard(block: b, status: _stepStatus(widget.runState, sid), selected: sel, wireSrc: sid == _wireSrc, note: b['note']?.toString()),
+              ),
+            );
+          }),
+          if (_lassoStart != null && _lassoEnd != null)
+            Positioned.fill(child: CustomPaint(painter: _LassoPainter(start: _lassoStart!, end: _lassoEnd!, cs: cs))),
+        ])),
       ),
-    );
+      if (_wireSrc != null) Positioned(left: 12, right: 12, bottom: 12, child: Material(color: cs.inverseSurface, borderRadius: BorderRadius.circular(8), child: Padding(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8), child: Row(children: [Expanded(child: Text('Tap target block for $_wireSrc', style: TextStyle(color: cs.onInverseSurface))), IconButton(tooltip: 'Cancel', onPressed: () => setState(() => _wireSrc = null), icon: Icon(Icons.close_rounded, color: cs.onInverseSurface))])))),
+      if (_selWire != null) Positioned(left: 12, right: 12, bottom: _wireSrc == null ? 12 : 78, child: _WireBar(wire: widget.wires.firstWhere((w) => w['id']?.toString() == _selWire, orElse: () => const {}), onDelete: () { widget.onDeleteWire(_selWire!); setState(() => _selWire = null); }, onClear: () => setState(() => _selWire = null))),
+    ]));
   }
 }
 
-class _WirePainter extends CustomPainter {
-  const _WirePainter({
-    required this.blocks,
-    required this.wires,
-    required this.runState,
-    required this.colorScheme,
-    required this.selectedWireId,
-  });
+// ============================================================
+// GRID PAINTER
+// ============================================================
 
-  final List<Map<String, dynamic>> blocks;
-  final List<Map<String, dynamic>> wires;
-  final Map<String, dynamic>? runState;
-  final ColorScheme colorScheme;
-  final String? selectedWireId;
+class _GridPainter extends CustomPainter {
+  const _GridPainter({required this.gridSize, required this.cs});
+  final double gridSize;
+  final ColorScheme cs;
 
   @override
   void paint(Canvas canvas, Size size) {
-    final blockByStep = {
-      for (final block in blocks) block['step_id']?.toString(): block,
-    };
-    for (final wire in wires) {
-      final source = blockByStep[wire['source_step_id']?.toString()];
-      final target = blockByStep[wire['target_step_id']?.toString()];
-      if (source == null || target == null) continue;
-      final sourcePos = _blockPosition(source) + const Offset(230, 108);
-      final targetPos = _blockPosition(target) + const Offset(0, 108);
-      final path = Path()
-        ..moveTo(sourcePos.dx, sourcePos.dy)
-        ..cubicTo(
-          sourcePos.dx + 90,
-          sourcePos.dy,
-          targetPos.dx - 90,
-          targetPos.dy,
-          targetPos.dx,
-          targetPos.dy,
-        );
-      final status = _stepStatus(runState, wire['target_step_id']?.toString());
-      final selected = wire['id']?.toString() == selectedWireId;
+    final paint = Paint()..color = cs.outlineVariant.withValues(alpha: 0.15)..strokeWidth = 0.5;
+    for (double x = 0; x < size.width; x += gridSize) canvas.drawLine(Offset(x, 0), Offset(x, size.height), paint);
+    for (double y = 0; y < size.height; y += gridSize) canvas.drawLine(Offset(0, y), Offset(size.width, y), paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _GridPainter o) => o.gridSize != gridSize;
+}
+
+// ============================================================
+// LASSO PAINTER
+// ============================================================
+
+class _LassoPainter extends CustomPainter {
+  const _LassoPainter({required this.start, required this.end, required this.cs});
+  final Offset start, end;
+  final ColorScheme cs;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    canvas.drawRect(Rect.fromPoints(start, end), Paint()..color = cs.primary.withValues(alpha: 0.15)..style = PaintingStyle.fill);
+    canvas.drawRect(Rect.fromPoints(start, end), Paint()..color = cs.primary.withValues(alpha: 0.6)..style = PaintingStyle.stroke..strokeWidth = 1.5);
+  }
+
+  @override
+  bool shouldRepaint(covariant _LassoPainter o) => o.start != start || o.end != end;
+}
+
+// ============================================================
+// BLOCK CARD
+// ============================================================
+
+class _BlockCard extends StatelessWidget {
+  const _BlockCard({required this.block, required this.status, required this.selected, required this.wireSrc, this.note});
+  final Map<String, dynamic> block;
+  final String status;
+  final bool selected, wireSrc;
+  final String? note;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final sc = _statusColor(cs, status);
+    final name = block['display_name']?.toString().isNotEmpty == true ? block['display_name'].toString() : block['block_id']?.toString() ?? 'Block';
+    final tools = (block['config'] as Map?)?['tools'] as List? ?? [];
+    return Material(
+      color: cs.surface, elevation: selected || wireSrc ? 8 : 2, borderRadius: BorderRadius.circular(10),
+      child: Container(
+        decoration: BoxDecoration(borderRadius: BorderRadius.circular(10), border: Border.all(color: wireSrc ? cs.primary : selected ? cs.primary : sc.withValues(alpha: 0.5), width: selected || wireSrc ? 2.5 : 1)),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          // Header
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            decoration: BoxDecoration(color: sc.withValues(alpha: 0.1), borderRadius: const BorderRadius.vertical(top: Radius.circular(9))),
+            child: Row(children: [
+              Icon(_iconFor(block), size: 16, color: sc), const SizedBox(width: 6),
+              Expanded(child: Text(name, maxLines: 1, overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.labelMedium?.copyWith(fontWeight: FontWeight.w600))),
+              if (selected) Icon(Icons.check_circle_rounded, size: 16, color: cs.primary),
+            ]),
+          ),
+          // Body
+          Expanded(child: Padding(padding: const EdgeInsets.all(8), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            if (tools.isNotEmpty)
+              Wrap(spacing: 4, runSpacing: 2, children: tools.take(3).map((t) => Container(padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2), decoration: BoxDecoration(color: cs.surfaceContainerHighest, borderRadius: BorderRadius.circular(4)), child: Text('$t', style: TextStyle(fontSize: 9, color: cs.onSurfaceVariant)))).toList()),
+            if (tools.isNotEmpty) const SizedBox(height: 4),
+            Text(_preview(block), maxLines: 2, overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.bodySmall?.copyWith(fontSize: 10)),
+            if (note != null && note!.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 4), child: Row(children: [Icon(Icons.sticky_note_2_rounded, size: 10, color: Colors.amber), const SizedBox(width: 4), Expanded(child: Text(note!, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 9, color: Colors.amber.shade700)))])),
+          ]))),
+          // Footer
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(color: cs.surfaceContainerHighest.withValues(alpha: 0.5), borderRadius: const BorderRadius.vertical(bottom: Radius.circular(9))),
+            child: Row(children: [
+              const _Dot(color: Colors.blue, size: 6), const SizedBox(width: 4), Text('IN', style: TextStyle(fontSize: 8, color: cs.outline)),
+              const Spacer(),
+              Text(status, style: TextStyle(fontSize: 8, color: sc)),
+              const Spacer(),
+              Text('OUT', style: TextStyle(fontSize: 8, color: cs.outline)), const SizedBox(width: 4), const _Dot(color: Colors.green, size: 6),
+            ]),
+          ),
+        ]),
+      ),
+    );
+  }
+}
+
+class _Dot extends StatelessWidget {
+  const _Dot({required this.color, this.size = 10});
+  final Color color;
+  final double size;
+  @override
+  Widget build(BuildContext context) => DecoratedBox(decoration: BoxDecoration(color: color, shape: BoxShape.circle), child: SizedBox.square(dimension: size));
+}
+
+class _EndPoint extends StatelessWidget {
+  const _EndPoint({required this.icon, required this.title, required this.subtitle, required this.color});
+  final IconData icon;
+  final String title, subtitle;
+  final Color color;
+  @override
+  Widget build(BuildContext context) => Material(color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.92), elevation: 8, borderRadius: BorderRadius.circular(10), child: Container(width: 180, padding: const EdgeInsets.all(12), decoration: BoxDecoration(borderRadius: BorderRadius.circular(10), border: Border.all(color: color.withValues(alpha: 0.8), width: 2)), child: Row(children: [Icon(icon, color: color, size: 22), const SizedBox(width: 10), Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [Text(title, style: Theme.of(context).textTheme.labelMedium?.copyWith(color: color, fontWeight: FontWeight.bold)), Text(subtitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.bodySmall)]))])));
+}
+
+class _WireBar extends StatelessWidget {
+  const _WireBar({required this.wire, required this.onDelete, required this.onClear});
+  final Map<String, dynamic> wire;
+  final VoidCallback onDelete, onClear;
+  @override
+  Widget build(BuildContext context) => Material(color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.95), elevation: 10, borderRadius: BorderRadius.circular(8), child: Padding(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8), child: Row(children: [const Icon(Icons.cable_rounded, size: 18), const SizedBox(width: 8), Expanded(child: Text('${wire['source_step_id'] ?? '?'} \u2192 ${wire['target_step_id'] ?? '?'}', maxLines: 1, overflow: TextOverflow.ellipsis)), if (wire['label'] != null) Container(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2), decoration: BoxDecoration(color: Theme.of(context).colorScheme.surfaceContainerHighest, borderRadius: BorderRadius.circular(4)), child: Text('${wire['label']}', style: Theme.of(context).textTheme.labelSmall)), const SizedBox(width: 8), IconButton(tooltip: 'Disconnect', onPressed: onDelete, icon: const Icon(Icons.link_off_rounded, size: 18)), IconButton(tooltip: 'Close', onPressed: onClear, icon: const Icon(Icons.close_rounded, size: 18))])));
+}
+
+class _WirePainter extends CustomPainter {
+  const _WirePainter({required this.blocks, required this.wires, required this.runState, required this.cs, required this.selWire});
+  final List<Map<String, dynamic>> blocks, wires;
+  final Map<String, dynamic>? runState;
+  final ColorScheme cs;
+  final String? selWire;
+
+  @override
+  void paint(Canvas c, Size s) {
+    final map = {for (final b in blocks) b['step_id']?.toString(): b};
+    for (final w in wires) {
+      final src = map[w['source_step_id']?.toString()], tgt = map[w['target_step_id']?.toString()];
+      if (src == null || tgt == null) continue;
+      final a = _pos(src) + const Offset(230, 75), b = _pos(tgt) + const Offset(0, 75);
+      final p = Path()..moveTo(a.dx, a.dy)..cubicTo(a.dx + 90, a.dy, b.dx - 90, b.dy, b.dx, b.dy);
+      final st = _stepStatus(runState, w['target_step_id']?.toString()), sel = w['id']?.toString() == selWire;
+      // Dashed if no label
       final paint = Paint()
-        ..color = _statusColor(colorScheme, status).withValues(alpha: 0.82)
-        ..strokeWidth = selected ? 5 : status == 'running' ? 3.4 : 2.2
-        ..style = PaintingStyle.stroke
-        ..strokeCap = StrokeCap.round;
-      canvas.drawPath(path, paint);
-      if (selected) {
-        canvas.drawCircle(
-          Offset.lerp(sourcePos, targetPos, 0.5)!,
-          7,
-          Paint()..color = colorScheme.primary,
-        );
+        ..color = _statusColor(cs, st).withValues(alpha: 0.82)
+        ..strokeWidth = sel ? 5 : st == 'running' ? 3.4 : 2.2
+        ..style = PaintingStyle.stroke..strokeCap = StrokeCap.round;
+      c.drawPath(p, paint);
+      // Arrow at midpoint
+      if (st != 'running') {
+        final mid = Offset.lerp(a, b, 0.5)!;
+        final arrowPaint = Paint()..color = _statusColor(cs, st)..style = PaintingStyle.fill;
+        final arrowPath = Path()..moveTo(mid.dx, mid.dy - 5)..lineTo(mid.dx + 8, mid.dy)..lineTo(mid.dx, mid.dy + 5)..close();
+        c.drawPath(arrowPath, arrowPaint);
+      }
+      if (sel) c.drawCircle(Offset.lerp(a, b, 0.5)!, 7, Paint()..color = cs.primary);
+      // Label
+      if (w['label'] != null) {
+        final tp = TextPainter(text: TextSpan(text: w['label'], style: TextStyle(color: cs.onSurface, fontSize: 9)), textDirection: TextDirection.ltr)..layout();
+        tp.paint(c, Offset.lerp(a, b, 0.5)! - Offset(tp.width / 2, tp.height + 8));
       }
     }
   }
 
   @override
-  bool shouldRepaint(covariant _WirePainter oldDelegate) {
-    return oldDelegate.blocks != blocks ||
-        oldDelegate.wires != wires ||
-        oldDelegate.runState != runState ||
-        oldDelegate.selectedWireId != selectedWireId;
-  }
+  bool shouldRepaint(covariant _WirePainter o) => o.blocks != blocks || o.wires != wires || o.runState != runState || o.selWire != selWire;
 }
 
-class _CanvasEndpoint extends StatelessWidget {
-  const _CanvasEndpoint({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    required this.color,
-  });
-
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  final Color color;
-
+class _WorkflowPicker extends StatelessWidget {
+  const _WorkflowPicker({required this.items, required this.selectedId});
+  final List<dynamic> items;
+  final String? selectedId;
   @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.92),
-      elevation: 8,
-      borderRadius: BorderRadius.circular(8),
-      child: Container(
-        width: 170,
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: color.withValues(alpha: 0.8), width: 1.4),
-        ),
-        child: Row(
-          children: [
-            Icon(icon, color: color),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(title, style: Theme.of(context).textTheme.labelLarge?.copyWith(color: color)),
-                  Text(subtitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.bodySmall),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+  Widget build(BuildContext context) => ListView.separated(padding: const EdgeInsets.all(12), itemCount: items.length, separatorBuilder: (_, __) => const SizedBox(height: 8), itemBuilder: (_, i) {
+    final w = Map<String, dynamic>.from(items[i] as Map);
+    final id = w['draft_id']?.toString() ?? '';
+    return ListTile(selected: id == selectedId, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)), tileColor: Theme.of(context).colorScheme.surface, leading: const Icon(Icons.account_tree_rounded), title: Text('${w['name'] ?? 'Workflow'}', overflow: TextOverflow.ellipsis), subtitle: Text('${w['status'] ?? 'draft'} \u2022 ${(w['blocks'] as List?)?.length ?? 0} blocks'), onTap: () { HapticFeedback.selectionClick(); Navigator.pop(context, w); });
+  });
 }
 
-class _SelectedWireBar extends StatelessWidget {
-  const _SelectedWireBar({
-    required this.wire,
-    required this.onDelete,
-    required this.onClear,
-  });
-
-  final Map<String, dynamic> wire;
-  final VoidCallback onDelete;
-  final VoidCallback onClear;
-
+class _EmptyCanvas extends StatelessWidget {
+  const _EmptyCanvas({required this.onCreate});
+  final VoidCallback onCreate;
   @override
-  Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    return Material(
-      color: colorScheme.surface.withValues(alpha: 0.95),
-      elevation: 10,
-      borderRadius: BorderRadius.circular(8),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-        child: Row(
-          children: [
-            const Icon(Icons.cable_rounded, size: 18),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                '${wire['source_step_id'] ?? 'source'} -> ${wire['target_step_id'] ?? 'target'}',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-            IconButton(
-              tooltip: 'Disconnect wire',
-              onPressed: onDelete,
-              icon: const Icon(Icons.link_off_rounded),
-            ),
-            IconButton(
-              tooltip: 'Close',
-              onPressed: onClear,
-              icon: const Icon(Icons.close_rounded),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+  Widget build(BuildContext context) => Stack(children: [const Positioned.fill(child: ColoredBox(color: Colors.black12)), Center(child: Column(mainAxisSize: MainAxisSize.min, children: [const Icon(Icons.account_tree_rounded, size: 64, color: Colors.white38), const SizedBox(height: 16), const Text('No workflows yet', style: TextStyle(color: Colors.white54, fontSize: 18)), const SizedBox(height: 24), FilledButton.icon(onPressed: onCreate, icon: const Icon(Icons.add_rounded), label: const Text('Create your first workflow'))]))]);
 }
 
-class _BlockDetailsSheet extends StatelessWidget {
-  const _BlockDetailsSheet({
-    required this.block,
-    required this.status,
-    required this.output,
-    required this.connectedWires,
-    required this.onConnect,
-    required this.onDeleteWires,
-    required this.onDeleteBlock,
-  });
-
+class _BlockDetails extends ConsumerWidget {
+  const _BlockDetails({required this.block, required this.status, required this.output, required this.wires, required this.onConnect, required this.onDelWires, required this.onDel, required this.onAddNote});
   final Map<String, dynamic> block;
   final String status;
   final Map<String, dynamic>? output;
-  final List<Map<String, dynamic>> connectedWires;
-  final VoidCallback onConnect;
-  final VoidCallback onDeleteWires;
-  final VoidCallback onDeleteBlock;
+  final List<Map<String, dynamic>> wires;
+  final VoidCallback onConnect, onDelWires, onDel;
+  final ValueChanged<String> onAddNote;
 
   @override
-  Widget build(BuildContext context) {
-    final blockId = block['block_id']?.toString() ?? 'Block';
-    final stepId = block['step_id']?.toString() ?? 'step';
-    return Padding(
-      padding: EdgeInsets.fromLTRB(16, 0, 16, MediaQuery.viewInsetsOf(context).bottom + 18),
-      child: ListView(
-        shrinkWrap: true,
-        children: [
-          Row(
-            children: [
-              Icon(_iconForBlock(block), color: _statusColor(Theme.of(context).colorScheme, status)),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  block['display_name']?.toString().isNotEmpty == true ? block['display_name'].toString() : blockId,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.titleLarge,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Text('$stepId - $status', style: Theme.of(context).textTheme.labelMedium),
-          const Divider(height: 24),
-          _DetailSection(title: 'Tools', values: [
-            'Connect from this block',
-            'Disconnect ${connectedWires.length} wire${connectedWires.length == 1 ? '' : 's'}',
-            'Delete block',
-          ]),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              FilledButton.icon(onPressed: onConnect, icon: const Icon(Icons.cable_rounded), label: const Text('Connect')),
-              OutlinedButton.icon(onPressed: connectedWires.isEmpty ? null : onDeleteWires, icon: const Icon(Icons.link_off_rounded), label: const Text('Disconnect')),
-              OutlinedButton.icon(onPressed: onDeleteBlock, icon: const Icon(Icons.delete_outline_rounded), label: const Text('Delete')),
-            ],
-          ),
-          const SizedBox(height: 18),
-          _DetailSection(title: 'Input bindings', values: _mapLines(block['input_bindings'])),
-          _DetailSection(title: 'Config', values: _mapLines(block['config'])),
-          if (connectedWires.isNotEmpty)
-            _DetailSection(
-              title: 'Connected wires',
-              values: connectedWires
-                  .map((wire) => '${wire['source_step_id'] ?? 'source'} -> ${wire['target_step_id'] ?? 'target'}:${wire['target_port'] ?? 'input'}')
-                  .toList(),
-            ),
-          if (output != null) _DetailSection(title: 'Last output', values: _mapLines(output)),
-        ],
-      ),
-    );
+  Widget build(BuildContext context, WidgetRef ref) {
+    final bid = block['block_id']?.toString() ?? 'Block', sid = block['step_id']?.toString() ?? 'step', cs = Theme.of(context).colorScheme;
+    final config = block['config'] as Map? ?? const {};
+    final tools = (config['tools'] as List? ?? []).map((e) => e.toString()).toList();
+    final name = block['display_name']?.toString().isNotEmpty == true ? block['display_name'].toString() : bid;
+    final noteCtrl = TextEditingController(text: block['note']?.toString() ?? '');
+    return Padding(padding: EdgeInsets.fromLTRB(16, 0, 16, MediaQuery.viewInsetsOf(context).bottom + 18), child: ListView(shrinkWrap: true, children: [
+      Row(children: [Icon(_iconFor(block), color: _statusColor(cs, status), size: 28), const SizedBox(width: 10), Expanded(child: Text(name, style: Theme.of(context).textTheme.titleLarge))]),
+      const SizedBox(height: 6), Text('$sid \u2022 $status', style: Theme.of(context).textTheme.labelMedium), const Divider(height: 20),
+      // Note field
+      TextField(controller: noteCtrl, decoration: const InputDecoration(labelText: 'Note', hintText: 'Add a note to this block...', prefixIcon: Icon(Icons.sticky_note_2_rounded), border: OutlineInputBorder()), onChanged: onAddNote, minLines: 1, maxLines: 2),
+      const SizedBox(height: 12),
+      if (tools.isNotEmpty) _Section(title: 'RIP Tools (${tools.length})', lines: tools),
+      _Section(title: 'Input Bindings', lines: _mapLines(block['input_bindings'])),
+      _Section(title: 'Configuration', lines: _mapLines(block['config'])),
+      if (wires.isNotEmpty) _Section(title: 'Wires (${wires.length})', lines: wires.map((w) => '${w['source_step_id'] ?? '?'} \u2192 ${w['target_step_id'] ?? '?'}${w['label'] != null ? ' [${w['label']}]' : ''}').toList()),
+      if (output != null) _Section(title: 'Last Output', lines: _mapLines(output)),
+      const SizedBox(height: 12),
+      Wrap(spacing: 8, runSpacing: 8, children: [
+        FilledButton.icon(onPressed: onConnect, icon: const Icon(Icons.cable_rounded), label: const Text('Connect')),
+        OutlinedButton.icon(onPressed: wires.isEmpty ? null : onDelWires, icon: const Icon(Icons.link_off_rounded), label: const Text('Disconnect All')),
+        OutlinedButton.icon(onPressed: onDel, icon: const Icon(Icons.delete_outline_rounded), label: const Text('Delete'), style: OutlinedButton.styleFrom(foregroundColor: cs.error)),
+      ]),
+    ]));
   }
 }
 
-class _DetailSection extends StatelessWidget {
-  const _DetailSection({required this.title, required this.values});
-
+class _Section extends StatelessWidget {
+  const _Section({required this.title, required this.lines});
   final String title;
-  final List<String> values;
+  final List<String> lines;
+  @override
+  Widget build(BuildContext context) => Padding(padding: const EdgeInsets.only(bottom: 12), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(title, style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600)), const SizedBox(height: 4), if (lines.isEmpty) Text('None', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.grey)) else ...lines.map((l) => Padding(padding: const EdgeInsets.only(bottom: 3), child: Container(width: double.infinity, padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.5), borderRadius: BorderRadius.circular(6)), child: SelectableText(l, style: Theme.of(context).textTheme.bodySmall?.copyWith(fontFamily: 'monospace')))))]));
+}
+
+// ============================================================
+// QUICK CONFIG (same as before)
+// ============================================================
+
+class _Configured {
+  final Map<String, dynamic> config, bindings;
+  const _Configured({required this.config, required this.bindings});
+}
+
+class _QuickConfigSheet {
+  static Future<_Configured?> show(BuildContext ctx, Map<String, dynamic> block, List<Map<String, dynamic>> existing, WidgetRef ref) {
+    final bid = block['id']?.toString() ?? '';
+    return showModalBottomSheet<_Configured>(context: ctx, isScrollControlled: true, showDragHandle: true, builder: (_) {
+      if (bid.toLowerCase().contains('rip') || bid.toLowerCase().contains('context')) return _RIPQuickConfig();
+      if (bid == 'prompt.ask_ai') return _PromptQuickConfig(ref: ref);
+      if (bid.contains('approval')) return _ApprovalQuickConfig();
+      if (bid.contains('terminal')) return _TerminalQuickConfig();
+      if (bid.contains('notification')) return _NotificationQuickConfig();
+      return _GenericQuickConfig(block: block);
+    });
+  }
+}
+
+class _RIPQuickConfig extends StatefulWidget {
+  const _RIPQuickConfig();
+  @override
+  State<_RIPQuickConfig> createState() => _RIPQuickConfigState();
+}
+
+class _RIPQuickConfigState extends State<_RIPQuickConfig> {
+  final _tools = const [
+    {'name': 'search', 'desc': 'Semantic search across the codebase', 'icon': '🔍'},
+    {'name': 'trace', 'desc': 'Trace dependency chains (callers and callees)', 'icon': '📊'},
+    {'name': 'explain', 'desc': 'Explain architecture and code structure', 'icon': '💡'},
+    {'name': 'impact', 'desc': 'Analyze impact of proposed changes', 'icon': '🔬'},
+    {'name': 'architecture', 'desc': 'Generate architecture overview', 'icon': '🏗️'},
+    {'name': 'metrics', 'desc': 'Code metrics and complexity analysis', 'icon': '📈'},
+    {'name': 'dead_code', 'desc': 'Detect unused functions and classes', 'icon': '💀'},
+    {'name': 'onboard', 'desc': 'Generate onboarding guides', 'icon': '📚'},
+  ];
+  final _selected = <String>{};
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 14),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(title, style: Theme.of(context).textTheme.titleSmall),
+    final cs = Theme.of(context).colorScheme;
+    return Padding(padding: EdgeInsets.fromLTRB(16, 0, 16, MediaQuery.viewInsetsOf(context).bottom + 16), child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      Row(children: [const Icon(Icons.search_rounded, color: Color(0xFF8B5CF6)), const SizedBox(width: 10), Expanded(child: Text('RIP Intelligence', style: Theme.of(context).textTheme.titleLarge))]),
+      const SizedBox(height: 4), Text('Select tools to include in this block.', style: Theme.of(context).textTheme.bodySmall),
+      const SizedBox(height: 12),
+      Row(children: [TextButton.icon(onPressed: () => setState(() => _selected.addAll(_tools.map((t) => '${t['name']}'))), icon: const Icon(Icons.select_all_rounded, size: 16), label: const Text('All')), TextButton.icon(onPressed: () => setState(() => _selected.clear()), icon: const Icon(Icons.deselect_rounded, size: 16), label: const Text('Clear')), const Spacer(), Text('${_selected.length}', style: Theme.of(context).textTheme.labelMedium)]),
+      const SizedBox(height: 6),
+      Flexible(child: ListView(shrinkWrap: true, children: _tools.map((t) {
+        final name = '${t['name']}', sel = _selected.contains(name);
+        return Card(margin: const EdgeInsets.only(bottom: 4), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: BorderSide(color: sel ? const Color(0xFF8B5CF6) : cs.outlineVariant, width: sel ? 2 : 1)), child: InkWell(borderRadius: BorderRadius.circular(8), onTap: () => setState(() => sel ? _selected.remove(name) : _selected.add(name)), child: Padding(padding: const EdgeInsets.all(10), child: Row(children: [
+          Container(width: 20, height: 20, decoration: BoxDecoration(shape: BoxShape.circle, color: sel ? const Color(0xFF8B5CF6) : Colors.transparent, border: Border.all(color: sel ? const Color(0xFF8B5CF6) : cs.outline, width: 2)), child: sel ? const Icon(Icons.check_rounded, size: 12, color: Colors.white) : null),
+          const SizedBox(width: 10), Expanded(child: Text(name, style: Theme.of(context).textTheme.titleSmall)), Text('${t['desc']}', style: Theme.of(context).textTheme.bodySmall?.copyWith(fontSize: 10)),
+        ]))));
+      }).toList())),
+      const SizedBox(height: 12),
+      FilledButton.icon(onPressed: _selected.isEmpty ? null : () => Navigator.pop(context, _Configured(config: {'tools': _selected.toList()}, bindings: {'query': {'source': 'trigger_query'}})), icon: const Icon(Icons.check_rounded), label: Text('Add ${_selected.length} tool${_selected.length == 1 ? '' : 's'}')),
+    ]));
+  }
+}
+
+class _PromptQuickConfig extends ConsumerStatefulWidget {
+  const _PromptQuickConfig({required this.ref});
+  final WidgetRef ref;
+  @override
+  ConsumerState<_PromptQuickConfig> createState() => _PromptQuickConfigState();
+}
+
+class _PromptQuickConfigState extends ConsumerState<_PromptQuickConfig> {
+  String? _pid;
+  final _quick = TextEditingController();
+  @override
+  void dispose() { _quick.dispose(); super.dispose(); }
+
+  @override
+  Widget build(BuildContext context) {
+    final prompts = widget.ref.watch(gatewayPromptTemplatesProvider);
+    final cs = Theme.of(context).colorScheme;
+    return Padding(padding: EdgeInsets.fromLTRB(16, 0, 16, MediaQuery.viewInsetsOf(context).bottom + 16), child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      Text('AI Analysis', style: Theme.of(context).textTheme.titleLarge),
+      const SizedBox(height: 12),
+      Flexible(child: prompts.when(data: (d) {
+        final templates = ((d['templates'] as List?) ?? []).whereType<Map>().map((m) => Map<String, dynamic>.from(m)).toList();
+        if (templates.isEmpty) return const Text('No templates yet. Write a quick prompt below.');
+        return ListView(shrinkWrap: true, children: [
+          Text('Saved Templates', style: Theme.of(context).textTheme.titleSmall),
           const SizedBox(height: 6),
-          if (values.isEmpty)
-            Text('None', style: Theme.of(context).textTheme.bodySmall)
-          else
-            for (final value in values)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 4),
-                child: SelectableText(value, style: Theme.of(context).textTheme.bodySmall),
-              ),
-        ],
-      ),
-    );
+          ...templates.map((t) {
+            final tid = t['id']?.toString() ?? '', sel = _pid == tid;
+            return Card(margin: const EdgeInsets.only(bottom: 6), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: BorderSide(color: sel ? cs.primary : cs.outlineVariant, width: sel ? 2 : 1)), child: InkWell(borderRadius: BorderRadius.circular(8), onTap: () => setState(() => _pid = sel ? null : tid), child: Padding(padding: const EdgeInsets.all(10), child: Row(children: [
+              Container(width: 20, height: 20, decoration: BoxDecoration(shape: BoxShape.circle, color: sel ? cs.primary : Colors.transparent, border: Border.all(color: sel ? cs.primary : cs.outline, width: 2)), child: sel ? Icon(Icons.check_rounded, size: 12, color: cs.onPrimary) : null),
+              const SizedBox(width: 10), Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text('${t['name'] ?? 'Untitled'}', style: Theme.of(context).textTheme.titleSmall), Text('${t['prompt_template'] ?? t['template'] ?? ''}'.replaceAll(RegExp(r'\s+'), ' ').trim(), maxLines: 2, overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.bodySmall?.copyWith(fontSize: 10))])),
+            ]))));
+          }),
+        ]);
+      }, loading: () => const CircularProgressIndicator(), error: (e, _) => Text('Error: $e'))),
+      const Divider(height: 20),
+      TextField(controller: _quick, minLines: 2, maxLines: 4, decoration: const InputDecoration(labelText: 'Quick Prompt', hintText: 'Analyze this code and find bugs...', border: OutlineInputBorder())),
+      const SizedBox(height: 12),
+      FilledButton.icon(onPressed: () {
+        final b = <String, dynamic>{'query': {'source': 'trigger_query'}};
+        if (_pid != null) b['prompt_id'] = {'source': 'literal', 'value': _pid};
+        else if (_quick.text.trim().isNotEmpty) b['prompt'] = {'source': 'literal', 'value': _quick.text.trim()};
+        else return;
+        Navigator.pop(context, _Configured(config: {}, bindings: b));
+      }, icon: const Icon(Icons.check_rounded), label: const Text('Add Block')),
+    ]));
   }
 }
 
-class _CanvasChip extends StatelessWidget {
-  const _CanvasChip({required this.icon, required this.label});
-
-  final IconData icon;
-  final String label;
-
+class _ApprovalQuickConfig extends StatefulWidget {
+  const _ApprovalQuickConfig();
   @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Theme.of(context).colorScheme.surface,
-      borderRadius: BorderRadius.circular(8),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 16),
-            const SizedBox(width: 6),
-            Text(label, style: Theme.of(context).textTheme.labelMedium),
-          ],
-        ),
-      ),
-    );
-  }
+  State<_ApprovalQuickConfig> createState() => _ApprovalQuickConfigState();
 }
 
-class _PortDot extends StatelessWidget {
-  const _PortDot({required this.color});
+class _ApprovalQuickConfigState extends State<_ApprovalQuickConfig> {
+  String _when = 'always';
+  String _timeout = '24';
 
-  final Color color;
+  @override
+  Widget build(BuildContext context) => Padding(padding: EdgeInsets.fromLTRB(16, 0, 16, MediaQuery.viewInsetsOf(context).bottom + 16), child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+    Text('Approval Gate', style: Theme.of(context).textTheme.titleLarge),
+    const SizedBox(height: 4), Text('Pause workflow until reviewed.', style: Theme.of(context).textTheme.bodySmall),
+    const SizedBox(height: 12),
+    Text('When to pause:', style: Theme.of(context).textTheme.titleSmall),
+    RadioListTile<String>(title: const Text('Always'), value: 'always', groupValue: _when, onChanged: (v) => setState(() => _when = v!), dense: true),
+    RadioListTile<String>(title: const Text('If high risk'), value: 'risk', groupValue: _when, onChanged: (v) => setState(() => _when = v!), dense: true),
+    RadioListTile<String>(title: const Text('Protected files'), value: 'protected', groupValue: _when, onChanged: (v) => setState(() => _when = v!), dense: true),
+    const SizedBox(height: 8),
+    TextField(decoration: const InputDecoration(labelText: 'Timeout (hours)', border: OutlineInputBorder()), keyboardType: TextInputType.number, onChanged: (v) => _timeout = v, controller: TextEditingController(text: _timeout)),
+    const SizedBox(height: 12),
+    FilledButton.icon(onPressed: () => Navigator.pop(context, _Configured(config: {'condition': _when, 'timeout_hours': int.tryParse(_timeout) ?? 24}, bindings: {})), icon: const Icon(Icons.check_rounded), label: const Text('Add Block')),
+  ]));
+}
+
+class _TerminalQuickConfig extends StatefulWidget {
+  const _TerminalQuickConfig();
+  @override
+  State<_TerminalQuickConfig> createState() => _TerminalQuickConfigState();
+}
+
+class _TerminalQuickConfigState extends State<_TerminalQuickConfig> {
+  final _cmd = TextEditingController(text: 'pytest');
+  final _cwd = TextEditingController();
+
+  @override
+  void dispose() { _cmd.dispose(); _cwd.dispose(); super.dispose(); }
+
+  @override
+  Widget build(BuildContext context) => Padding(padding: EdgeInsets.fromLTRB(16, 0, 16, MediaQuery.viewInsetsOf(context).bottom + 16), child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+    Text('Terminal', style: Theme.of(context).textTheme.titleLarge),
+    const SizedBox(height: 12),
+    TextField(controller: _cmd, decoration: const InputDecoration(labelText: 'Command', hintText: 'pytest', border: OutlineInputBorder())),
+    const SizedBox(height: 10),
+    TextField(controller: _cwd, decoration: const InputDecoration(labelText: 'Working directory (optional)', border: OutlineInputBorder())),
+    const SizedBox(height: 12),
+    FilledButton.icon(onPressed: _cmd.text.trim().isEmpty ? null : () {
+      final config = <String, dynamic>{'command': _cmd.text.trim()};
+      if (_cwd.text.trim().isNotEmpty) config['cwd'] = _cwd.text.trim();
+      Navigator.pop(context, _Configured(config: config, bindings: {}));
+    }, icon: const Icon(Icons.check_rounded), label: const Text('Add Block')),
+  ]));
+}
+
+class _NotificationQuickConfig extends StatefulWidget {
+  const _NotificationQuickConfig();
+  @override
+  State<_NotificationQuickConfig> createState() => _NotificationQuickConfigState();
+}
+
+class _NotificationQuickConfigState extends State<_NotificationQuickConfig> {
+  String _channel = 'push';
+  final _msg = TextEditingController(text: 'Workflow completed');
+
+  @override
+  void dispose() { _msg.dispose(); super.dispose(); }
+
+  @override
+  Widget build(BuildContext context) => Padding(padding: EdgeInsets.fromLTRB(16, 0, 16, MediaQuery.viewInsetsOf(context).bottom + 16), child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+    Text('Notification', style: Theme.of(context).textTheme.titleLarge),
+    const SizedBox(height: 12),
+    SegmentedButton<String>(segments: const [ButtonSegment(value: 'push', label: Text('Push')), ButtonSegment(value: 'in_app', label: Text('In-App')), ButtonSegment(value: 'slack', label: Text('Slack'))], selected: {_channel}, onSelectionChanged: (v) => setState(() => _channel = v.first)),
+    const SizedBox(height: 10),
+    TextField(controller: _msg, decoration: const InputDecoration(labelText: 'Message', border: OutlineInputBorder())),
+    const SizedBox(height: 12),
+    FilledButton.icon(onPressed: () => Navigator.pop(context, _Configured(config: {'channel': _channel, 'message': _msg.text.trim()}, bindings: {})), icon: const Icon(Icons.check_rounded), label: const Text('Add Block')),
+  ]));
+}
+
+class _GenericQuickConfig extends StatefulWidget {
+  const _GenericQuickConfig({required this.block});
+  final Map<String, dynamic> block;
+  @override
+  State<_GenericQuickConfig> createState() => _GenericQuickConfigState();
+}
+
+class _GenericQuickConfigState extends State<_GenericQuickConfig> {
+  final _bindings = <String, String>{};
 
   @override
   Widget build(BuildContext context) {
-    return DecoratedBox(
-      decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-      child: const SizedBox.square(dimension: 10),
-    );
+    final inputs = _schemaProps(_schemaMap(widget.block['input_schema']));
+    final required = _schemaRequired(_schemaMap(widget.block['input_schema']));
+    return Padding(padding: EdgeInsets.fromLTRB(16, 0, 16, MediaQuery.viewInsetsOf(context).bottom + 16), child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      Text(widget.block['name']?.toString() ?? 'Block', style: Theme.of(context).textTheme.titleLarge),
+      const SizedBox(height: 12),
+      if (inputs.isEmpty) Text('No inputs needed.', style: Theme.of(context).textTheme.bodySmall) else Flexible(child: ListView(shrinkWrap: true, children: inputs.keys.map((k) => Padding(padding: const EdgeInsets.only(bottom: 10), child: TextField(decoration: InputDecoration(labelText: '${_fieldLabel(k)}${required.contains(k) ? ' *' : ''}', hintText: 'Leave empty for chat input', border: const OutlineInputBorder()), onChanged: (v) => _bindings[k] = v))).toList())),
+      const SizedBox(height: 12),
+      FilledButton.icon(onPressed: () {
+        final b = <String, dynamic>{};
+        for (final k in inputs.keys) b[k] = {'source': (_bindings[k]?.isNotEmpty == true) ? 'literal' : 'trigger_query', if (_bindings[k]?.isNotEmpty == true) 'value': _bindings[k]};
+        Navigator.pop(context, _Configured(config: {}, bindings: b));
+      }, icon: const Icon(Icons.check_rounded), label: const Text('Add Block')),
+    ]));
   }
 }
 
 class _BlockPalette extends StatelessWidget {
   const _BlockPalette({required this.blocks});
-
   final List<Map<String, dynamic>> blocks;
 
   @override
   Widget build(BuildContext context) {
     final grouped = <String, List<Map<String, dynamic>>>{};
-    for (final block in blocks) {
-      final kind = block['kind']?.toString() ?? 'custom';
-      grouped.putIfAbsent(kind, () => []).add(block);
-    }
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        for (final entry in grouped.entries) ...[
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 6),
-            child: Text(_groupTitle(entry.key), style: Theme.of(context).textTheme.titleSmall),
-          ),
-          for (final block in entry.value)
-            ListTile(
-              leading: Icon(_iconForKind(entry.key)),
-              title: Text('${block['name'] ?? block['id']}'),
-              subtitle: Text('${block['description'] ?? block['id']}'),
-              onTap: () => Navigator.pop(context, block),
-            ),
+    for (final b in blocks) grouped.putIfAbsent(b['kind']?.toString() ?? 'other', () => []).add(b);
+    final cs = Theme.of(context).colorScheme;
+    return Column(mainAxisSize: MainAxisSize.min, children: [
+      Padding(padding: const EdgeInsets.all(12), child: TextField(decoration: InputDecoration(hintText: 'Search blocks...', prefixIcon: const Icon(Icons.search_rounded), border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)), filled: true, fillColor: cs.surfaceContainerHighest), onChanged: (v) {} /* filter logic could go here */)),
+      Expanded(child: ListView(padding: const EdgeInsets.fromLTRB(16, 0, 16, 16), children: [
+        for (final e in grouped.entries) ...[
+          Padding(padding: const EdgeInsets.only(top: 12, bottom: 4), child: Row(children: [Icon(_kindIcon(e.key), size: 18, color: cs.primary), const SizedBox(width: 8), Text(_kindTitle(e.key), style: Theme.of(context).textTheme.titleSmall), const SizedBox(width: 8), Container(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1), decoration: BoxDecoration(color: cs.surfaceContainerHighest, borderRadius: BorderRadius.circular(8)), child: Text('${e.value.length}', style: Theme.of(context).textTheme.labelSmall))])),
+          ...e.value.map((b) => Card(margin: const EdgeInsets.only(bottom: 4), elevation: 0, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: BorderSide(color: cs.outlineVariant)), child: ListTile(leading: Icon(_iconFor(b), color: _displayColor(b), size: 22), title: Text('${b['name'] ?? b['id']}', style: Theme.of(context).textTheme.bodyMedium, overflow: TextOverflow.ellipsis), subtitle: Text('${b['description'] ?? ''}', maxLines: 1, overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.bodySmall), trailing: const Icon(Icons.add_circle_outline_rounded, size: 20), dense: true, onTap: () => Navigator.pop(context, b)))),
         ],
-      ],
-    );
+      ])),
+    ]);
   }
 }
 
-class _BlockConfigSheet extends StatefulWidget {
-  const _BlockConfigSheet({required this.block, required this.existingBlocks, required this.ref});
+// ============================================================
+// ALL HELPERS
+// ============================================================
 
-  final Map<String, dynamic> block;
-  final List<Map<String, dynamic>> existingBlocks;
-  final WidgetRef ref;
+List<Map<String, dynamic>> _blocks(Map<String, dynamic> w) => (w['blocks'] as List? ?? []).whereType<Map>().map((m) => Map<String, dynamic>.from(m)).toList();
+List<Map<String, dynamic>> _wires(Map<String, dynamic> w) => (w['wires'] as List? ?? []).whereType<Map>().map((m) => Map<String, dynamic>.from(m)).toList();
 
-  @override
-  State<_BlockConfigSheet> createState() => _BlockConfigSheetState();
+Offset _pos(Map<String, dynamic> b) {
+  final p = b['position'] as Map?;
+  return Offset((p?['x'] as num?)?.toDouble() ?? 120, (p?['y'] as num?)?.toDouble() ?? 180);
 }
 
-class _BlockConfigSheetState extends State<_BlockConfigSheet> {
-  final _literalController = TextEditingController();
-  final _configController = TextEditingController();
-  String _bindingSource = 'trigger_query';
-  String? _sourceStepId;
-  String? _promptId;
-
-  @override
-  void dispose() {
-    _literalController.dispose();
-    _configController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final blockId = widget.block['id']?.toString() ?? '';
-    final isPrompt = blockId == 'prompt.ask_ai';
-    final prompts = isPrompt ? widget.ref.watch(gatewayPromptTemplatesProvider) : null;
-    return Padding(
-      padding: EdgeInsets.only(
-        left: 16,
-        right: 16,
-        bottom: MediaQuery.viewInsetsOf(context).bottom + 16,
-      ),
-      child: ListView(
-        shrinkWrap: true,
-        children: [
-          Text('${widget.block['name'] ?? blockId}', style: Theme.of(context).textTheme.titleLarge),
-          const SizedBox(height: 12),
-          SegmentedButton<String>(
-            segments: const [
-              ButtonSegment(value: 'trigger_query', label: Text('Query')),
-              ButtonSegment(value: 'step_output', label: Text('Step')),
-              ButtonSegment(value: 'literal', label: Text('Literal')),
-            ],
-            selected: {_bindingSource},
-            onSelectionChanged: (value) => setState(() => _bindingSource = value.first),
-          ),
-          if (_bindingSource == 'step_output')
-            DropdownButtonFormField<String>(
-              value: _sourceStepId,
-              decoration: const InputDecoration(labelText: 'From step'),
-              items: [
-                for (final block in widget.existingBlocks)
-                  DropdownMenuItem(
-                    value: block['step_id']?.toString(),
-                    child: Text('${block['step_id']} - ${block['block_id']}'),
-                  ),
-              ],
-              onChanged: (value) => setState(() => _sourceStepId = value),
-            ),
-          if (_bindingSource == 'literal')
-            TextField(
-              controller: _literalController,
-              decoration: const InputDecoration(labelText: 'Literal value'),
-            ),
-          if (isPrompt)
-            prompts!.when(
-              data: (data) {
-                final templates = (data['templates'] as List? ?? const []).whereType<Map>().toList();
-                return DropdownButtonFormField<String>(
-                  value: _promptId,
-                  decoration: const InputDecoration(labelText: 'Prompt template'),
-                  items: [
-                    for (final template in templates)
-                      DropdownMenuItem(
-                        value: template['id']?.toString(),
-                        child: Text('${template['name'] ?? template['id']}'),
-                      ),
-                  ],
-                  onChanged: (value) => setState(() => _promptId = value),
-                );
-              },
-              loading: () => const LinearProgressIndicator(),
-              error: (error, _) => Text('Prompt templates unavailable: $error'),
-            ),
-          TextField(
-            controller: _configController,
-            minLines: 1,
-            maxLines: 3,
-            decoration: const InputDecoration(labelText: 'Config note'),
-          ),
-          const SizedBox(height: 12),
-          FilledButton.icon(
-            onPressed: !isPrompt || (_promptId != null && _promptId!.isNotEmpty)
-                ? () => Navigator.pop(context, _buildConfig(blockId))
-                : null,
-            icon: const Icon(Icons.check_rounded),
-            label: const Text('Add Block'),
-          ),
-          if (isPrompt && (_promptId == null || _promptId!.isEmpty))
-            Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: Text(
-                'Select a prompt template before adding this block.',
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-
-  _ConfiguredBlock _buildConfig(String blockId) {
-    final inputKey = blockId == 'terminal.run_tests'
-        ? 'command'
-        : blockId == 'workflow.approval'
-            ? 'title'
-            : blockId == 'prompt.ask_ai'
-                ? 'variables'
-                : 'query';
-    final binding = switch (_bindingSource) {
-      'literal' => {'source': 'literal', 'value': _literalController.text},
-      'step_output' => {'source': 'step_output', 'step_id': _sourceStepId, 'field': 'content'},
-      _ => {'source': 'trigger_query'},
-    };
-    final inputBindings = <String, dynamic>{inputKey: binding};
-    if (blockId == 'prompt.ask_ai') {
-      inputBindings['prompt_id'] = {'source': 'literal', 'value': _promptId};
-    }
-    return _ConfiguredBlock(
-      config: {
-        if (_configController.text.trim().isNotEmpty) 'note': _configController.text.trim(),
-      },
-      inputBindings: inputBindings,
-    );
-  }
+Map<String, double> _nextPos(Map<String, dynamic> w) {
+  final blocks = _blocks(w);
+  if (blocks.isEmpty) return const {'x': 160, 'y': 220};
+  final positions = blocks.map(_pos).toList();
+  final r = positions.reduce((a, b) => a.dx >= b.dx ? a : b);
+  return r.dx + 280 <= 17200 ? {'x': r.dx + 280, 'y': r.dy} : {'x': 160, 'y': positions.map((o) => o.dy).reduce((a, b) => a > b ? a : b) + 200};
 }
 
-class _ConfiguredBlock {
-  const _ConfiguredBlock({required this.config, required this.inputBindings});
-
-  final Map<String, dynamic> config;
-  final Map<String, dynamic> inputBindings;
+String _stepStatus(Map<String, dynamic>? s, String? id) {
+  if (id == null || s == null) return 'ready';
+  final st = (s['step_states'] as Map?)?[id];
+  return st is Map ? '${st['status'] ?? 'ready'}' : 'ready';
 }
 
-class _EmptyWorkflowDetail extends StatelessWidget {
-  const _EmptyWorkflowDetail();
-
-  @override
-  Widget build(BuildContext context) {
-    return const Center(child: Text('Select or create a workflow.'));
-  }
-}
-
-List<Map<String, dynamic>> _blocks(Map<String, dynamic> workflow) {
-  return (workflow['blocks'] as List? ?? const [])
-      .whereType<Map>()
-      .map((item) => Map<String, dynamic>.from(item))
-      .toList();
-}
-
-List<Map<String, dynamic>> _wires(Map<String, dynamic> workflow) {
-  return (workflow['wires'] as List? ?? const [])
-      .whereType<Map>()
-      .map((item) => Map<String, dynamic>.from(item))
-      .toList();
-}
-
-Offset _blockPosition(Map<String, dynamic> block) {
-  final position = block['position'] as Map?;
-  final x = position?['x'];
-  final y = position?['y'];
-  return Offset(
-    x is num ? x.toDouble() : 120,
-    y is num ? y.toDouble() : 180,
-  );
-}
-
-Map<String, double> _nextBlockPosition(Map<String, dynamic> workflow) {
-  final blocks = _blocks(workflow);
-  if (blocks.isEmpty) {
-    return const {'x': 160, 'y': 220};
-  }
-  final positions = blocks.map(_blockPosition).toList();
-  final rightMost = positions.reduce((a, b) => a.dx >= b.dx ? a : b);
-  final nextX = rightMost.dx + 260;
-  final nextY = rightMost.dy;
-  if (nextX <= 17200) {
-    return {'x': nextX, 'y': nextY};
-  }
-  final lowestY = positions.map((offset) => offset.dy).reduce((a, b) => a > b ? a : b);
-  return {'x': 160, 'y': lowestY + 190};
-}
-
-String _stepStatus(Map<String, dynamic>? state, String? stepId) {
-  if (stepId == null) return 'ready';
-  final stepStates = state?['step_states'] as Map?;
-  final step = stepStates?[stepId] as Map?;
-  return step?['status']?.toString() ?? 'ready';
-}
-
-Map<String, dynamic>? _stepOutput(Map<String, dynamic>? state, String? stepId) {
-  if (stepId == null) return null;
-  final stepStates = state?['step_states'] as Map?;
-  final step = stepStates?[stepId] as Map?;
-  final output = step?['output'];
-  if (output is Map<String, dynamic>) return output;
-  if (output is Map) return Map<String, dynamic>.from(output);
+Map<String, dynamic>? _stepOutput(Map<String, dynamic>? s, String? id) {
+  if (id == null || s == null) return null;
+  final st = (s['step_states'] as Map?)?[id];
+  if (st is Map) { final o = st['output']; if (o is Map) return Map<String, dynamic>.from(o); }
   return null;
 }
 
-List<String> _mapLines(Object? value) {
-  if (value == null) return const [];
-  if (value is Map) {
-    if (value.isEmpty) return const [];
-    return value.entries
-        .map((entry) => '${entry.key}: ${entry.value}')
-        .toList();
-  }
-  if (value is List) {
-    if (value.isEmpty) return const [];
-    return value.map((item) => '$item').toList();
-  }
-  return ['$value'];
+List<String> _mapLines(Object? v) {
+  if (v == null) return const [];
+  if (v is Map) return v.isEmpty ? const [] : v.entries.map((e) => '${e.key}: ${e.value}').toList();
+  if (v is List) return v.isEmpty ? const [] : v.map((i) => '$i').toList();
+  return ['$v'];
 }
 
-Color _statusColor(ColorScheme colorScheme, String status) {
-  return switch (status) {
-    'running' => colorScheme.primary,
-    'completed' => const Color(0xFF22C55E),
-    'failed' => colorScheme.error,
-    'awaiting_input' || 'awaiting_approval' => const Color(0xFFF59E0B),
-    'skipped' || 'disabled' => colorScheme.outline,
-    _ => colorScheme.onSurfaceVariant,
-  };
-}
+Map<String, dynamic> _schemaMap(Object? v) => v is Map ? Map<String, dynamic>.from(v) : const {};
+Map<String, dynamic> _schemaProps(Map<String, dynamic> s) => s['properties'] is Map ? Map<String, dynamic>.from(s['properties']) : const {};
+Set<String> _schemaRequired(Map<String, dynamic> s) => (s['required'] as List?)?.map((e) => '$e').toSet() ?? const {};
 
-IconData _iconForBlock(Map<String, dynamic> block) {
-  final blockId = block['block_id']?.toString() ?? '';
-  if (blockId.contains('approval')) return Icons.verified_user_rounded;
-  if (blockId.contains('terminal')) return Icons.checklist_rounded;
-  if (blockId.contains('github')) return Icons.call_merge_rounded;
-  if (blockId.contains('prompt')) return Icons.psychology_rounded;
-  if (blockId.contains('context') || blockId.contains('rip')) return Icons.search_rounded;
-  if (blockId.contains('tool')) return Icons.extension_rounded;
-  return Icons.widgets_rounded;
-}
-
-String _bindingPreview(Map<String, dynamic> block) {
-  final bindings = block['input_bindings'] as Map? ?? const {};
-  if (bindings.isEmpty) return 'No inputs configured';
-  final parts = <String>[];
-  for (final entry in bindings.entries.take(2)) {
-    final value = entry.value;
-    if (value is Map) {
-      parts.add('${entry.key}: ${value['source'] ?? 'input'}');
-    } else {
-      parts.add('${entry.key}: input');
+String _defaultPort(List<Map<String, dynamic>> blocks, String id) {
+  for (final b in blocks) {
+    if (b['step_id']?.toString() == id) {
+      final bid = b['block_id']?.toString() ?? '';
+      if (bid.contains('terminal')) return 'command';
+      if (bid.contains('approval')) return 'title';
+      if (bid.contains('prompt')) return 'variables';
+      return 'query';
     }
   }
-  return parts.join('\n');
+  return 'query';
 }
 
-String _defaultTargetPort(List<Map<String, dynamic>> blocks, String targetStepId) {
-  final target = blocks.cast<Map<String, dynamic>?>().firstWhere(
-        (block) => block?['step_id']?.toString() == targetStepId,
-        orElse: () => null,
-      );
-  final blockId = target?['block_id']?.toString() ?? '';
-  return blockId == 'terminal.run_tests'
-      ? 'command'
-      : blockId == 'workflow.approval'
-          ? 'title'
-          : blockId == 'prompt.ask_ai'
-              ? 'variables'
-              : 'query';
+String? _missingStep(Map<String, dynamic>? s) {
+  final m = s?['missing_inputs'] as Map?;
+  return m?.isEmpty == false ? m!.keys.first.toString() : null;
 }
 
-PipelineTrace _traceFromRunState(String runId, Map<String, dynamic> state) {
-  final steps = (state['step_states'] as Map? ?? const {}).values.whereType<Map>().toList();
+bool _hasStatus(Map<String, dynamic>? s, String st) => (s?['step_states'] as Map? ?? {}).values.any((x) => x is Map && x['status'] == st);
+
+PipelineTrace _makeTrace(String rid, Map<String, dynamic> s) {
+  final steps = (s['step_states'] as Map? ?? {}).values.whereType<Map>().toList();
   var seq = 0;
-  final events = <PipelineEvent>[
-    for (final step in steps)
-      PipelineEvent(
-        sessionId: runId,
-        stage: step['block_id']?.toString() ?? 'workflow_step',
-        status: _eventStatus(step['status']?.toString() ?? 'pending'),
-        detail: '${step['block_id'] ?? 'Step'}: ${step['status'] ?? 'pending'}',
-        meta: {
-          if (step['error'] != null) 'error': step['error'],
-        },
-        seq: ++seq,
-        timestamp: DateTime.tryParse(step['completed_at']?.toString() ?? '') ?? DateTime.now(),
-      ),
-    if (state['final_output'] != null)
-      PipelineEvent(
-        sessionId: runId,
-        stage: 'done',
-        status: 'done',
-        detail: 'Workflow completed',
-        meta: const {},
-        seq: ++seq,
-        timestamp: DateTime.now(),
-      ),
-  ];
-  return PipelineTrace(sessionId: runId, events: events);
+  return PipelineTrace(sessionId: rid, events: [
+    ...steps.map((st) => PipelineEvent(sessionId: rid, stage: st['block_id']?.toString() ?? 'step', status: st['status'] == 'completed' ? 'done' : '${st['status'] ?? 'pending'}', detail: '${st['block_id'] ?? 'Step'}: ${st['status'] ?? 'pending'}', meta: {if (st['error'] != null) 'error': st['error']}, seq: ++seq, timestamp: DateTime.tryParse(st['completed_at']?.toString() ?? '') ?? DateTime.now())),
+    if (s['final_output'] != null) PipelineEvent(sessionId: rid, stage: 'done', status: 'done', detail: 'Completed', meta: const {}, seq: ++seq, timestamp: DateTime.now()),
+  ]);
 }
 
-String _eventStatus(String status) {
-  return status == 'completed' ? 'done' : status;
+String _preview(Map<String, dynamic> b) {
+  final bindings = b['input_bindings'] as Map? ?? const {};
+  if (bindings.isEmpty) return 'From chat input';
+  return bindings.entries.take(2).map((e) => '${e.key}: ${e.value is Map ? e.value['source'] ?? '?' : '?'}').join('\n');
 }
 
-bool _hasStepStatus(Map<String, dynamic>? state, String status) {
-  return (state?['step_states'] as Map? ?? const {})
-      .values
-      .whereType<Map>()
-      .any((step) => step['status'] == status);
-}
-
-String? _missingStepId(Map<String, dynamic>? state) {
-  final missing = state?['missing_inputs'] as Map?;
-  if (missing == null || missing.isEmpty) return null;
-  return missing.keys.first.toString();
-}
-
-String _groupTitle(String kind) {
-  return switch (kind) {
-    'approval' => 'Approval',
-    'verification' => 'Verification',
-    'deployment' => 'Deployment',
-    'prompt' => 'Prompt + AI',
-    'retrieval' => 'Retrieval',
-    'tool' => 'Tools',
-    _ => 'Custom',
-  };
-}
-
-IconData _iconForKind(String kind) {
-  return switch (kind) {
-    'approval' => Icons.verified_user_rounded,
-    'verification' => Icons.checklist_rounded,
-    'deployment' => Icons.call_merge_rounded,
-    'prompt' => Icons.psychology_rounded,
-    'retrieval' => Icons.search_rounded,
-    'tool' => Icons.extension_rounded,
-    _ => Icons.widgets_rounded,
-  };
-}
+Color _statusColor(ColorScheme cs, String s) => switch (s) { 'running' => cs.primary, 'completed' => const Color(0xFF22C55E), 'failed' => cs.error, 'awaiting_input' || 'awaiting_approval' => const Color(0xFFF59E0B), _ => cs.onSurfaceVariant };
+IconData _iconFor(Map<String, dynamic> b) { final id = b['block_id']?.toString() ?? ''; if (id.contains('approval')) return Icons.verified_user_rounded; if (id.contains('terminal')) return Icons.terminal_rounded; if (id.contains('github')) return Icons.call_merge_rounded; if (id.contains('prompt') || id.contains('llm')) return Icons.psychology_rounded; if (id.contains('notification')) return Icons.notifications_rounded; if (id.contains('rip') || id.contains('context') || id.contains('search')) return Icons.search_rounded; return Icons.widgets_rounded; }
+String _fieldLabel(String n) => n.replaceAll('_', ' ').split(' ').where((w) => w.isNotEmpty).map((w) => '${w[0].toUpperCase()}${w.substring(1)}').join(' ');
+String _kindTitle(String k) => switch (k) { 'retrieval' => 'Code Intelligence', 'prompt' => 'AI & Prompts', 'tool' => 'Tools & Actions', 'approval' => 'Flow Control', 'verification' => 'Verification', 'deployment' => 'Deployment', 'notification' => 'Notifications', _ => 'Other' };
+IconData _kindIcon(String k) => switch (k) { 'retrieval' => Icons.search_rounded, 'prompt' => Icons.psychology_rounded, 'tool' => Icons.extension_rounded, 'approval' => Icons.verified_user_rounded, 'verification' => Icons.checklist_rounded, 'deployment' => Icons.call_merge_rounded, 'notification' => Icons.notifications_rounded, _ => Icons.widgets_rounded };
+Color _displayColor(Map<String, dynamic> b) { final h = b['display_color']?.toString() ?? ''; return h.startsWith('#') && h.length == 7 ? Color(int.parse('FF${h.substring(1)}', radix: 16)) : Colors.blueGrey; }

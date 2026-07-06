@@ -650,6 +650,28 @@ class RipClient {
     return data['data'] as Map<String, dynamic>? ?? data;
   }
 
+  Future<Map<String, dynamic>> createGatewayPromptTemplate({
+    required String name,
+    required String promptTemplate,
+    List<String> variables = const [],
+    String? systemPrompt,
+    String visibility = 'private',
+    CancelToken? cancelToken,
+  }) async {
+    final response = await _dio.post(
+      '/gateway/api/workflows/prompt-templates',
+      data: {
+        'name': name,
+        'prompt_template': promptTemplate,
+        'variables': variables,
+        if (systemPrompt != null && systemPrompt.trim().isNotEmpty) 'system_prompt': systemPrompt,
+        'visibility': visibility,
+      },
+      cancelToken: cancelToken,
+    );
+    return response.data as Map<String, dynamic>;
+  }
+
   Future<Map<String, dynamic>> createGatewayWorkflow({
     required String name,
     String scope = 'project',

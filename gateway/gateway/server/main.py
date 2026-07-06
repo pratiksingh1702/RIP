@@ -61,13 +61,13 @@ async def _background_oauth_refresh():
 async def lifespan(app: FastAPI):
     """Application lifespan for setup/teardown."""
     logger.info("Starting Context Gateway server", version=settings.version)
-    register_all_blocks()
     seed_llm_configs()
     await ensure_storage_schema()
     await seed_prompt_templates()
     await seed_workflows()
     await oauth.oauth_manager.ensure_oauth_providers()
     await get_source_registry().refresh()
+    register_all_blocks()
     
     # Start background health checks
     health_task = asyncio.create_task(_background_health_check())

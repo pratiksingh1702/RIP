@@ -42,6 +42,17 @@ def _resolve_binding(step_id: str, key: str, binding: Any, state: RunState) -> A
     if source in {"literal", "fixed"}:
         value = binding.get("value", binding.get("fixed_value"))
         return value if value not in (None, "") else MISSING
+    if source == "object":
+        fields = binding.get("fields")
+        if not isinstance(fields, dict):
+            return MISSING
+        resolved: dict[str, Any] = {}
+        for field, field_binding in fields.items():
+            value = _resolve_binding(step_id, f"{key}.{field}", field_binding, state)
+            if value is MISSING:
+                return MISSING
+            resolved[str(field)] = value
+        return resolved
     if source == "step_output":
         source_step_id = binding.get("step_id") or binding.get("source_step_id")
         source_step = state.step_states.get(source_step_id)

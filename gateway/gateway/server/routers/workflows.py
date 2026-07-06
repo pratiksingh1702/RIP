@@ -4,10 +4,10 @@ from typing import Any
 from uuid import UUID as UUIDType
 
 from fastapi import APIRouter, HTTPException, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 
-from gateway.core.blocks import get_block_registry
+from gateway.core.blocks import get_block_registry, register_all_blocks
 from gateway.core.workflow import get_workflow_engine
 from gateway.core.workflow.engine import _wire_to_dict, workflow_to_dict
 from gateway.server.request_context import gateway_user_id
@@ -96,6 +96,14 @@ class ReorderBlocksRequest(BaseModel):
 class RunWorkflowRequest(BaseModel):
     query: str
     project_id: str | None = None
+
+
+class CreatePromptTemplateRequest(BaseModel):
+    name: str
+    prompt_template: str
+    variables: list[str] = Field(default_factory=list)
+    system_prompt: str | None = None
+    visibility: str = "private"
 
 
 class AnswerInputRequest(BaseModel):
@@ -302,6 +310,7 @@ async def list_workflows(request: Request, project_id: str | None = None):
 async def list_workflow_blocks():
     """List registered blocks for mobile palette rendering."""
     try:
+        register_all_blocks()
         registry = get_block_registry()
         blocks = [_palette_card(block.describe()) for block in registry.list()]
         blocks.sort(key=lambda item: (item.get("kind", ""), item.get("name", item.get("id", ""))))
@@ -328,12 +337,51 @@ async def list_prompt_templates():
                     "id": template.id,
                     "name": template.name,
                     "version": template.version,
+                    "system_prompt": template.system_prompt,
+                    "prompt_template": template.prompt_template,
                     "variables": template.variables,
                     "visibility": template.visibility,
                 }
                 for template in templates
             ]
         }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/prompt-templates")
+async def create_prompt_template(body: CreatePromptTemplateRequest):
+    """Create a prompt template from mobile workflow builder."""
+    try:
+        variables = [item.strip() for item in body.variables if item.strip()]
+        template = PromptTemplate(
+            name=body.name.strip(),
+            version="1.0.0",
+            system_prompt=body.system_prompt.strip() if body.system_prompt else None,
+            prompt_template=body.prompt_template.strip(),
+            variables=variables,
+            owner_org="mobile",
+            visibility=body.visibility or "private",
+        )
+        if not template.name:
+            raise HTTPException(status_code=400, detail="Template name is required")
+        if not template.prompt_template:
+            raise HTTPException(status_code=400, detail="Prompt template is required")
+        async with async_session_factory() as session:
+            session.add(template)
+            await session.commit()
+            await session.refresh(template)
+        return {
+            "id": template.id,
+            "name": template.name,
+            "version": template.version,
+            "system_prompt": template.system_prompt,
+            "prompt_template": template.prompt_template,
+            "variables": template.variables,
+            "visibility": template.visibility,
+        }
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

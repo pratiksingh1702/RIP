@@ -12,6 +12,7 @@ from gateway.core.blocks.terminal import TerminalRunTestsBlock
 from gateway.core.events.bus import EventBus
 from gateway.core.workflow.dag import WorkflowDAG
 from gateway.core.workflow.run_state import RunState, StepState
+from gateway.core.workflow.input_resolver import resolve_step_inputs
 from gateway.core.workflow.engine import WorkflowEngine
 
 
@@ -108,6 +109,36 @@ def test_run_state_round_trips_bindings_and_missing_input_answers():
     assert restored.step_states["step_1"].output["content"] == "retrieved"
     assert restored.missing_inputs["step_2"] == "command"
     assert restored.provided_inputs["step_2.command"] == "pytest"
+
+
+def test_resolve_step_inputs_supports_prompt_variable_object_bindings():
+    state = RunState(trigger_query="explain auth")
+    state.step_states["step_1"] = StepState(
+        step_id="step_1",
+        block_id="context.retrieve",
+        status="completed",
+        output={"content": "retrieved context"},
+    )
+
+    inputs, missing = resolve_step_inputs(
+        "step_2",
+        {
+            "prompt_id": {"source": "literal", "value": "Explain Flow"},
+            "variables": {
+                "source": "object",
+                "fields": {
+                    "query": {"source": "trigger_query"},
+                    "context": {"source": "step_output", "step_id": "step_1", "field": "content"},
+                },
+            },
+        },
+        [],
+        state,
+    )
+
+    assert missing is None
+    assert inputs["prompt_id"] == "Explain Flow"
+    assert inputs["variables"] == {"query": "explain auth", "context": "retrieved context"}
 
 
 @pytest.mark.asyncio

@@ -95,4 +95,8 @@ class ToolBlock(Block):
             "kind": self.kind.value,
             "name": self.source.name,
             "description": getattr(self.source, 'description', f"Tool block for {getattr(self.source, 'id', self.source.name)}"),
+            "input_schema": self.input_schema,
+            "output_schema": self.output_schema,
+            "config_schema": self.config_schema,
+            "requires_capabilities": self.requires_capabilities,
         }

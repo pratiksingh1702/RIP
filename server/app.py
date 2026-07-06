@@ -61,12 +61,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     runtime = ServerRuntime(get_settings())
     app.state.runtime = runtime
     await runtime.startup()
-    register_all_blocks()
     seed_llm_configs()
     await ensure_gateway_storage_schema()
     await seed_prompt_templates()
     await seed_workflows()
     await get_gateway_source_registry().refresh()
+    register_all_blocks()
     try:
         yield
     finally:

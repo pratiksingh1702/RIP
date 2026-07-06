@@ -996,3 +996,231 @@ This is the literal build ledger for this plan, in the same checkbox convention 
 ---
 
 **End of specification.** Any AI agent implementing against this document should start at Phase A (§25, §28), verify each checkpoint against the "Non-Breaking, Additive" table in §26, never modify the Context Engine internals described as "preserved" in §8 — only wrap them — and skip anything marked "Parked" in §27 unless explicitly asked to build it.
+I've read the entire specification carefully. Here's my analysis of what this document is, what it does well, what concerns me, and what I'd recommend before implementation begins.
+
+---
+
+## What This Document Is
+
+This is a **complete, implementable architecture specification** that transforms your existing Context Gateway into a personal control plane for AI-assisted development. It's written as a single source of truth that any developer or AI agent can pick up and build from, module by module, without needing to re-derive intent from chat history.
+
+The key difference from our earlier discussions: **this document properly constrains scope to a single-user, single-machine reality.** It explicitly parks multi-tenancy, enterprise SSO, compliance-grade audit, billing, and cloud deployment as "do not build until needed" items. This is the right call.
+
+---
+
+## What It Does Well
+
+### 1. The "Preserved, Not Replaced" Principle Is Concrete
+
+Every section explicitly states what existing code is touched and what isn't. The Context Engine (§8) is declared untouchable — it only gets wrapped as a `context.retrieve` block. This isn't vague intent; it's a hard constraint enforced by the document structure.
+
+### 2. The Block Contract Is the Right Abstraction
+
+The `Block` interface (§5.2) is clean:
+
+```
+Block
+├── id, kind, input_schema, output_schema, config_schema
+├── run(ctx, inputs, config) -> BlockResult
+└── describe() -> BlockManifest
+```
+
+This unifies everything — RIP queries, MCP tools, LLM calls, approval gates, terminal commands, notifications — under one shape. The Workflow Engine doesn't need to know what a block does, only how to call it. This is the architecture that makes the mobile block-by-block builder possible.
+
+### 3. The Mobile Builder Design (§7.4) Is Practical
+
+Rather than requiring a desktop YAML editor, the spec defines:
+
+- **Build-time:** Tap "+ Add Block" → pick from palette → configure bindings → reorder → save.
+- **Run-time:** Open saved workflow → type a free-text query → system resolves `trigger_query` bindings using the existing Intent Classifier.
+- **API surface:** REST endpoints for CRUD on workflow drafts, publish, and run — all under the existing unified host/API-key.
+
+This is the killer feature. It's why the block architecture exists.
+
+### 4. The Event Bus Reuses Existing Infrastructure
+
+Rather than introducing Redis/Kafka, the spec absorbs the existing live-pipeline event stream (`intent`, `plan`, `source_start`, ... `done`) as the Event Bus (§5.4). Audit, Notification, and Analytics engines are just subscribers. This avoids building a second event system.
+
+### 5. LLM Resource Pool Is Appropriately Minimal (§14)
+
+No team budgets, no region compliance, no cost governance. Just a named registry of your configured models with health tracking and a simple `resolve(preferred_id, step) -> config` function. This wraps the existing `core/llm/client.py` fallback chain without replacing it.
+
+### 6. Deployment Architecture Is Honest (§16)
+
+Two modes only: Local (no Docker) and Single-Machine Server (Docker Compose on the same laptop). The Cloud-Hosted box is shown as "hypothetical, NOT part of this build." No Kubernetes, no load balancers, no managed services required.
+
+### 7. The Migration Plan (§26) Is a Table, Not Aspirational
+
+Every existing surface — `/gateway/api/context`, RIP CLI, MCP tools, API keys, OAuth flows, Flutter screens — has an explicit row stating what happens to it. Nothing is deprecated or removed.
+
+---
+
+## Concerns and Questions
+
+### 1. The Workflow Engine's State Machine Is Underspecified
+
+§7.2 says "DAG resolved topologically" and "State persists after every step." But there's no explicit state machine diagram for `WorkflowRun`. What are all the valid states? What transitions exist? What happens on:
+
+- Step timeout?
+- Block returning `ok: false`?
+- Approval gate timeout (approver never responds)?
+- Crash during a parallel step group where one sibling completed and one didn't?
+
+**Recommendation:** Add a state machine section before Phase B implementation:
+
+```
+WorkflowRun states:
+  pending → running → (awaiting_approval | awaiting_input) → running → completed
+  any active state → failed (with partial_results captured)
+  awaiting_approval → (running | rejected)
+  awaiting_input → running
+```
+
+### 2. The `trigger_query` Resolution Is Hand-Waved
+
+§7.4.3 says the existing Classifier/param-extraction path extracts values for `trigger_query` bindings. But the existing classifier maps intent → retrieval plan, not free text → structured parameter extraction for arbitrary workflow inputs.
+
+**Question:** When a workflow has three blocks each binding `source: trigger_query` to different fields (`query`, `bug_description`, `target_repository`), does the extraction happen once (shared) or per-block? If the LLM fallback is used for extraction, what's the prompt and what's the output schema?
+
+**Recommendation:** This is the riskiest single component in the mobile builder UX. Prototype it first, before building the full Workflow Engine.
+
+### 3. Prompt Engine Variable Scoping Is Implicit
+
+§11.3 defines `render(template, context: dict) -> str` with Jinja2-style substitution. But the context dictionary's structure — how `{{step_1.top_result}}` maps to actual execution state — isn't specified as a contract. If a workflow author binds `{{step_1.top_result}}` but `step_1` returns `{results: [{name: "foo"}]}`, what happens? Error? Null? Best-effort traversal?
+
+**Recommendation:** Define the variable resolution algorithm explicitly. Something like:
+
+```
+resolve(variable_path, execution_state):
+  parts = variable_path.split(".")
+  step_id = parts[0]
+  field_path = parts[1:]
+  step_output = execution_state[step_id].output
+  return drill(step_output, field_path)  # with clear error on missing key
+```
+
+### 4. The Approval Gate Block's Suspend Mechanism
+
+§7.3 says an approval gate's `run()` "suspends the workflow" by writing `status=awaiting_approval` and returning control. But the Workflow Engine's execution loop needs to know how to handle a block returning without completing. Is this a special return type? An exception? A specific `BlockResult` shape?
+
+**Recommendation:** Define `BlockResult` with an explicit `status` field:
+
+```python
+class BlockResult:
+    ok: bool
+    status: "completed" | "suspended" | "failed"
+    output: dict | None
+    suspend_reason: str | None  # "awaiting_approval", "awaiting_input"
+    error: str | None
+```
+
+### 5. Parallel Step Execution Semantics
+
+§7.1 shows a linear step list. The text mentions parallel execution but the schema doesn't show how to express "steps 2 and 3 run in parallel, step 4 runs after both complete."
+
+**Recommendation:** Add explicit DAG syntax to the template schema:
+
+```yaml
+steps:
+  - {id: step_1, ...}
+  - {id: step_2, depends_on: [step_1], parallel_group: "fetch"}
+  - {id: step_3, depends_on: [step_1], parallel_group: "fetch"}
+  - {id: step_4, depends_on: [step_2, step_3]}  # waits for entire parallel_group
+```
+
+### 6. What Happens to `POST /gateway/api/context` in a Workflow World?
+
+§8 says it's preserved and also wrapped as a block. But when a user triggers a workflow that calls `context.retrieve`, does that create a new session? Does it interact with the existing session/conflict detection? Does it emit the same live-pipeline events?
+
+**Recommendation:** Be explicit: `context.retrieve` block runs the exact same code path as `POST /gateway/api/context`, sharing session/conflict/audit behavior. The only difference is the caller (Workflow Engine vs. direct API).
+
+### 7. The "Verification Engine" = Terminal Block Is a Simplification That Works, But...
+
+§12.2 defines the Verification Engine as a `terminal` built-in MCP block. This is clean. But it means the Gateway process launches subprocesses. What's the sandboxing? Can a workflow step run `rm -rf /`? What's the timeout? What happens if the test runner hangs?
+
+**Recommendation:** Define the terminal block's policy constraints explicitly:
+
+```yaml
+terminal_policy:
+  allowed_commands: ["pytest", "npm test", "go test", "cargo test", "lint", "typecheck"]
+  blocked_patterns: ["rm ", "sudo", "curl", "wget", "|", ";", "&&"]
+  default_timeout_seconds: 300
+  max_output_bytes: 1_000_000
+  working_dir_constraint: "must be within project root"
+```
+
+---
+
+## What's Missing (Minor Gaps)
+
+### 1. No Rollback Semantics
+
+If a deployment block (GitHub PR creation) succeeds but a subsequent notification block fails, what happens? Is the PR left open? Is there a compensating transaction?
+
+**Recommendation:** For now, accept that workflows are not transactional. Document that the last successful step's side effects persist. Add a `on_failure` hook to the template schema for cleanup steps.
+
+### 2. No Workflow Version Migration
+
+If a workflow template is updated from v1 to v2, what happens to in-flight runs using v1? What happens to saved drafts based on v1?
+
+**Recommendation:** In-flight runs complete with the version they started with (immutable snapshot). Drafts flag a "template updated" warning. Keep it simple for the single-user case.
+
+### 3. No Mention of RIP's Own LLM Layer in the Prompt Engine
+
+RIP already has `core/llm/context_assembler.py` and prompt templates for `explain`. The Prompt Engine section mentions "reusing patterns" but doesn't specify whether RIP's prompts migrate into the Prompt Engine or remain separate.
+
+**Recommendation:** RIP's prompts stay in RIP. The Prompt Engine manages Gateway/workflow prompts. If a workflow wants RIP's explain behavior, it calls the `rip.explain` block, not a Prompt Engine template. No migration needed.
+
+---
+
+## Overall Assessment
+
+This is a **well-scoped, implementable specification.** The decisions to:
+
+- Park multi-tenancy
+- Park cloud deployment
+- Park enterprise SSO and compliance audit
+- Build the mobile block-by-block builder as the primary workflow creation surface
+- Reuse existing event infrastructure instead of introducing new buses
+- Wrap existing code rather than refactoring it
+
+...are all correct for a single-user, single-machine system.
+
+The main risk is the `trigger_query` parameter extraction (§7.4.3) being underspecified. That's the component that bridges "user types free text" to "structured workflow inputs," and if it doesn't work reliably, the mobile builder UX collapses. I'd prototype that single path end-to-end before building anything else in Phase B.
+
+**Verdict: Proceed with Phase A. Prototype trigger_query resolution early in Phase B. Add the state machine and variable resolution specs I've suggested above before writing Workflow Engine code.**
+
+
+
+
+# **Context Gateway + Repository Intelligence Platform (RIP): The Long-Term Vision**
+
+Modern software engineering is entering a new era where artificial intelligence is becoming another member of the engineering team rather than simply a code completion tool. Today, developers use Claude Code, Codex, Cursor, Copilot, Gemini, and many other AI coding assistants to understand repositories, write code, fix bugs, generate documentation, perform reviews, and automate repetitive engineering tasks. However, despite rapid improvements in language models, the overall workflow remains highly fragmented. Every developer manually writes prompts, manually gathers repository context, manually switches between GitHub, Jira, Slack, documentation, terminals, browsers, databases, and deployment systems, and manually decides which AI model should perform which task. Every AI agent repeatedly searches repositories, consumes large context windows, duplicates work performed by other agents, lacks awareness of previous engineering decisions, and operates without a centralized understanding of organizational workflows or permissions. The result is that organizations are beginning to use AI heavily, yet there is no true infrastructure responsible for governing how AI software engineering actually happens.
+
+The Repository Intelligence Platform (RIP) was created to solve the first fundamental problem: repository understanding. Traditional search systems treat repositories as collections of files, folders, or text documents. RIP instead transforms repositories into structured architectural knowledge. Through multi-language parsing, abstract syntax tree analysis, semantic indexing, graph construction, dependency extraction, workflow analysis, impact tracing, and architecture generation, repositories become intelligent knowledge graphs capable of answering architectural questions with evidence rather than assumptions. Instead of simply finding matching files, RIP understands relationships between functions, classes, APIs, services, providers, modules, packages, execution flows, inheritance structures, dependency chains, and application architecture. Developers and AI agents no longer need to manually reconstruct repository knowledge because RIP continuously maintains that understanding. Features such as repository explanation, dependency tracing, workflow trees, Mermaid architecture diagrams, impact analysis, dead code detection, semantic search, onboarding assistance, coupling metrics, hybrid graph retrieval, vector search, cross-encoder reranking, incremental indexing, smart indexing, and multi-language support make RIP a comprehensive repository intelligence engine. Rather than being another AI chatbot, RIP acts as a structured intelligence layer that supplies accurate, architecture-aware information to both humans and AI systems while significantly reducing unnecessary context consumption.
+
+As RIP evolved, another limitation became increasingly obvious. Even when repository intelligence exists, AI agents still behave independently. Claude Code retrieves context differently from Codex. Cursor follows its own retrieval strategy. Every AI repeatedly queries repositories, repeatedly invokes MCP tools, repeatedly consumes tokens, and repeatedly performs work that another AI has already completed. Organizations are left with multiple powerful AI systems but no centralized way to coordinate them. This realization led to the creation of the Context Gateway.
+
+Initially, the Context Gateway was designed as an intelligent orchestration layer positioned between AI agents and external data sources. Instead of allowing every AI assistant to communicate directly with repositories, GitHub, Jira, Slack, documentation systems, terminals, browsers, databases, or other MCP servers, every request flows through the Gateway. The Gateway classifies developer intent, determines which information sources are required, retrieves context from multiple MCP servers simultaneously, ranks results using repository intelligence and semantic relevance, removes redundant information, compresses context into predefined token budgets, preserves architectural meaning, manages session memory, detects concurrent editing conflicts, applies role-based permissions, and finally delivers one optimized context package to the language model. Rather than an AI making ten independent MCP calls, the AI makes one request while the Gateway performs the complete orchestration process behind the scenes. This architecture dramatically reduces redundant retrieval, decreases token usage, improves context quality, and creates consistent behavior across different AI coding assistants.
+
+The original Context Gateway therefore focused primarily on context optimization. It contained an intent classification engine capable of recognizing engineering tasks such as bug fixing, feature implementation, architectural investigation, documentation generation, code review, and refactoring. It contained a retrieval planner that translated engineering intent into optimized retrieval strategies across multiple information sources. It included a ranking engine that prioritized repository knowledge according to semantic similarity, graph centrality, source authority, recency, workflow relevance, and architectural importance. It implemented token-aware context compression to maximize information density within fixed LLM context windows while eliminating redundant information. It introduced persistent session memory that preserved context across multiple AI interactions, conflict detection capable of identifying overlapping modifications between multiple AI agents, and permission filtering that enforced organizational access control before context reached any language model.
+
+As development continued, the vision expanded far beyond context optimization. The realization emerged that organizations do not fundamentally care which AI model performs a task. Claude, Codex, GPT, Gemini, and future models are simply execution engines. The real organizational problem is defining how AI engineers should work. Companies require consistent engineering workflows, standardized prompt strategies, secure tool execution, organizational memory, permissions, governance, auditing, collaboration, and policy enforcement. This transforms the Context Gateway from a context optimization layer into the control plane for AI software engineering.
+
+Under the new vision, developers no longer interact directly with language models. Instead, they interact with the Context Gateway. The Gateway becomes the central operating system responsible for orchestrating every AI engineering activity. Organizations define engineering workflows rather than repeatedly writing prompts. A workflow becomes a reusable engineering process describing exactly how a task should be executed. A production bug workflow may automatically retrieve repository intelligence from RIP, inspect recent GitHub commits, analyze Jira issues, identify dependency chains, perform impact analysis, generate optimized prompts, invoke Claude Code for implementation, execute automated testing through terminal tools, create pull requests, notify reviewers through Slack, archive execution logs, and request mobile approval before deployment. Once created, this workflow becomes organizational knowledge rather than personal knowledge. Every AI agent follows the same engineering process regardless of which language model is selected.
+
+Prompt engineering similarly evolves into organizational infrastructure. Rather than individual developers repeatedly writing instructions for AI assistants, organizations create reusable prompt templates attached directly to workflows. These templates dynamically incorporate repository intelligence, dependency graphs, workflow summaries, risk assessments, architectural context, ownership metadata, affected components, test results, and historical engineering decisions. Prompt optimization becomes an organizational capability instead of an individual developer skill.
+
+The Context Gateway also becomes a centralized tool orchestration platform built around MCP. Built-in MCP servers such as RIP, GitHub, Jira, Slack, terminal execution, file systems, browsers, Docker, CI/CD pipelines, databases, deployment platforms, monitoring systems, cloud services, and documentation systems become immediately available within the Gateway. At the same time, organizations can register their own private MCP servers, internal APIs, enterprise software, proprietary deployment systems, ERP platforms, CRM systems, or custom business services. Every MCP server appears as a reusable capability inside engineering workflows. The Gateway becomes responsible for discovering, registering, securing, and orchestrating these tools regardless of their implementation details. Users are therefore free to combine built-in capabilities with custom organizational infrastructure while maintaining centralized governance.
+
+Permissions become workflow-aware rather than tool-aware. Organizations define which users, AI agents, repositories, workflows, tools, environments, and actions are permitted under specific circumstances. Junior engineers may retrieve repository context but cannot deploy production changes. Security workflows may require mandatory human approval before execution. Continuous integration agents may run tests but cannot modify repositories. Every action performed by an AI flows through organizational policy rather than direct model execution.
+
+Session memory expands from simple conversational history into organizational engineering memory. Every workflow execution records repository context, engineering rationale, prompt templates, generated changes, execution outcomes, approvals, architectural decisions, and AI reasoning. Future workflows inherit accumulated organizational knowledge rather than beginning from an empty conversation. Repository intelligence compounds over time, allowing organizations to build persistent AI-assisted engineering experience.
+
+Multi-agent coordination becomes another core capability. Instead of independent AI agents unknowingly modifying identical files, the Gateway tracks every active engineering session across the organization. Developers can observe which AI agents are currently active, which workflows are executing, which repositories are being modified, which files are locked, where conflicts exist, and what engineering tasks remain pending. Conflict detection evolves into collaborative workflow management where multiple AI agents cooperate rather than compete.
+
+One of the defining characteristics of the long-term vision is remote management. Unlike existing AI coding assistants that assume developers remain inside desktop IDEs, the Context Gateway exposes the complete engineering infrastructure through web and mobile applications. Engineering leaders can monitor running workflows, review generated pull requests, inspect execution logs, approve privileged operations, resolve conflicts, configure permissions, register new MCP servers, create workflows, analyze AI costs, observe token consumption, monitor team activity, and manage organizational AI operations directly from their phones. The mobile application is not another chat interface but rather a secure operational console providing visibility into the organization's AI engineering infrastructure regardless of physical location.
+
+Architecturally, the Context Gateway becomes the control plane governing every aspect of AI software engineering. Internally it contains a Workflow Engine responsible for defining engineering processes, a Prompt Engine managing reusable prompt templates, a Context Engine performing retrieval optimization and token management, a Tool Registry maintaining built-in and user-provided MCP servers, a Permission Engine enforcing organizational security, a Session Engine coordinating multi-agent collaboration, an Execution Engine orchestrating AI workflows, an Audit Engine recording every engineering action, a Memory Engine preserving organizational knowledge, and Repository Intelligence supplied by RIP as the foundational understanding layer. Externally, the Gateway communicates with any AI model including Claude Code, Codex, GPT, Gemini, open-source language models, or future systems. Language models become interchangeable execution engines while organizational intelligence remains centralized inside the Gateway.
+
+The long-term objective is therefore not to compete directly with AI coding assistants, repository search tools, or workflow automation platforms individually. RIP continues serving as the intelligence engine responsible for understanding software systems. The Context Gateway evolves into the orchestration and governance platform responsible for determining how AI software engineering should operate inside organizations. Together they form an integrated infrastructure stack where repositories become intelligent knowledge, workflows become organizational assets, MCP servers become reusable capabilities, language models become interchangeable execution engines, and software development becomes governed through centralized policies rather than isolated prompts. Instead of asking developers to continuously adapt themselves to AI systems, the platform allows organizations to define engineering workflows once and have every current and future AI agent operate consistently within those organizational standards. This transforms AI-assisted development from disconnected conversations into structured, collaborative, secure, and continuously evolving engineering infrastructure.
