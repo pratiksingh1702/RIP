@@ -1,4 +1,4 @@
-﻿import 'package:dio/dio.dart';
+import 'package:dio/dio.dart';
 import '../exceptions.dart';
 import '../../data/models/project.dart';
 import '../../data/models/search_result.dart';
@@ -921,83 +921,4 @@ class RipClient {
       return false;
     }
   }
-
-  /// List available LLM configurations
-  Future<Map<String, dynamic>> listLLMConfigs({CancelToken? cancelToken}) async {
-    final response = await _dio.get('/gateway/api/workflows/llm-configs', cancelToken: cancelToken);
-    return response.data as Map<String, dynamic>;
-  }
-
-  /// Add a custom LLM configuration
-  Future<Map<String, dynamic>> addLLMConfig({
-    required String configId,
-    required String provider,
-    required String model,
-    String? apiKey,
-    String? baseUrl,
-    CancelToken? cancelToken,
-  }) async {
-    final response = await _dio.post('/gateway/api/workflows/llm-configs', data: {
-      'config_id': configId,
-      'provider': provider,
-      'model': model,
-      if (apiKey != null && apiKey.isNotEmpty) 'api_key': apiKey,
-      if (baseUrl != null && baseUrl.isNotEmpty) 'base_url': baseUrl,
-    }, cancelToken: cancelToken);
-    return response.data as Map<String, dynamic>;
-  }
-
-  /// Update an LLM configuration
-  Future<Map<String, dynamic>> updateLLMConfig({
-    required String configId,
-    String? provider,
-    String? model,
-    String? apiKey,
-    String? baseUrl,
-    CancelToken? cancelToken,
-  }) async {
-    final data = <String, dynamic>{};
-    if (provider != null) data['provider'] = provider;
-    if (model != null) data['model'] = model;
-    if (apiKey != null) data['api_key'] = apiKey.isEmpty ? null : apiKey;
-    if (baseUrl != null) data['base_url'] = baseUrl.isEmpty ? null : baseUrl;
-    final response = await _dio.patch(
-      '/gateway/api/workflows/llm-configs/$configId',
-      data: data,
-      cancelToken: cancelToken,
-    );
-    return response.data as Map<String, dynamic>;
-  }
-
-  /// Remove an LLM configuration
-  Future<void> deleteLLMConfig(String configId, {CancelToken? cancelToken}) async {
-    await _dio.delete('/gateway/api/workflows/llm-configs/$configId', cancelToken: cancelToken);
-  }
-
-  /// Update an LLM configuration
-
-
-
-  /// Sync active project to server
-  Future<void> setActiveProject(String projectId) async {
-    try {
-      await _dio.post('/gateway/api/projects/active', data: {'project_id': projectId});
-    } catch (_) {}
-  }
-
-  /// Clear active project on server
-  Future<void> clearActiveProject() async {
-    try {
-      await _dio.post('/gateway/api/projects/active', data: {'project_id': null});
-    } catch (_) {}
-  }
-
-  /// List prompt templates (used by workflow builder)
-  Future<Map<String, dynamic>> listGatewayPromptTemplates({CancelToken? cancelToken}) async {
-    final response = await _dio.get('/gateway/api/workflows/prompt-templates', cancelToken: cancelToken);
-    return response.data as Map<String, dynamic>;
-  }
-
 }
-
-

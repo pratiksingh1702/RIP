@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/services.dart';
 
 import '../../../core/design/app_colors.dart';
 import '../../../data/models/pipeline_trace.dart';
@@ -102,8 +103,17 @@ class _PipelineSummaryChipState extends ConsumerState<PipelineSummaryChip> {
         ),
         Padding(
           padding: const EdgeInsets.only(top: 8),
-          child: _FeedbackRow(
-            sessionId: widget.trace.sessionId,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _FeedbackRow(
+                sessionId: widget.trace.sessionId,
+              ),
+              const SizedBox(height: 8),
+              _CopyRow(
+                trace: widget.trace,
+              ),
+            ],
           ),
         ),
       ],
@@ -287,6 +297,110 @@ class _FeedbackButton extends StatelessWidget {
   final VoidCallback onTap;
 
   const _FeedbackButton({
+    required this.label,
+    required this.icon,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ActionChip(
+      avatar: Icon(icon, size: 14, color: AppColors.textSecondary),
+      label: Text(label),
+      visualDensity: VisualDensity.compact,
+      onPressed: onTap,
+    );
+  }
+}
+
+class _CopyRow extends StatelessWidget {
+  final PipelineTrace trace;
+
+  const _CopyRow({
+    required this.trace,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Wrap(
+      spacing: 6,
+      runSpacing: 6,
+      children: [
+        _CopyButton(
+          label: 'Copy Response',
+          icon: Icons.copy_rounded,
+          onTap: () => _copyToClipboard(context, _getResponseText()),
+        ),
+        _CopyButton(
+          label: 'Copy Last Output',
+          icon: Icons.output_rounded,
+          onTap: () => _copyToClipboard(context, _getLastOutput()),
+        ),
+      ],
+    );
+  }
+
+  String _getResponseText() {
+    final events = trace.events;
+    final responseEvents = events.where((event) => 
+      event.stage == 'done' || 
+      event.stage == 'response' ||
+      event.stage == 'complete'
+    ).toList();
+    
+    if (responseEvents.isNotEmpty) {
+      final lastResponse = responseEvents.last;
+      return lastResponse.detail;
+    }
+    
+    // Fallback: get the last event detail
+    if (events.isNotEmpty) {
+      return events.last.detail;
+    }
+    
+    return 'No response available';
+  }
+
+  String _getLastOutput() {
+    final events = trace.events;
+    final outputEvents = events.where((event) => 
+      event.stage == 'done' || 
+      event.stage == 'output' ||
+      event.stage == 'final' ||
+      (event.stage == 'step' && event.detail.contains('Output'))
+    ).toList();
+    
+    if (outputEvents.isNotEmpty) {
+      final lastOutput = outputEvents.last;
+      return lastOutput.detail;
+    }
+    
+    // Fallback: get the last event detail
+    if (events.isNotEmpty) {
+      return events.last.detail;
+    }
+    
+    return 'No output available';
+  }
+
+  void _copyToClipboard(BuildContext context, String text) {
+    Clipboard.setData(ClipboardData(text: text));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Copied to clipboard'),
+        duration: const Duration(seconds: 2),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+}
+
+class _CopyButton extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final VoidCallback onTap;
+
+  const _CopyButton({
     required this.label,
     required this.icon,
     required this.onTap,

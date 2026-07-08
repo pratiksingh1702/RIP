@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -139,6 +139,16 @@ class AppDrawer extends ConsumerWidget {
                     _CompactSection(
                       title: 'Repository Tools',
                       children: [
+                        _CompactRow(
+  icon: Icons.smart_toy_rounded,
+  title: 'LLM Config',
+  subtitle: 'Configure AI models',
+  onTap: () {
+    HapticFeedback.selectionClick();
+    Navigator.pop(context);
+    context.push('/llm-settings');
+  },
+),
                         _CompactRow(
                           icon: Icons.account_tree_rounded,
                           title: 'Workflows',
@@ -563,3 +573,4 @@ class _ThemeRow extends StatelessWidget {
     );
   }
 }
+

@@ -1,4 +1,4 @@
-﻿"""Workflow run state management."""
+"""Workflow run state management."""
 
 from __future__ import annotations
 
@@ -25,8 +25,6 @@ class RunState:
     missing_inputs: dict[str, str] = field(default_factory=dict)
     provided_inputs: dict[str, Any] = field(default_factory=dict)
     final_output: dict[str, Any] | None = None
-    error: str | None = None
-    status: str = "pending"
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -47,8 +45,6 @@ class RunState:
             "missing_inputs": self.missing_inputs,
             "provided_inputs": self.provided_inputs,
             "final_output": self.final_output,
-            "error": self.error,
-            "status": self.status,
         }
 
     @classmethod
@@ -56,9 +52,9 @@ class RunState:
         step_states = {}
         for step_id, step_data in data.get("step_states", {}).items():
             step_states[step_id] = StepState(
-                step_id=step_data.get("step_id", step_id),
-                block_id=step_data.get("block_id", ""),
-                status=step_data.get("status", "pending"),
+                step_id=step_data["step_id"],
+                block_id=step_data["block_id"],
+                status=step_data["status"],
                 inputs=step_data.get("inputs", {}),
                 output=step_data.get("output"),
                 error=step_data.get("error"),
@@ -71,6 +67,4 @@ class RunState:
             missing_inputs=data.get("missing_inputs", {}),
             provided_inputs=data.get("provided_inputs", {}),
             final_output=data.get("final_output"),
-            error=data.get("error"),
-            status=data.get("status", "pending"),
         )

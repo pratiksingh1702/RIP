@@ -1,4 +1,4 @@
-﻿"""Workflow engine implementation."""
+"""Workflow engine implementation."""
 
 from __future__ import annotations
 
@@ -73,6 +73,7 @@ async def seed_workflows():
         if existing is not None:
             return
 
+        # Seed a bug investigation workflow
         bug_workflow = WorkflowDraft(
             id=uuid4(),
             owner_user_id="system",
@@ -99,6 +100,7 @@ async def seed_workflows():
         )
         session.add(bug_workflow)
 
+        # Seed an architecture overview workflow
         arch_workflow = WorkflowDraft(
             id=uuid4(),
             owner_user_id="system",
@@ -169,6 +171,7 @@ class WorkflowEngine:
             draft = await session.get(WorkflowDraft, draft_id)
             if not draft:
                 raise ValueError("Draft not found")
+
             step_id = f"step_{len(draft.blocks) + 1}"
             new_block = {
                 "step_id": step_id,
@@ -199,6 +202,7 @@ class WorkflowEngine:
             draft = await session.get(WorkflowDraft, draft_id)
             if not draft:
                 raise ValueError("Draft not found")
+            
             blocks = [dict(block) for block in draft.blocks]
             for i, block in enumerate(blocks):
                 if block["step_id"] == step_id:
@@ -217,6 +221,7 @@ class WorkflowEngine:
                     break
             else:
                 raise ValueError("Step not found")
+
             draft.blocks = blocks
             flag_modified(draft, "blocks")
             await session.commit()
@@ -232,6 +237,7 @@ class WorkflowEngine:
             draft = await session.get(WorkflowDraft, draft_id)
             if not draft:
                 raise ValueError("Draft not found")
+            
             draft.blocks = [block for block in draft.blocks if block["step_id"] != step_id]
             await session.execute(
                 delete(WorkflowWire).where(
@@ -336,15 +342,20 @@ class WorkflowEngine:
             draft = await session.get(WorkflowDraft, draft_id)
             if not draft:
                 raise ValueError("Draft not found")
+            
+            # Validate all steps are present
             existing_step_ids = {b["step_id"] for b in draft.blocks}
             if not set(step_order).issubset(existing_step_ids):
                 raise ValueError("Invalid step order")
             if len(step_order) != len(existing_step_ids):
                 raise ValueError("Step order must include all steps")
+            
+            # Reorder blocks
             ordered_blocks = []
             for step_id in step_order:
                 block = next(b for b in draft.blocks if b["step_id"] == step_id)
                 ordered_blocks.append(block)
+            
             draft.blocks = ordered_blocks
             await session.commit()
             await session.refresh(draft)
@@ -383,7 +394,6 @@ class WorkflowEngine:
             return draft, wires
 
     async def publish_draft(self, draft_id: UUIDType) -> WorkflowDraft:
-        """Publish a workflow draft so it can be executed."""
         async with async_session_factory() as session:
             draft = await session.get(WorkflowDraft, draft_id)
             if not draft:
@@ -400,33 +410,23 @@ class WorkflowEngine:
         user_id: str,
         project_id: str | None = None,
     ) -> WorkflowRun:
-        """Start a workflow run. Creates the run record and kicks off background execution."""
         async with async_session_factory() as session:
             draft = await session.get(WorkflowDraft, draft_id)
-            if not draft:
-                raise ValueError("Draft not found")
-            if draft.status != "published":
-                raise ValueError(
-                    f"Workflow must be published before running. Current status: {draft.status}. "
-                    f"Tap the publish button (upload icon) in the mobile app."
-                )
-
-            state = RunState(
-                trigger_query=trigger_query,
-                status="running",
-            )
+            if not draft or draft.status != "published":
+                raise ValueError("Draft not found or not published")
 
             run = WorkflowRun(
                 id=uuid4(),
                 draft_id=draft_id,
-                status="running",
-                state=state.to_dict(),
+                status="pending",
+                state=RunState(trigger_query=trigger_query).to_dict(),
             )
             draft.run_count = (draft.run_count or 0) + 1
             draft.last_run_at = datetime.now(UTC)
             session.add(run)
             await session.commit()
 
+            # Start execution in background
             import asyncio
             asyncio.create_task(self._execute_run(run.id, user_id, project_id))
 
@@ -434,7 +434,6 @@ class WorkflowEngine:
             return run
 
     async def get_run_state(self, run_id: UUIDType) -> dict[str, Any]:
-        """Get the current state of a workflow run."""
         async with async_session_factory() as session:
             run = await session.get(WorkflowRun, run_id)
             if not run:
@@ -448,7 +447,6 @@ class WorkflowEngine:
         approver: str | None = None,
         comment: str | None = None,
     ) -> dict[str, Any]:
-        """Resume a workflow paused at an approval gate."""
         async with async_session_factory() as session:
             run = await session.get(WorkflowRun, run_id)
             if not run:
@@ -467,10 +465,9 @@ class WorkflowEngine:
                 approval_step.status = "failed"
                 approval_step.error = f"Rejected: {comment or 'No comment'}"
                 approval_step.completed_at = datetime.now(UTC).isoformat()
-                state.status = "failed"
-                state.final_output = {"approved": False, "comment": comment, "approver": approver}
                 run.status = "failed"
                 run.completed_at = datetime.now(UTC)
+                state.final_output = {"approved": False, "comment": comment, "approver": approver}
                 run.state = state.to_dict()
                 await session.commit()
                 return run.state
@@ -478,7 +475,6 @@ class WorkflowEngine:
             approval_step.status = "completed"
             approval_step.output = {"approved": True, "approver": approver, "comment": comment}
             approval_step.completed_at = datetime.now(UTC).isoformat()
-            state.status = "running"
             run.status = "running"
             run.state = state.to_dict()
             await session.commit()
@@ -493,7 +489,6 @@ class WorkflowEngine:
         step_id: str,
         value: Any,
     ) -> dict[str, Any]:
-        """Provide a missing input and resume execution."""
         async with async_session_factory() as session:
             run = await session.get(WorkflowRun, run_id)
             if not run:
@@ -508,13 +503,13 @@ class WorkflowEngine:
                     state.step_states[step_id].status = "pending"
                     state.step_states[step_id].error = None
 
-            state.status = "running"
-            run.status = "running"
+            # Update state and resume
             run.state = state.to_dict()
             await session.commit()
 
             import asyncio
             asyncio.create_task(self._execute_run(run.id, None, None))
+
             return run.state
 
     async def _execute_run(
@@ -523,7 +518,6 @@ class WorkflowEngine:
         user_id: str | None,
         project_id: str | None,
     ):
-        """Execute all steps in the workflow DAG."""
         async with async_session_factory() as session:
             run = await session.get(WorkflowRun, run_id)
             if not run:
@@ -531,12 +525,6 @@ class WorkflowEngine:
 
             draft = await session.get(WorkflowDraft, run.draft_id)
             if not draft:
-                state = RunState.from_dict(run.state)
-                state.error = "Workflow draft not found"
-                state.status = "failed"
-                run.status = "failed"
-                run.state = state.to_dict()
-                await session.commit()
                 return
 
             state = RunState.from_dict(run.state)
@@ -551,18 +539,12 @@ class WorkflowEngine:
             dag = WorkflowDAG(draft.blocks, wire_dicts)
 
             run.status = "running"
-            state.status = "running"
-            if not run.started_at:
-                run.started_at = datetime.now(UTC)
-            run.state = state.to_dict()
+            run.started_at = datetime.now(UTC)
             await session.commit()
 
             try:
                 for step_id in dag.topological_order():
-                    block = next((b for b in draft.blocks if b["step_id"] == step_id), None)
-                    if not block:
-                        continue
-
+                    block = next(b for b in draft.blocks if b["step_id"] == step_id)
                     step_state = state.step_states.get(step_id)
                     if not step_state:
                         step_state = StepState(
@@ -571,18 +553,15 @@ class WorkflowEngine:
                         )
                         state.step_states[step_id] = step_state
 
-                    if step_state.status not in ("pending", None):
+                    if step_state.status != "pending":
                         continue
 
                     step_state.status = "running"
                     step_state.started_at = datetime.now(UTC).isoformat()
-                    run.state = state.to_dict()
-                    await session.commit()
 
                     if step_state.block_id == "workflow.approval":
                         step_state.status = "awaiting_approval"
                         step_state.inputs = dict(block.get("input_bindings", {}))
-                        state.status = "awaiting_approval"
                         run.status = "awaiting_approval"
                         run.state = state.to_dict()
                         await session.commit()
@@ -602,16 +581,15 @@ class WorkflowEngine:
                         state,
                     )
                     step_state.inputs = inputs
-
                     if missing_key:
                         state.missing_inputs[step_id] = missing_key
                         step_state.status = "awaiting_input"
-                        state.status = "awaiting_input"
                         run.status = "awaiting_input"
                         run.state = state.to_dict()
                         await session.commit()
                         return
 
+                    # Run block
                     block_instance = self.registry.get(step_state.block_id)
                     if block_instance:
                         ctx = ExecutionContext(
@@ -629,12 +607,11 @@ class WorkflowEngine:
                             step_state.error = result.error
                     else:
                         step_state.status = "failed"
-                        step_state.error = (
-                            f"Block '{step_state.block_id}' not found in registry. "
-                            f"Available blocks: {list(self.registry._blocks.keys())}"
-                        )
+                        step_state.error = f"Block {step_state.block_id} not found"
 
                     step_state.completed_at = datetime.now(UTC).isoformat()
+
+                    # Update run state
                     run.state = state.to_dict()
                     await session.commit()
 
@@ -642,55 +619,28 @@ class WorkflowEngine:
                         break
 
                 if any(s.status == "awaiting_input" for s in state.step_states.values()):
-                    state.status = "awaiting_input"
                     run.status = "awaiting_input"
                 elif any(s.status == "awaiting_approval" for s in state.step_states.values()):
-                    state.status = "awaiting_approval"
                     run.status = "awaiting_approval"
-                elif any(s.status == "failed" for s in state.step_states.values()):
-                    state.status = "failed"
-                    run.status = "failed"
-                else:
-                    state.status = "completed"
+                elif not any(s.status == "failed" for s in state.step_states.values()):
                     run.status = "completed"
-                    # Find the last meaningful output (skip approval gates and blocks with no output)
-                    meaningful_steps = [
-                        s for s in state.step_states.values()
-                        if s.output is not None
-                        and s.block_id != "workflow.approval"
-                    ]
-                    if meaningful_steps:
-                        state.final_output = meaningful_steps[-1].output
-                    else:
-                        # Fallback to any step with output, including approval
-                        steps_with_output = [
-                            s for s in state.step_states.values()
-                            if s.output is not None
-                        ]
-                        if steps_with_output:
-                            state.final_output = steps_with_output[-1].output
-                        else:
-                            state.final_output = {"message": "Workflow completed with no output"}
+                    final_step = list(state.step_states.values())[-1] if state.step_states else None
+                    state.final_output = final_step.output if final_step else None
+                else:
+                    run.status = "failed"
 
-                if run.status in ("completed", "failed"):
+                if run.status in {"completed", "failed"}:
                     run.completed_at = datetime.now(UTC)
-
                 run.state = state.to_dict()
                 await session.commit()
 
                 await self.event_bus.publish(
                     "workflow.completed",
                     workflow_run_id=str(run_id),
-                    payload={"status": run.status, "final_output": state.final_output},
+                    payload={"status": run.status},
                 )
-
             except Exception as e:
-                state = RunState.from_dict(run.state)
-                state.error = str(e)
-                state.status = "failed"
                 run.status = "failed"
-                run.state = state.to_dict()
-                run.completed_at = datetime.now(UTC)
                 await session.commit()
                 await self.event_bus.publish(
                     "workflow.failed",

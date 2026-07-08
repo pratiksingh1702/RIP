@@ -1,4 +1,4 @@
-"""Prompt ask AI block."""
+﻿"""Prompt ask AI block."""
 
 from __future__ import annotations
 
@@ -20,6 +20,7 @@ class PromptAskAIBlock(Block):
             "system_prompt": {"type": "string", "nullable": True},
             "max_tokens": {"type": "integer", "nullable": True},
             "temperature": {"type": "number", "nullable": True},
+            "model_preference": {"type": "string", "nullable": True},
         },
         "required": ["prompt_id"],
     }
@@ -53,9 +54,18 @@ class PromptAskAIBlock(Block):
             renderer = PromptRenderer()
             rendered = renderer.render(prompt_tpl, inputs.get("variables", {}))
 
+            # Resolve model preference from inputs or config
+            model_pref = None
+            mp = inputs.get("model_preference")
+            if isinstance(mp, dict):
+                model_pref = mp.get("value")
+            elif isinstance(mp, str) and mp:
+                model_pref = mp
+
             # Call LLM router
             router = get_llm_router()
-            llm_config = router.get_config(
+            llm_config = await router.get_config(
+                config_id=model_pref or config.get("model"),
                 provider=config.get("provider"),
                 model=config.get("model"),
             )
@@ -110,8 +120,6 @@ class ApprovalBlock(Block):
     requires_capabilities = []
 
     async def run(self, ctx: ExecutionContext, inputs: dict[str, Any], config: dict[str, Any]) -> BlockResult:
-        # This block requires manual approval, so it should pause the workflow
-        # For now, let's return a pending state with approval request
         return BlockResult(
             ok=False,
             error="Approval required - use answer_missing_input to approve/reject",

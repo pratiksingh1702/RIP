@@ -1,4 +1,4 @@
-"""FastAPI app factory."""
+﻿"""FastAPI app factory."""
 
 from __future__ import annotations
 
@@ -36,6 +36,7 @@ from server.routers.ws import router as ws_router
 from server.runtime import ServerRuntime
 
 from gateway.server.routers import (
+    active_project as gateway_active_project,
     audit as gateway_audit,
     context as gateway_context,
     feedback as gateway_feedback,
@@ -61,7 +62,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     runtime = ServerRuntime(get_settings())
     app.state.runtime = runtime
     await runtime.startup()
-    seed_llm_configs()
+    await seed_llm_configs()
     await ensure_gateway_storage_schema()
     await seed_prompt_templates()
     await seed_workflows()
@@ -161,9 +162,18 @@ def create_app() -> FastAPI:
         tags=["gateway-workflows"],
         dependencies=[Depends(verify_api_key)],
     )
+    app.include_router(
+        gateway_active_project.router,
+        prefix="/gateway/api/projects",
+        tags=["gateway-projects"],
+        dependencies=[Depends(verify_api_key)],
+    )
     app.include_router(ws_router)
     return app
 
 
 
 app = create_app()
+
+
+

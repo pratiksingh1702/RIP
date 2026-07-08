@@ -1,6 +1,7 @@
+// REPLACE the entire file:
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-
+import 'package:rip_app/presentation/providers/connection_provider.dart';
 import '../providers/gateway_provider.dart';
 
 class GatewayAuditScreen extends ConsumerWidget {
@@ -8,7 +9,9 @@ class GatewayAuditScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final audit = ref.watch(gatewayAuditProvider);
+    // Use a simple FutureProvider instead of family
+    final audit = ref.watch(_auditProvider);
+
     return Scaffold(
       appBar: AppBar(title: const Text('Audit')),
       body: audit.when(
@@ -45,3 +48,13 @@ class GatewayAuditScreen extends ConsumerWidget {
     );
   }
 }
+
+// Simple provider without family params
+final _auditProvider = FutureProvider<List<dynamic>>((ref) async {
+  final client = ref.watch(ripClientProvider);
+  try {
+    return await client.gatewayAudit();
+  } catch (e) {
+    return [];
+  }
+});

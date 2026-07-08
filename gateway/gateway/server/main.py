@@ -1,4 +1,4 @@
-"""FastAPI server for Context Gateway."""
+﻿"""FastAPI server for Context Gateway."""
 
 import asyncio
 from contextlib import asynccontextmanager
@@ -15,6 +15,7 @@ from gateway.core.sources.registry import get_source_registry
 from gateway.core.workflow import seed_workflows
 from gateway.server.middleware.rate_limit import RateLimitMiddleware
 from gateway.server.routers import (
+    active_project,
     audit,
     context,
     feedback,
@@ -27,6 +28,7 @@ from gateway.server.routers import (
     workflows,
 )
 from gateway.server.routers import (
+    active_project,
     settings as gateway_settings,
 )
 from gateway.storage.database import ensure_storage_schema
@@ -61,7 +63,7 @@ async def _background_oauth_refresh():
 async def lifespan(app: FastAPI):
     """Application lifespan for setup/teardown."""
     logger.info("Starting Context Gateway server", version=settings.version)
-    seed_llm_configs()
+    await seed_llm_configs()
     await ensure_storage_schema()
     await seed_prompt_templates()
     await seed_workflows()
@@ -124,6 +126,7 @@ def create_app() -> FastAPI:
     app.include_router(audit.router, prefix="/api/audit", tags=["audit"])
     app.include_router(feedback.router, prefix="/api/feedback", tags=["feedback"])
     app.include_router(workflows.router, prefix="/api/workflows", tags=["workflows"])
+    app.include_router(active_project.router, prefix="/api/projects", tags=["projects"])
 
     return app
 
@@ -138,3 +141,5 @@ if __name__ == "__main__":
         port=settings.port,
         reload=settings.debug,
     )
+
+

@@ -42,15 +42,34 @@ class ActiveProjectNotifier extends Notifier<void> {
   @override
   void build() {}
 
-  Future<void> setActiveProject(String? projectId) async {
-    final prefs = await SharedPreferences.getInstance();
-    if (projectId != null) {
-      await prefs.setString(AppConstants.sharedPrefsActiveProjectIdKey, projectId);
-    } else {
-      await prefs.remove(AppConstants.sharedPrefsActiveProjectIdKey);
-    }
-    ref.read(activeProjectIdProvider.notifier).state = projectId;
+// In rip_app/lib/presentation/providers/project_provider.dart
+// Replace the setActiveProject method in ActiveProjectNotifier:
+
+Future<void> setActiveProject(String? projectId) async {
+  final prefs = await SharedPreferences.getInstance();
+  if (projectId != null) {
+    await prefs.setString(AppConstants.sharedPrefsActiveProjectIdKey, projectId);
+  } else {
+    await prefs.remove(AppConstants.sharedPrefsActiveProjectIdKey);
   }
+  ref.read(activeProjectIdProvider.notifier).state = projectId;
+  
+  // Sync to server
+  _syncProjectToServer(projectId);
+}
+
+Future<void> _syncProjectToServer(String? projectId) async {
+  try {
+    final client = ref.read(ripClientProvider);
+    if (projectId != null) {
+      await client.setActiveProject(projectId);
+    } else {
+      await client.clearActiveProject();
+    }
+  } catch (_) {
+    // Silently fail - project is still saved locally
+  }
+}
 
   Future<void> loadActiveProject() async {
     final prefs = await SharedPreferences.getInstance();

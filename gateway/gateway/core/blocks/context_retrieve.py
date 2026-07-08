@@ -1,4 +1,4 @@
-"""Context retrieve block."""
+﻿"""Context retrieve block."""
 
 from __future__ import annotations
 
@@ -26,6 +26,8 @@ class ContextRetrieveBlock(Block):
             "context": {"type": "array"},
             "intent": {"type": "string"},
             "domain": {"type": "string", "nullable": True},
+            "session_id": {"type": "string"},
+            "tokens_used": {"type": "integer"},
         },
     }
     config_schema = {}
@@ -34,15 +36,33 @@ class ContextRetrieveBlock(Block):
     async def run(self, ctx: ExecutionContext, inputs: dict[str, Any], config: dict[str, Any]) -> BlockResult:
         try:
             pipeline = get_context_pipeline()
-            result = await pipeline.run(
-                query=inputs["query"],
-                project_id=inputs.get("project_id") or ctx.project_id,
-                user_id=inputs.get("user_id") or ctx.user_id,
-                session_id=ctx.session_id,
+            # CORRECT METHOD: pipeline.get_context() with 'task' parameter
+            result = await pipeline.get_context(
+                task=inputs.get("query", ""),
+                max_tokens=int(config.get("max_tokens", 8000)),
+                role=str(config.get("role", "developer")),
+                trace_session_id=ctx.session_id or ctx.workflow_run_id,
             )
+            # Convert ContextPackage items to serializable dicts
+            context_items = []
+            if result.context:
+                for item in result.context:
+                    context_items.append({
+                        "source": str(item.source),
+                        "query_type": str(item.query_type),
+                        "content": str(item.content),
+                        "metadata": item.metadata,
+                        "score": float(item.score) if item.score else 0.0,
+                    })
             return BlockResult(
                 ok=True,
-                output=result,
+                output={
+                    "context": context_items,
+                    "intent": str(result.intent),
+                    "domain": str(result.domain) if result.domain else None,
+                    "session_id": str(result.session_id),
+                    "tokens_used": int(result.tokens_used),
+                },
             )
         except Exception as e:
             return BlockResult(

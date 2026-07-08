@@ -117,22 +117,6 @@ class ApproveRejectRequest(BaseModel):
     approver: str | None = None
 
 
-# LLM Config models
-class AddLLMConfigRequest(BaseModel):
-    config_id: str
-    provider: str
-    model: str
-    api_key: str | None = None
-    base_url: str | None = None
-
-
-class UpdateLLMConfigRequest(BaseModel):
-    provider: str | None = None
-    model: str | None = None
-    api_key: str | None = None
-    base_url: str | None = None
-
-
 @router.post("")
 async def create_workflow_draft(
     request: Request,
@@ -401,96 +385,6 @@ async def create_prompt_template(body: CreatePromptTemplateRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-
-# ─── LLM Config Endpoints ───
-
-@router.get("/llm-configs")
-async def list_llm_configs():
-    """List available LLM configurations (API keys masked)."""
-    try:
-        from gateway.core.llm_pool import get_llm_router, seed_llm_configs
-        await seed_llm_configs()
-        router = get_llm_router()
-        configs = await router.list_configs()
-        return {"configs": configs}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.post("/llm-configs")
-async def add_llm_config(body: AddLLMConfigRequest):
-    """Add a custom LLM configuration with API key."""
-    try:
-        from gateway.core.llm_pool import get_llm_router
-        router = get_llm_router()
-        config_id = body.config_id.strip()
-        if not config_id:
-            raise HTTPException(status_code=400, detail="config_id is required")
-        cfg = await router.add_custom_config(
-            config_id=config_id,
-            provider=body.provider.strip(),
-            model=body.model.strip(),
-            api_key=body.api_key.strip() if body.api_key else None,
-            base_url=body.base_url.strip() if body.base_url else None,
-        )
-        return {
-            "id": cfg.id,
-            "provider": cfg.provider,
-            "model": cfg.model,
-            "has_api_key": bool(cfg.api_key),
-            "is_custom": cfg.is_custom,
-            "base_url": cfg.base_url,
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.patch("/llm-configs/{config_id}")
-async def update_llm_config(config_id: str, body: UpdateLLMConfigRequest):
-    """Update an existing LLM configuration."""
-    try:
-        from gateway.core.llm_pool import get_llm_router
-        router = get_llm_router()
-        updated = await router.update_config(
-            config_id=config_id,
-            provider=body.provider,
-            model=body.model,
-            api_key=body.api_key,
-            base_url=body.base_url,
-        )
-        if not updated:
-            raise HTTPException(status_code=404, detail="Config not found")
-        return {
-            "id": updated.id,
-            "provider": updated.provider,
-            "model": updated.model,
-            "has_api_key": bool(updated.api_key),
-            "is_custom": updated.is_custom,
-            "base_url": updated.base_url,
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.delete("/llm-configs/{config_id}")
-async def remove_llm_config(config_id: str):
-    """Remove a custom LLM configuration."""
-    try:
-        from gateway.core.llm_pool import get_llm_router
-        router = get_llm_router()
-        removed = await router.remove_config(config_id)
-        if not removed:
-            raise HTTPException(status_code=404, detail="Config not found")
-        return {"ok": True}
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-# ─── Workflow Run Endpoints ───
 
 @router.get("/{draft_id}")
 async def get_workflow(draft_id: UUIDType):

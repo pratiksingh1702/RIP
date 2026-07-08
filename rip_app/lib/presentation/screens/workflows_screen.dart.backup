@@ -8,7 +8,6 @@ import '../providers/connection_provider.dart';
 import '../providers/gateway_provider.dart';
 import '../providers/project_provider.dart';
 import '../widgets/chat/pipeline_trace_widgets.dart';
-import '../providers/gateway_provider.dart';
 
 // ============================================================
 // MAIN SCREEN - WorkflowsScreen
@@ -79,90 +78,25 @@ class _WorkflowsScreenState extends ConsumerState<WorkflowsScreen> {
     }
     return Map<String, dynamic>.from(items.first as Map);
   }
-// Replace _handleBlockTap (around line 95-110)
-void _handleBlockTap(String stepId, {required bool isOutputTap}) {
-  if (_wireMode) {
-    if (isOutputTap) {
-      setState(() => _wireSourceId = (_wireSourceId == stepId) ? null : stepId);
-    } else {
-      if (_wireSourceId != null && _wireSourceId != stepId) {
-        // Show port picker before connecting
-        _showPortPicker(_wireSourceId!, stepId);
+  void _handleBlockTap(String stepId, {required bool isOutputTap}) {
+    if (_wireMode) {
+      if (isOutputTap) {
+        setState(() => _wireSourceId = (_wireSourceId == stepId) ? null : stepId);
+      } else {
+        if (_wireSourceId != null && _wireSourceId != stepId) {
+          _pushUndo();
+          _connect(_selected!, _wireSourceId!, stepId);
+          setState(() => _wireSourceId = null);
+        }
       }
+      return;
     }
-    return;
+    // Normal mode: single tap = select ONLY this block
+    setState(() {
+      _selectedBlockIds.clear();
+      _selectedBlockIds.add(stepId);
+    });
   }
-  setState(() {
-    _selectedBlockIds.clear();
-    _selectedBlockIds.add(stepId);
-  });
-}
-
-// Add this new method to _WorkflowsScreenState
-Future<void> _showPortPicker(String sourceStepId, String targetStepId) async {
-  final targetBlock = _findBlock(_selected!, targetStepId);
-  if (targetBlock == null) return;
-  
-  // Get the target block's input ports from its schema
-  final inputSchema = _schemaMap(targetBlock['input_schema'] ?? {});
-  final properties = _schemaProps(inputSchema);
-  
-  if (properties.isEmpty) {
-    // No ports to pick, just connect with default
-    _pushUndo();
-    await _connect(_selected!, sourceStepId, targetStepId);
-    setState(() => _wireSourceId = null);
-    return;
-  }
-  
-  final portNames = properties.keys.toList();
-  
-  final pickedPort = await showModalBottomSheet<String>(
-    context: context,
-    showDragHandle: true,
-    builder: (ctx) => Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('Connect to which input?', style: Theme.of(ctx).textTheme.titleMedium),
-          const SizedBox(height: 4),
-          Text('Target: $targetStepId (${targetBlock['block_id'] ?? 'block'})',
-              style: Theme.of(ctx).textTheme.bodySmall),
-          const SizedBox(height: 12),
-          ...portNames.map((port) => RadioListTile<String>(
-                title: Text(_fieldLabel(port)),
-                subtitle: Text(_schemaHint(properties[port] is Map 
-                    ? Map<String, dynamic>.from(properties[port]) 
-                    : {})),
-                value: port,
-                groupValue: null,
-                dense: true,
-                onChanged: (v) => Navigator.pop(ctx, v),
-              )),
-        ],
-      ),
-    ),
-  );
-  
-  if (pickedPort == null) {
-    setState(() => _wireSourceId = null);
-    return;
-  }
-  
-  _pushUndo();
-  await ref.read(ripClientProvider).addGatewayWorkflowWire(
-    draftId: _selected!['draft_id'].toString(),
-    sourceStepId: sourceStepId,
-    targetStepId: targetStepId,
-    targetPort: pickedPort,
-    sourcePort: 'output',
-  );
-  _refresh(await ref.read(ripClientProvider).gatewayWorkflowCanvas(
-      draftId: _selected!['draft_id'].toString()));
-  setState(() => _wireSourceId = null);
-}
   @override
   Widget build(BuildContext context) {
     final workflows = ref.watch(gatewayWorkflowsProvider);
@@ -508,23 +442,28 @@ Future<void> _showPortPicker(String sourceStepId, String targetStepId) async {
     }
   }
 
-void _startPolling(String wid, String rid) {
-  _poller?.cancel();
-  _poller = Timer.periodic(const Duration(seconds: 2), (_) async {
-    try {
-      final s = await ref.read(ripClientProvider).gatewayWorkflowRunState(draftId: wid, runId: rid);
-      if (!mounted) return;
-      setState(() => _runState = s);
-      
-      // STOP if overall status is completed or failed
-      if (s['status'] == 'completed' || s['status'] == 'failed' || s['final_output'] != null) {
+  void _startPolling(String wid, String rid) {
+    _poller?.cancel();
+    _poller = Timer.periodic(const Duration(seconds: 2), (_) async {
+      try {
+        final s = await ref
+            .read(ripClientProvider)
+            .gatewayWorkflowRunState(draftId: wid, runId: rid);
+        if (!mounted) return;
+        setState(() => _runState = s);
+        final stepStates = s['step_states'] as Map? ?? {};
+        final hasCompleted = stepStates.values.any((st) =>
+            st is Map &&
+            (st['status'] == 'completed' || st['status'] == 'failed'));
+        if (s['final_output'] != null ||
+            hasCompleted ||
+            s['status'] == 'completed' ||
+            s['status'] == 'failed') _poller?.cancel();
+      } catch (_) {
         _poller?.cancel();
       }
-    } catch (_) {
-      _poller?.cancel();
-    }
-  });
-}
+    });
+  }
 
   Future<void> _deleteStep(Map<String, dynamic> w, String id) async {
     _refresh(await ref.read(ripClientProvider).deleteGatewayWorkflowBlock(
@@ -1979,15 +1918,11 @@ class _WireBar extends StatelessWidget {
           child: Row(children: [
             const Icon(Icons.cable_rounded, size: 18),
             const SizedBox(width: 8),
-          // In _WireBar, replace the Expanded text line:
-          // In _WireBar, replace the Expanded text line:
             Expanded(
-              child: Text(
-                '${wire['source_step_id'] ?? '?'}:${wire['source_port'] ?? 'out'} \u2192 ${wire['target_step_id'] ?? '?'}:${wire['target_port'] ?? 'in'}',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
+                child: Text(
+                    '${wire['source_step_id'] ?? '?'} \u2192 ${wire['target_step_id'] ?? '?'}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis)),
             if (wire['label'] != null)
               Container(
                   padding:
@@ -2355,181 +2290,7 @@ class _PromptQuickConfig extends ConsumerStatefulWidget {
 
 class _PromptQuickConfigState extends ConsumerState<_PromptQuickConfig> {
   String? _pid;
-  String _selectedModel = 'primary';
-  List<Map<String, dynamic>> _llmConfigs = [];
   final _quick = TextEditingController();
-  List<Map<String, dynamic>> _cachedTemplates = [];
-  bool _loaded = false;
-  bool _llmLoaded = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadData();
-  }
-
-  Future<void> _loadData() async {
-    await Future.wait([_loadTemplates(), _loadLLM()]);
-  }
-
-  Future<void> _loadTemplates() async {
-    try {
-      final data = await widget.ref.read(ripClientProvider).listGatewayPromptTemplates();
-      if (!mounted) return;
-      setState(() {
-        _cachedTemplates = ((data['templates'] as List?) ?? [])
-            .whereType<Map>()
-            .map((m) => Map<String, dynamic>.from(m))
-            .toList();
-        _loaded = true;
-      });
-    } catch (_) {
-      if (mounted) setState(() => _loaded = true);
-    }
-  }
-
-  Future<void> _loadLLM() async {
-    try {
-      final data = await widget.ref.read(ripClientProvider).listLLMConfigs();
-      if (!mounted) return;
-      setState(() {
-        _llmConfigs = ((data['configs'] as List?) ?? [])
-            .whereType<Map>()
-            .map((m) => Map<String, dynamic>.from(m))
-            .toList();
-        _llmLoaded = true;
-        if (_selectedModel == 'primary' && _llmConfigs.isNotEmpty) {
-          _selectedModel = _llmConfigs.first['id']?.toString() ?? 'primary';
-        }
-      });
-    } catch (_) {
-      if (mounted) setState(() => _llmLoaded = true);
-    }
-  }
-
-  Future<void> _showAddModelDialog() async {
-    final nameCtrl = TextEditingController();
-    final providerCtrl = TextEditingController();
-    final modelCtrl = TextEditingController();
-    final keyCtrl = TextEditingController();
-    final urlCtrl = TextEditingController();
-
-    final result = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Add LLM Model'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: nameCtrl,
-                decoration: const InputDecoration(
-                  labelText: 'Name *',
-                  hintText: 'my-gpt4',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: providerCtrl,
-                decoration: const InputDecoration(
-                  labelText: 'Provider *',
-                  hintText: 'openai, anthropic, google, openrouter, ollama',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: modelCtrl,
-                decoration: const InputDecoration(
-                  labelText: 'Model *',
-                  hintText: 'gpt-4, claude-3-5-sonnet, gemini-2.5-flash',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: keyCtrl,
-                obscureText: true,
-                decoration: const InputDecoration(
-                  labelText: 'API Key',
-                  hintText: 'sk-... (leave empty for local models)',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: urlCtrl,
-                decoration: const InputDecoration(
-                  labelText: 'Base URL (optional)',
-                  hintText: 'https://api.openai.com/v1',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Add Model'),
-          ),
-        ],
-      ),
-    );
-
-    nameCtrl.dispose();
-    providerCtrl.dispose();
-    modelCtrl.dispose();
-    keyCtrl.dispose();
-    urlCtrl.dispose();
-
-    if (result != true || !mounted) return;
-
-    final name = nameCtrl.text.trim();
-    final provider = providerCtrl.text.trim();
-    final model = modelCtrl.text.trim();
-    final apiKey = keyCtrl.text.trim();
-    final baseUrl = urlCtrl.text.trim();
-
-    if (name.isEmpty || provider.isEmpty || model.isEmpty) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Name, provider, and model are required')),
-        );
-      }
-      return;
-    }
-
-    try {
-      await widget.ref.read(ripClientProvider).addLLMConfig(
-        configId: name,
-        provider: provider,
-        model: model,
-        apiKey: apiKey.isEmpty ? null : apiKey,
-        baseUrl: baseUrl.isEmpty ? null : baseUrl,
-      );
-      await _loadLLM();
-      setState(() => _selectedModel = name);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Model "$name" added')),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to add model: $e')),
-        );
-      }
-    }
-  }
-
   @override
   void dispose() {
     _quick.dispose();
@@ -2538,96 +2299,73 @@ class _PromptQuickConfigState extends ConsumerState<_PromptQuickConfig> {
 
   @override
   Widget build(BuildContext context) {
+    final prompts = widget.ref.watch(gatewayPromptTemplatesProvider);
     final cs = Theme.of(context).colorScheme;
     return Padding(
-      padding: EdgeInsets.fromLTRB(16, 0, 16, MediaQuery.viewInsetsOf(context).bottom + 16),
+      padding: EdgeInsets.fromLTRB(
+          16, 0, 16, MediaQuery.viewInsetsOf(context).bottom + 16),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text('AI Analysis', style: Theme.of(context).textTheme.titleLarge),
           const SizedBox(height: 12),
-          if (!_loaded)
-            const Padding(padding: EdgeInsets.all(24), child: Center(child: CircularProgressIndicator()))
-          else ...[
-            Flexible(
-              child: _cachedTemplates.isEmpty
-                  ? const Text('No templates yet.')
-                  : ListView(
-                      shrinkWrap: true,
-                      children: [
-                        Text('Saved Templates', style: Theme.of(context).textTheme.titleSmall),
-                        const SizedBox(height: 6),
-                        for (final t in _cachedTemplates) _buildTemplateCard(t, cs),
-                      ],
-                    ),
-            ),
-            // LLM Model Selector
-            const SizedBox(height: 12),
-            Row(children: [
-              Text('Model', style: Theme.of(context).textTheme.titleSmall),
-              const Spacer(),
-              TextButton.icon(
-                onPressed: _showAddModelDialog,
-                icon: const Icon(Icons.add_rounded, size: 16),
-                label: const Text('Add Model'),
-              ),
-            ]),
-            if (_llmLoaded && _llmConfigs.isNotEmpty) ...[
-              const SizedBox(height: 4),
-              SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Row(children: [
-                  for (final cfg in _llmConfigs)
-                    Padding(
-                      padding: const EdgeInsets.only(right: 8),
-                      child: ChoiceChip(
-                        label: Text(
-                          '${cfg['provider']}/${cfg['model']}',
-                          style: const TextStyle(fontSize: 11),
-                        ),
-                        selected: _selectedModel == cfg['id']?.toString(),
-                        onSelected: (sel) {
-                          if (sel) setState(() => _selectedModel = cfg['id']?.toString() ?? 'primary');
-                        },
-                        avatar: cfg['has_api_key'] == true
-                            ? const Icon(Icons.vpn_key_rounded, size: 14)
-                            : null,
-                      ),
-                    ),
-                ]),
-              ),
-            ] else if (_llmLoaded)
-              Padding(
-                padding: const EdgeInsets.all(8),
-                child: Text('No models configured. Add one using the button above.',
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.grey)),
-              ),
-            const Divider(height: 20),
-            TextField(
-              controller: _quick,
-              minLines: 2,
-              maxLines: 4,
-              decoration: const InputDecoration(labelText: 'Quick Prompt', hintText: 'Analyze this code...', border: OutlineInputBorder()),
-            ),
-            const SizedBox(height: 12),
-            FilledButton.icon(
-              onPressed: () {
-                final b = <String, dynamic>{'query': {'source': 'trigger_query'}};
-                b['model_preference'] = {'source': 'literal', 'value': _selectedModel};
-                if (_pid != null) {
-                  b['prompt_id'] = {'source': 'literal', 'value': _pid};
-                } else if (_quick.text.trim().isNotEmpty) {
-                  b['prompt'] = {'source': 'literal', 'value': _quick.text.trim()};
-                } else {
-                  return;
+          Flexible(
+            child: prompts.when(
+              data: (d) {
+                final templates = ((d['templates'] as List?) ?? [])
+                    .whereType<Map>()
+                    .map((m) => Map<String, dynamic>.from(m))
+                    .toList();
+                if (templates.isEmpty) {
+                  return const Text('No templates yet.');
                 }
-                Navigator.pop(context, _Configured(config: {}, bindings: b));
+                return ListView(
+                  shrinkWrap: true,
+                  children: [
+                    Text('Saved Templates',
+                        style: Theme.of(context).textTheme.titleSmall),
+                    const SizedBox(height: 6),
+                    for (final t in templates) _buildTemplateCard(t, cs),
+                  ],
+                );
               },
-              icon: const Icon(Icons.check_rounded),
-              label: const Text('Add Block'),
+              loading: () => const CircularProgressIndicator(),
+              error: (e, _) => Text('Error: $e'),
             ),
-          ],
+          ),
+          const Divider(height: 20),
+          TextField(
+            controller: _quick,
+            minLines: 2,
+            maxLines: 4,
+            decoration: const InputDecoration(
+              labelText: 'Quick Prompt',
+              hintText: 'Analyze this code...',
+              border: OutlineInputBorder(),
+            ),
+          ),
+          const SizedBox(height: 12),
+          FilledButton.icon(
+            onPressed: () {
+              final b = <String, dynamic>{
+                'query': {'source': 'trigger_query'}
+              };
+              if (_pid != null) {
+                b['prompt_id'] = {'source': 'literal', 'value': _pid};
+              } else if (_quick.text.trim().isNotEmpty) {
+                b['prompt'] = {
+                  'source': 'literal',
+                  'value': _quick.text.trim()
+                };
+              } else {
+                return;
+              }
+              Navigator.pop(context, _Configured(config: {}, bindings: b));
+            },
+            icon: const Icon(Icons.check_rounded),
+            label: const Text('Add Block'),
+          ),
         ],
       ),
     );
@@ -2636,26 +2374,68 @@ class _PromptQuickConfigState extends ConsumerState<_PromptQuickConfig> {
   Widget _buildTemplateCard(Map<String, dynamic> t, ColorScheme cs) {
     final tid = t['id']?.toString() ?? '';
     final sel = _pid == tid;
-    final preview = (t['prompt_template'] ?? t['template'] ?? '').toString();
-    final short = preview.length > 60 ? '${preview.substring(0, 60)}...' : preview;
     return Card(
       margin: const EdgeInsets.only(bottom: 6),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: BorderSide(color: sel ? cs.primary : cs.outlineVariant, width: sel ? 2 : 1)),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(8),
+        side: BorderSide(
+          color: sel ? cs.primary : cs.outlineVariant,
+          width: sel ? 2 : 1,
+        ),
+      ),
       child: InkWell(
         borderRadius: BorderRadius.circular(8),
         onTap: () => setState(() => _pid = sel ? null : tid),
         child: Padding(
           padding: const EdgeInsets.all(10),
-          child: Row(children: [
-            Container(width: 20, height: 20, decoration: BoxDecoration(shape: BoxShape.circle, color: sel ? cs.primary : Colors.transparent, border: Border.all(color: sel ? cs.primary : cs.outline, width: 2)), child: sel ? Icon(Icons.check_rounded, size: 12, color: cs.onPrimary) : null),
-            const SizedBox(width: 10),
-            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text('${t['name'] ?? 'Untitled'}', style: Theme.of(context).textTheme.titleSmall), Text(short, maxLines: 1, overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.bodySmall?.copyWith(fontSize: 10))])),
-          ]),
+          child: Row(
+            children: [
+              Container(
+                width: 20,
+                height: 20,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: sel ? cs.primary : Colors.transparent,
+                  border: Border.all(
+                    color: sel ? cs.primary : cs.outline,
+                    width: 2,
+                  ),
+                ),
+                child: sel
+                    ? Icon(Icons.check_rounded, size: 12, color: cs.onPrimary)
+                    : null,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '${t['name'] ?? 'Untitled'}',
+                      style: Theme.of(context).textTheme.titleSmall,
+                    ),
+                    Text(
+                      '${t['prompt_template'] ?? t['template'] ?? ''}'
+                          .replaceAll(RegExp(r'\s+'), ' ')
+                          .trim(),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context)
+                          .textTheme
+                          .bodySmall
+                          ?.copyWith(fontSize: 10),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 }
+
 class _ApprovalQuickConfig extends StatefulWidget {
   const _ApprovalQuickConfig();
   @override
@@ -2805,86 +2585,55 @@ class _GenericQuickConfig extends StatefulWidget {
 
 class _GenericQuickConfigState extends State<_GenericQuickConfig> {
   final _bindings = <String, String>{};
-  final _portSources = <String, String>{}; // portName -> 'chat' | 'literal' | 'unused'
   @override
-@override
-Widget build(BuildContext context) {
-  final inputs = _schemaProps(_schemaMap(widget.block['input_schema']));
-  final required = _schemaRequired(_schemaMap(widget.block['input_schema']));
-  return Padding(
-    padding: EdgeInsets.fromLTRB(16, 0, 16, MediaQuery.viewInsetsOf(context).bottom + 16),
-    child: Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Text(widget.block['name']?.toString() ?? 'Block',
-            style: Theme.of(context).textTheme.titleLarge),
-        const SizedBox(height: 12),
-        if (inputs.isEmpty)
-          Text('No inputs needed.', style: Theme.of(context).textTheme.bodySmall)
-        else
-          Flexible(
-            child: ListView(
-              shrinkWrap: true,
-              children: inputs.keys.map((portName) {
-                final isReq = required.contains(portName);
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 10),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('${_fieldLabel(portName)}${isReq ? ' *' : ''}',
-                          style: Theme.of(context).textTheme.titleSmall),
-                      const SizedBox(height: 4),
-                      SegmentedButton<String>(
-                        segments: [
-                          ButtonSegment(value: 'chat', label: Text(isReq ? 'Chat' : 'Unused')),
-                          ButtonSegment(value: 'literal', label: const Text('Value')),
-                        ],
-                        selected: {_portSources[portName] ?? (isReq ? 'chat' : 'unused')},
-                        onSelectionChanged: (v) {
-                          setState(() => _portSources[portName] = v.first);
-                        },
-                      ),
-                      if (_portSources[portName] == 'literal')
-                        TextField(
-                          decoration: InputDecoration(
-                            hintText: 'Enter value...',
-                            border: const OutlineInputBorder(),
-                          ),
-                          onChanged: (v) => _bindings[portName] = v,
-                        ),
-                    ],
-                  ),
-                );
-              }).toList(),
-            ),
-          ),
-        const SizedBox(height: 12),
-        FilledButton.icon(
-          onPressed: () {
-            final b = <String, dynamic>{};
-            for (final k in inputs.keys) {
-              final source = _portSources[k] ?? 'chat';
-              if (source == 'unused') continue;
-              b[k] = {
-                'source': source == 'literal' ? 'literal' : 'trigger_query',
-                if (source == 'literal' && (_bindings[k]?.isNotEmpty == true))
-                  'value': _bindings[k],
-              };
-            }
-            Navigator.pop(context, _Configured(config: {}, bindings: b));
-          },
-          icon: const Icon(Icons.check_rounded),
-          label: const Text('Add Block'),
-        ),
-      ],
-    ),
-  );
-}
-
-// Add this field to _GenericQuickConfigState:
-
+  Widget build(BuildContext context) {
+    final inputs = _schemaProps(_schemaMap(widget.block['input_schema']));
+    return Padding(
+        padding: EdgeInsets.fromLTRB(
+            16, 0, 16, MediaQuery.viewInsetsOf(context).bottom + 16),
+        child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(widget.block['name']?.toString() ?? 'Block',
+                  style: Theme.of(context).textTheme.titleLarge),
+              const SizedBox(height: 12),
+              if (inputs.isEmpty)
+                Text('No inputs needed.',
+                    style: Theme.of(context).textTheme.bodySmall)
+              else
+                Flexible(
+                    child: ListView(
+                        shrinkWrap: true,
+                        children: inputs.keys
+                            .map((k) => Padding(
+                                padding: const EdgeInsets.only(bottom: 10),
+                                child: TextField(
+                                    decoration: InputDecoration(
+                                        labelText: _fieldLabel(k),
+                                        hintText: 'Leave empty for chat input',
+                                        border: const OutlineInputBorder()),
+                                    onChanged: (v) => _bindings[k] = v)))
+                            .toList())),
+              const SizedBox(height: 12),
+              FilledButton.icon(
+                  onPressed: () {
+                    final b = <String, dynamic>{};
+                    for (final k in inputs.keys)
+                      b[k] = {
+                        'source': (_bindings[k]?.isNotEmpty == true)
+                            ? 'literal'
+                            : 'trigger_query',
+                        if (_bindings[k]?.isNotEmpty == true)
+                          'value': _bindings[k]
+                      };
+                    Navigator.pop(
+                        context, _Configured(config: {}, bindings: b));
+                  },
+                  icon: const Icon(Icons.check_rounded),
+                  label: const Text('Add Block'))
+            ]));
+  }
 }
 
 class _BlockPalette extends StatelessWidget {
@@ -3045,34 +2794,6 @@ Map<String, dynamic> _schemaProps(Map<String, dynamic> s) =>
     s['properties'] is Map
         ? Map<String, dynamic>.from(s['properties'])
         : const {};
-        // Add these near the other _schema functions (around line 3050)
-
-String _schemaType(Map<String, dynamic> schema) {
-  final type = schema['type'];
-  if (type is List && type.isNotEmpty) return type.first.toString();
-  return type?.toString() ?? 'string';
-}
-
-String _schemaHint(Map<String, dynamic> schema) {
-  final description = schema['description']?.toString();
-  if (description != null && description.isNotEmpty) return description;
-  final type = _schemaType(schema);
-  return switch (type) {
-    'array' => 'Enter a JSON array.',
-    'object' => 'Enter a JSON object.',
-    'number' || 'integer' => 'Enter a number.',
-    'boolean' => 'Enter true or false.',
-    _ => 'Enter text.',
-  };
-}
-
-Set<String> _schemaRequired(Map<String, dynamic> schema) {
-  final required = schema['required'];
-  if (required is List) {
-    return required.map((item) => item.toString()).toSet();
-  }
-  return const <String>{};
-}
 String _defaultPort(List<Map<String, dynamic>> blocks, String id) {
   for (final b in blocks) {
     if (b['step_id']?.toString() == id) {
@@ -3185,4 +2906,3 @@ Color _displayColor(Map<String, dynamic> b) {
       ? Color(int.parse('FF${h.substring(1)}', radix: 16))
       : Colors.blueGrey;
 }
-

@@ -1,0 +1,449 @@
+﻿// ============================================================
+// PROMPT QUICK CONFIG - WITH LLM CONFIG SUPPORT
+// ============================================================
+
+class _PromptQuickConfig extends ConsumerStatefulWidget {
+  const _PromptQuickConfig({required this.ref});
+  final WidgetRef ref;
+  @override
+  ConsumerState<_PromptQuickConfig> createState() => _PromptQuickConfigState();
+}
+
+class _PromptQuickConfigState extends ConsumerState<_PromptQuickConfig> {
+  String? _selectedTemplateId;
+  String? _selectedLlmConfigId;
+  final _quick = TextEditingController();
+  String _provider = 'openai';
+  String _model = 'gpt-4';
+
+  @override
+  void dispose() {
+    _quick.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final prompts = widget.ref.watch(gatewayPromptTemplatesProvider);
+    final llmConfigs = widget.ref.watch(gatewayLlmConfigsProvider);
+    final cs = Theme.of(context).colorScheme;
+
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+          16, 0, 16, MediaQuery.viewInsetsOf(context).bottom + 16),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(children: [
+            const Icon(Icons.psychology_rounded, color: Color(0xFF8B5CF6)),
+            const SizedBox(width: 10),
+            Expanded(
+                child: Text('Ask AI',
+                    style: Theme.of(context).textTheme.titleLarge)),
+          ]),
+          const SizedBox(height: 12),
+
+          // LLM Configuration Selector
+          _buildLlmConfigSelector(cs),
+
+          const Divider(height: 16),
+
+          // Templates Section
+          Flexible(
+            child: prompts.when(
+              data: (d) {
+                final templates = ((d['templates'] as List?) ?? [])
+                    .whereType<Map>()
+                    .map((m) => Map<String, dynamic>.from(m))
+                    .toList();
+                if (templates.isEmpty) {
+                  return const Text('No saved templates yet.');
+                }
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Saved Templates',
+                        style: Theme.of(context).textTheme.titleSmall),
+                    const SizedBox(height: 6),
+                    Expanded(
+                      child: ListView(
+                        shrinkWrap: true,
+                        children: templates.map((t) => _buildTemplateCard(t, cs)).toList(),
+                      ),
+                    ),
+                  ],
+                );
+              },
+              loading: () => const Expanded(
+                child: Center(child: CircularProgressIndicator()),
+              ),
+              error: (e, _) => Expanded(
+                child: Center(child: Text('Error loading templates: $e')),
+              ),
+            ),
+          ),
+          const Divider(height: 16),
+          Text('Quick Prompt',
+              style: Theme.of(context).textTheme.titleSmall),
+          const SizedBox(height: 6),
+          TextField(
+            controller: _quick,
+            minLines: 2,
+            maxLines: 4,
+            decoration: const InputDecoration(
+              hintText: 'Analyze this code...',
+              border: OutlineInputBorder(),
+              filled: true,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Row(children: [
+            Expanded(
+              child: FilledButton.icon(
+                onPressed: _canAdd()
+                    ? () {
+                        final b = _buildBindings();
+                        Navigator.pop(context,
+                            _Configured(config: _buildConfig(), bindings: b));
+                      }
+                    : null,
+                icon: const Icon(Icons.check_rounded),
+                label: const Text('Add Block'),
+              ),
+            ),
+            const SizedBox(width: 8),
+            OutlinedButton.icon(
+              onPressed: () => Navigator.pop(context),
+              icon: const Icon(Icons.close_rounded),
+              label: const Text('Cancel'),
+            ),
+          ]),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLlmConfigSelector(ColorScheme cs) {
+    final llmConfigs = widget.ref.watch(gatewayLlmConfigsProvider);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Icon(Icons.settings_rounded, size: 16, color: Color(0xFF8B5CF6)),
+            const SizedBox(width: 6),
+            Text('LLM Configuration',
+                style: Theme.of(context).textTheme.titleSmall),
+            const Spacer(),
+            TextButton.icon(
+              onPressed: () => _showAddLlmConfigDialog(),
+              icon: const Icon(Icons.add_rounded, size: 16),
+              label: const Text('Add'),
+              style: TextButton.styleFrom(
+                visualDensity: VisualDensity.compact,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        llmConfigs.when(
+          data: (configList) {
+            if (configList.isEmpty) {
+              return Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: cs.surfaceContainerHighest,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.info_outline_rounded, size: 18, color: cs.outline),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'No LLM configs found. Add one to customize your AI provider.',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }
+
+            return Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: [
+                // Built-in option
+                ChoiceChip(
+                  label: const Text('Default (OpenAI)'),
+                  selected: _selectedLlmConfigId == null,
+                  onSelected: (sel) => setState(() {
+                    _selectedLlmConfigId = null;
+                    _provider = 'openai';
+                    _model = 'gpt-4';
+                  }),
+                  selectedColor: cs.primaryContainer,
+                  avatar: const Icon(Icons.cloud_rounded, size: 14),
+                ),
+                // Custom configs
+                ...configList.map((cfg) {
+                  final id = cfg['id']?.toString() ?? '';
+                  final provider = cfg['provider']?.toString() ?? 'unknown';
+                  final model = cfg['model']?.toString() ?? 'model';
+                  final isCustom = cfg['is_custom'] ?? false;
+                  final isSelected = _selectedLlmConfigId == id;
+                  return ChoiceChip(
+                    label: Text('$provider: $model',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis),
+                    selected: isSelected,
+                    onSelected: (sel) => setState(() {
+                      if (sel) {
+                        _selectedLlmConfigId = id;
+                        _provider = provider;
+                        _model = model;
+                      } else {
+                        _selectedLlmConfigId = null;
+                        _provider = 'openai';
+                        _model = 'gpt-4';
+                      }
+                    }),
+                    selectedColor: cs.primaryContainer,
+                    avatar: Icon(
+                      isCustom ? Icons.code_rounded : Icons.memory_rounded,
+                      size: 14,
+                    ),
+                  );
+                }).toList(),
+              ],
+            );
+          },
+          loading: () => const SizedBox(
+            height: 30,
+            child: Center(
+              child: SizedBox.square(
+                dimension: 20,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+            ),
+          ),
+          error: (e, _) => Text('Error: $e',
+              style: TextStyle(color: cs.error, fontSize: 12)),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTemplateCard(Map<String, dynamic> t, ColorScheme cs) {
+    final tid = t['id']?.toString() ?? '';
+    final sel = _selectedTemplateId == tid;
+    return Card(
+      margin: const EdgeInsets.only(bottom: 6),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(8),
+        side: BorderSide(
+          color: sel ? cs.primary : cs.outlineVariant,
+          width: sel ? 2 : 1,
+        ),
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(8),
+        onTap: () => setState(() => _selectedTemplateId = sel ? null : tid),
+        child: Padding(
+          padding: const EdgeInsets.all(10),
+          child: Row(
+            children: [
+              Container(
+                width: 20,
+                height: 20,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: sel ? cs.primary : Colors.transparent,
+                  border: Border.all(
+                    color: sel ? cs.primary : cs.outline,
+                    width: 2,
+                  ),
+                ),
+                child: sel
+                    ? Icon(Icons.check_rounded, size: 12, color: cs.onPrimary)
+                    : null,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '${t['name'] ?? 'Untitled'}',
+                      style: Theme.of(context).textTheme.titleSmall,
+                    ),
+                    Text(
+                      '${t['prompt_template'] ?? t['template'] ?? ''}'
+                          .replaceAll(RegExp(r'\s+'), ' ')
+                          .trim(),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context)
+                          .textTheme
+                          .bodySmall
+                          ?.copyWith(fontSize: 10),
+                    ),
+                  ],
+                ),
+              ),
+              if (t['visibility'] == 'public')
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: cs.primaryContainer,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text('Public',
+                      style: TextStyle(fontSize: 8, color: cs.primary)),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Map<String, dynamic> _buildBindings() {
+    final b = <String, dynamic>{
+      'query': {'source': 'trigger_query'}
+    };
+
+    if (_selectedTemplateId != null) {
+      b['prompt_id'] = {'source': 'literal', 'value': _selectedTemplateId};
+    } else if (_quick.text.trim().isNotEmpty) {
+      b['prompt'] = {'source': 'literal', 'value': _quick.text.trim()};
+    }
+
+    // Add LLM config binding if selected
+    if (_selectedLlmConfigId != null) {
+      b['llm_config'] = {'source': 'literal', 'value': _selectedLlmConfigId};
+    }
+
+    return b;
+  }
+
+  Map<String, dynamic> _buildConfig() {
+    final config = <String, dynamic>{};
+
+    // Store provider and model in config
+    if (_selectedLlmConfigId != null) {
+      config['llm_config_id'] = _selectedLlmConfigId;
+    } else {
+      config['provider'] = _provider;
+      config['model'] = _model;
+    }
+
+    return config;
+  }
+
+  bool _canAdd() {
+    return _selectedTemplateId != null || _quick.text.trim().isNotEmpty;
+  }
+
+  Future<void> _showAddLlmConfigDialog() async {
+    final provider = TextEditingController(text: 'openai');
+    final model = TextEditingController(text: 'gpt-4');
+    final apiKey = TextEditingController();
+    final baseUrl = TextEditingController();
+    final configId = TextEditingController();
+
+    await showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Add LLM Configuration'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: configId,
+                decoration: const InputDecoration(
+                  labelText: 'Config ID (unique name)',
+                  hintText: 'my-openai-config',
+                ),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: provider,
+                decoration: const InputDecoration(
+                  labelText: 'Provider',
+                  hintText: 'openai, anthropic, deepseek, etc.',
+                ),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: model,
+                decoration: const InputDecoration(
+                  labelText: 'Model',
+                  hintText: 'gpt-4, claude-3, etc.',
+                ),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: apiKey,
+                decoration: const InputDecoration(
+                  labelText: 'API Key',
+                  hintText: 'sk-...',
+                ),
+                obscureText: true,
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: baseUrl,
+                decoration: const InputDecoration(
+                  labelText: 'Base URL (optional)',
+                  hintText: 'https://api.openai.com/v1',
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () async {
+              if (configId.text.trim().isEmpty) return;
+
+              try {
+                await widget.ref.read(ripClientProvider).addLLMConfig(
+                      configId: configId.text.trim(),
+                      provider: provider.text.trim(),
+                      model: model.text.trim(),
+                      apiKey: apiKey.text.trim().isNotEmpty
+                          ? apiKey.text.trim()
+                          : null,
+                      baseUrl: baseUrl.text.trim().isNotEmpty
+                          ? baseUrl.text.trim()
+                          : null,
+                    );
+                widget.ref.invalidate(gatewayLlmConfigsProvider);
+                if (mounted) Navigator.pop(ctx);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('LLM config added successfully!')),
+                );
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Failed to add config: $e')),
+                  );
+                }
+              }
+            },
+            child: const Text('Add'),
+          ),
+        ],
+      ),
+    );
+  }
+}

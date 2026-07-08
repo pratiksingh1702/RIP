@@ -1,4 +1,4 @@
-import 'package:go_router/go_router.dart';
+﻿import 'package:go_router/go_router.dart';
 import '../screens/splash_screen.dart';
 import '../screens/setup_screen.dart';
 import '../screens/chat_screen.dart';
@@ -7,6 +7,7 @@ import '../screens/gateway_audit_screen.dart';
 import '../screens/gateway_sources_screen.dart';
 import '../screens/mcp_export_screen.dart';
 import '../screens/workflows_screen.dart';
+import '../screens/llm_settings_screen.dart';
 
 final appRouter = GoRouter(
   initialLocation: '/splash',
@@ -46,9 +47,13 @@ final appRouter = GoRouter(
       path: '/audit',
       builder: (context, state) => const GatewayAuditScreen(),
     ),
+    GoRoute(path: '/llm-settings', builder: (context, state) => const LlmSettingsScreen()),
+    GoRoute(path: '/llm-settings', builder: (context, state) => const LlmSettingsScreen()),
     GoRoute(
       path: '/mcp-export',
       builder: (context, state) => const McpExportScreen(),
     ),
   ],
 );
+
+
