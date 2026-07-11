@@ -150,6 +150,16 @@ class AppDrawer extends ConsumerWidget {
   },
 ),
                         _CompactRow(
+                          icon: Icons.roundabout_left,
+                          title: 'Agent',
+                          subtitle: 'Autonomous code editing',
+                          onTap: () {
+                            HapticFeedback.selectionClick();
+                            Navigator.pop(context);
+                            context.push('/agent-runs');
+                          },
+                        ),
+                        _CompactRow(
                           icon: Icons.account_tree_rounded,
                           title: 'Workflows',
                           subtitle: 'Build and run block flows',
@@ -573,4 +583,6 @@ class _ThemeRow extends StatelessWidget {
     );
   }
 }
+
+
 

@@ -36,6 +36,7 @@ from server.routers.ws import router as ws_router
 from server.runtime import ServerRuntime
 
 from gateway.server.routers import (
+    agent as gateway_agent,
     active_project as gateway_active_project,
     audit as gateway_audit,
     context as gateway_context,
@@ -90,7 +91,7 @@ def create_app() -> FastAPI:
     app.include_router(architecture.router, dependencies=[Depends(verify_api_key)])
     app.include_router(onboard.router, dependencies=[Depends(verify_api_key)])
     app.include_router(explain.router, dependencies=[Depends(verify_api_key)])
-    app.include_router(health_router)  # No auth for health
+    app.include_router(health_router)
     app.include_router(runtime.router, dependencies=[Depends(verify_api_key)])
     app.include_router(git_router, dependencies=[Depends(verify_api_key)])
     app.include_router(projects_router, dependencies=[Depends(verify_api_key)])
@@ -168,12 +169,14 @@ def create_app() -> FastAPI:
         tags=["gateway-projects"],
         dependencies=[Depends(verify_api_key)],
     )
+    app.include_router(
+        gateway_agent.router,
+        prefix="/gateway/api/agent",
+        tags=["gateway-agent"],
+        dependencies=[Depends(verify_api_key)],
+    )
     app.include_router(ws_router)
     return app
 
 
-
 app = create_app()
-
-
-

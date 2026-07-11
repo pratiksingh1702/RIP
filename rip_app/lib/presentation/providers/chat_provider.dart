@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:developer';
 import 'package:dio/dio.dart';
@@ -25,6 +26,7 @@ final databaseProvider = Provider<AppDatabase>((ref) {
 });
 
 final isAssistantBusyProvider = StateProvider<bool>((ref) => false);
+final activeAgentRunIdProvider = StateProvider<String?>((ref) => null);
 
 class ChatNotifier extends Notifier<List<Message>> {
   late AppDatabase _db;
@@ -32,6 +34,7 @@ class ChatNotifier extends Notifier<List<Message>> {
   String? _activePendingId;
   String? _lastGatewaySessionId;
   String? _currentSessionId;
+  String? _activeAgentRunId;
 
   @override
   List<Message> build() {
@@ -339,6 +342,30 @@ class ChatNotifier extends Notifier<List<Message>> {
     state = [];
   }
 
+  void _startAgentPolling(String runId, String messageId) {
+    Timer.periodic(const Duration(seconds: 2), (timer) async {
+      if (_activeAgentRunId != runId) {
+        timer.cancel();
+        return;
+      }
+      
+      try {
+        final client = ref.read(ripClientProvider);
+        final status = await client.getAgentRun(runId);
+        
+        if (status['status'] == 'completed' || status['status'] == 'failed') {
+          timer.cancel();
+          _activeAgentRunId = null;
+          ref.read(activeAgentRunIdProvider.notifier).state = null;
+        }
+      } catch (e) {
+        timer.cancel();
+        _activeAgentRunId = null;
+        ref.read(activeAgentRunIdProvider.notifier).state = null;
+      }
+    });
+  }
+
   Future<String> _executeCommand(
     ParsedCommand cmd,
     String rawText, {
@@ -561,6 +588,21 @@ class ChatNotifier extends Notifier<List<Message>> {
           'Open Workflows to inspect completed, running, waiting, or broken blocks.',
         ].join('\n');
 
+      case CommandType.agent:
+        final taskQuery = cmd.arguments.isNotEmpty ? cmd.arguments.join(' ') : rawText;
+        final client = ref.read(ripClientProvider);
+        final result = await client.executeAgent(
+          query: taskQuery,
+          projectId: projectId,
+          modelPreference: cmd.flagValue('model'),
+          cancelToken: cancelToken,
+        );
+        final runId = result['run_id']?.toString() ?? '';
+        if (runId.isNotEmpty) {
+          _activeAgentRunId = runId;
+          _startAgentPolling(runId, _activePendingId!);
+        }
+        return 'Agent started. Run ID: $runId\n\nThe agent will read, edit, and verify code automatically. You can check progress in the Agent Runs screen.';
       case CommandType.unknown:
         final projectId = ref.read(activeProjectIdProvider);
         final result = await client.gatewayContext(

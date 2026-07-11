@@ -922,6 +922,42 @@ class RipClient {
     }
   }
 
+  /// Execute an AI agent for autonomous engineering tasks
+  Future<Map<String, dynamic>> executeAgent({
+    required String query,
+    String? modelPreference,
+    String? projectId,
+    int maxTurns = 50,
+    CancelToken? cancelToken,
+  }) async {
+    final response = await _dio.post('/gateway/api/agent/execute', data: {
+      'query': query,
+      if (modelPreference != null) 'model_preference': modelPreference,
+      if (projectId != null) 'project_id': projectId,
+      'max_turns': maxTurns,
+    }, cancelToken: cancelToken);
+    return response.data as Map<String, dynamic>;
+  }
+
+  /// Get the current state of an agent run
+  Future<Map<String, dynamic>> getAgentRun(String runId, {CancelToken? cancelToken}) async {
+    final response = await _dio.get('/gateway/api/agent/runs/$runId', cancelToken: cancelToken);
+    return response.data as Map<String, dynamic>;
+  }
+
+  /// List all agent runs
+  Future<Map<String, dynamic>> listAgentRuns({CancelToken? cancelToken}) async {
+    final response = await _dio.get('/gateway/api/agent/runs', cancelToken: cancelToken);
+    return response.data as Map<String, dynamic>;
+  }
+
+  /// List available agent tools
+  Future<Map<String, dynamic>> listAgentTools({CancelToken? cancelToken}) async {
+    final response = await _dio.get('/gateway/api/agent/tools', cancelToken: cancelToken);
+    return response.data as Map<String, dynamic>;
+  }
+
+
   /// List available LLM configurations
   Future<Map<String, dynamic>> listLLMConfigs({CancelToken? cancelToken}) async {
     final response = await _dio.get('/gateway/api/workflows/llm-configs', cancelToken: cancelToken);
@@ -999,5 +1035,6 @@ class RipClient {
   }
 
 }
+
 
 

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:rip_app/presentation/providers/llm_config_provider.dart';
 
 import '../../core/design/app_colors.dart';
 import '../../core/design/app_theme.dart';
@@ -1180,6 +1181,10 @@ class _ComposerSuggestions extends ConsumerWidget {
             flags: flags,
             onSelected: _insertFlag,
           ),
+                  if (commandToken == 'agent') ...[
+          const SizedBox(height: 10),
+          _LLMConfigChips(),
+        ],
         ],
       ],
     );
@@ -1502,6 +1507,87 @@ class _PremiumEmptyState extends StatelessWidget {
     final parsed = DateTime.tryParse(project.indexedAt);
     if (parsed == null) return project.indexedAt.isEmpty ? 'unknown' : project.indexedAt;
     return DateFormatter.formatRelativeTime(parsed);
+  }
+}
+class _LLMConfigChips extends ConsumerWidget {
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final llmConfigsAsync = ref.watch(llmConfigsProvider);
+    return llmConfigsAsync.when(
+      loading: () => const SizedBox.shrink(),
+      error: (_, __) => const SizedBox.shrink(),
+      data: (configs) {
+        if (configs.isEmpty) return const SizedBox.shrink();
+        final chrome = Theme.of(context).extension<ChatChromeTheme>() ??
+            const ChatChromeTheme.dark();
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'LLM Configs',
+              style: TextStyle(
+                color: AppColors.textSecondary.withValues(alpha: 0.82),
+                fontSize: 12,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final config in configs)
+                  Tooltip(
+                    message: '${config['provider']} / ${config['model']}',
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(18),
+                      onTap: () {
+                        HapticFeedback.selectionClick();
+                        final text = '/agent --model ${config['id']} ';
+                        // Use the controller to update text
+                        final controller = (context as Element).findAncestorWidgetOfExactType<_FloatingComposer>()?.controller;
+                        if (controller != null) {
+                          controller.text = text;
+                          controller.selection = TextSelection.collapsed(offset: text.length);
+                        }
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                        decoration: BoxDecoration(
+                          color: chrome.suggestionSurface.withValues(alpha: 0.72),
+                          borderRadius: BorderRadius.circular(18),
+                          border: Border.all(
+                            color: chrome.borderColor.withValues(alpha: 0.82),
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              config['has_api_key'] == true ? Icons.vpn_key_rounded : Icons.cloud_outlined,
+                              size: 14,
+                              color: AppColors.textSecondary,
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              '${config['provider']}: ${config['model']}',
+                              style: const TextStyle(
+                                color: AppColors.textPrimary,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ],
+        );
+      },
+    );
   }
 }
 

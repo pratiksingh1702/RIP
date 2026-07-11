@@ -6,6 +6,7 @@ import '../screens/gateway_activity_screen.dart';
 import '../screens/gateway_audit_screen.dart';
 import '../screens/gateway_sources_screen.dart';
 import '../screens/mcp_export_screen.dart';
+import '../screens/agent_runs_screen.dart';
 import '../screens/workflows_screen.dart';
 import '../screens/llm_settings_screen.dart';
 
@@ -47,13 +48,19 @@ final appRouter = GoRouter(
       path: '/audit',
       builder: (context, state) => const GatewayAuditScreen(),
     ),
+        GoRoute(
+      path: '/agent-runs',
+      builder: (context, state) => const AgentRunsScreen(),
+    ),
+
     GoRoute(path: '/llm-settings', builder: (context, state) => const LlmSettingsScreen()),
-    GoRoute(path: '/llm-settings', builder: (context, state) => const LlmSettingsScreen()),
+    GoRoute(path: '/agent-runs', builder: (context, state) => const AgentRunsScreen()),
     GoRoute(
       path: '/mcp-export',
       builder: (context, state) => const McpExportScreen(),
     ),
   ],
 );
+
 
 

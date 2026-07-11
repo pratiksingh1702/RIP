@@ -11,6 +11,7 @@ enum CommandType {
   projects,
   deadCode,
   workflow,
+  agent,
   unknown,
 }
 
@@ -65,7 +66,11 @@ class CommandParser {
       return ParsedCommand(type: CommandType.unknown);
     }
 
-    final parts = trimmed.substring(1).split(RegExp(r'\s+')).where((p) => p.isNotEmpty).toList();
+    final parts = trimmed
+        .substring(1)
+        .split(RegExp(r'\s+'))
+        .where((p) => p.isNotEmpty)
+        .toList();
     if (parts.isEmpty) {
       return ParsedCommand(type: CommandType.unknown);
     }
@@ -76,29 +81,42 @@ class CommandParser {
 
     switch (commandName) {
       case 'search':
-        return ParsedCommand(type: CommandType.search, arguments: args, flags: flags);
+        return ParsedCommand(
+            type: CommandType.search, arguments: args, flags: flags);
       case 'explain':
-        return ParsedCommand(type: CommandType.explain, arguments: args, flags: flags);
+        return ParsedCommand(
+            type: CommandType.explain, arguments: args, flags: flags);
       case 'trace':
-        return ParsedCommand(type: CommandType.trace, arguments: args, flags: flags);
+        return ParsedCommand(
+            type: CommandType.trace, arguments: args, flags: flags);
       case 'impact':
-        return ParsedCommand(type: CommandType.impact, arguments: args, flags: flags);
+        return ParsedCommand(
+            type: CommandType.impact, arguments: args, flags: flags);
       case 'architecture':
-        return ParsedCommand(type: CommandType.architecture, arguments: args, flags: flags);
+        return ParsedCommand(
+            type: CommandType.architecture, arguments: args, flags: flags);
       case 'metrics':
-        return ParsedCommand(type: CommandType.metrics, arguments: args, flags: flags);
+        return ParsedCommand(
+            type: CommandType.metrics, arguments: args, flags: flags);
       case 'onboard':
-        return ParsedCommand(type: CommandType.onboard, arguments: args, flags: flags);
+        return ParsedCommand(
+            type: CommandType.onboard, arguments: args, flags: flags);
       case 'dependencies':
-        return ParsedCommand(type: CommandType.dependencies, arguments: args, flags: flags);
+        return ParsedCommand(
+            type: CommandType.dependencies, arguments: args, flags: flags);
       case 'index':
-        return ParsedCommand(type: CommandType.indexRepository, arguments: args, flags: flags);
+        return ParsedCommand(
+            type: CommandType.indexRepository, arguments: args, flags: flags);
       case 'projects':
-        return ParsedCommand(type: CommandType.projects, arguments: args, flags: flags);
+        return ParsedCommand(
+            type: CommandType.projects, arguments: args, flags: flags);
       case 'dead-code':
-        return ParsedCommand(type: CommandType.deadCode, arguments: args, flags: flags);
+        return ParsedCommand(
+            type: CommandType.deadCode, arguments: args, flags: flags);
       case 'workflow':
         return ParsedCommand(type: CommandType.workflow, arguments: args, flags: flags);
+      case 'agent':
+        return ParsedCommand(type: CommandType.agent, arguments: args, flags: flags);
       default:
         return ParsedCommand(type: CommandType.unknown);
     }
@@ -144,22 +162,38 @@ class CommandParser {
         'description': 'Search codebase',
         'flags': [
           {'name': '--limit', 'description': 'Result count', 'value': '<n>'},
-          {'name': '--language', 'description': 'Language filter', 'value': '<lang>'},
-          {'name': '--service', 'description': 'Service filter', 'value': '<name>'},
+          {
+            'name': '--language',
+            'description': 'Language filter',
+            'value': '<lang>'
+          },
+          {
+            'name': '--service',
+            'description': 'Service filter',
+            'value': '<name>'
+          },
         ],
       },
       {
         'name': '/explain <topic>',
         'description': 'Explain a symbol or concept',
         'flags': [
-          {'name': '--level', 'description': 'Context scope', 'value': '<file|class|function>'},
+          {
+            'name': '--level',
+            'description': 'Context scope',
+            'value': '<file|class|function>'
+          },
           {'name': '--diagram', 'description': 'Mermaid workflow'},
           {'name': '--tree', 'description': 'Workflow tree'},
           {'name': '--deps', 'description': 'Dependency table'},
           {'name': '--code', 'description': 'Relevant code'},
           {'name': '--no-llm', 'description': 'Graph only'},
           {'name': '--max-hops', 'description': 'Trace depth', 'value': '<n>'},
-          {'name': '--provider', 'description': 'LLM provider', 'value': '<name>'},
+          {
+            'name': '--provider',
+            'description': 'LLM provider',
+            'value': '<name>'
+          },
           {'name': '--model', 'description': 'LLM model', 'value': '<name>'},
         ],
       },
@@ -173,15 +207,37 @@ class CommandParser {
         'name': '/index <git_url> --folder <name> --subdir lib',
         'description': 'Index a git repository',
         'flags': [
-          {'name': '--folder', 'description': 'Clone folder', 'value': '<name>'},
-          {'name': '--subdir', 'description': 'Index subfolder', 'value': '<path>'},
-          {'name': '--project-name', 'description': 'Project label', 'value': '<name>'},
+          {
+            'name': '--folder',
+            'description': 'Clone folder',
+            'value': '<name>'
+          },
+          {
+            'name': '--subdir',
+            'description': 'Index subfolder',
+            'value': '<path>'
+          },
+          {
+            'name': '--project-name',
+            'description': 'Project label',
+            'value': '<name>'
+          },
           {'name': '--branch', 'description': 'Git branch', 'value': '<name>'},
         ],
       },
       {'name': '/projects', 'description': 'List all projects'},
       {'name': '/dead-code', 'description': 'Find dead code'},
-      {'name': '/workflow', 'description': 'Attach and run a workflow from this chat message'},
+      {
+        'name': '/workflow',
+        'description': 'Attach and run a workflow from this chat message'
+      },
+            {
+        'name': '/agent <task>',
+        'description': 'Run autonomous agent for engineering tasks',
+        'flags': [
+          {'name': '--model', 'description': 'LLM model preference', 'value': '<name>'},
+        ],
+      },
     ];
   }
 }
@@ -192,3 +248,4 @@ class _ParsedParts {
 
   const _ParsedParts({required this.arguments, required this.flags});
 }
+

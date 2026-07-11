@@ -2,6 +2,8 @@
 from gateway.core.blocks.context_retrieve import ContextRetrieveBlock
 from gateway.core.blocks.data_blocks import DataExtractBlock, DataFilterBlock, DataMergeBlock, DataToJsonBlock
 from gateway.core.blocks.filesystem import FSListDirectoryBlock, FSReadFileBlock, FSSearchFilesBlock, FSWriteFileBlock
+from gateway.core.blocks.agent_block import AgentBlock
+from gateway.core.blocks.fs_apply_patch import FSApplyPatchBlock
 from gateway.core.blocks.flow import FlowDelayBlock, FlowLogBlock, FlowSetVariableBlock
 from gateway.core.blocks.github_deployment import (
     GitHubCommitFilesBlock,
@@ -84,6 +86,10 @@ def register_all_blocks():
     registry.register(FlowSetVariableBlock())
     registry.register(FlowLogBlock())
 
+    # Agent Runtime
+    registry.register(AgentBlock())
+    registry.register(FSApplyPatchBlock())
+
     # Register all MCP sources as tool blocks
     source_registry = get_source_registry()
     for source in source_registry.list_sources().values():
@@ -95,3 +101,4 @@ __all__ = [
     "BlockRegistry", "get_block_registry",
     "register_all_blocks",
 ]
+
