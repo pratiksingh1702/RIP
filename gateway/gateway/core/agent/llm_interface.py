@@ -13,6 +13,20 @@ from gateway.core.llm_pool.router import LLMConfig
 
 logger = logging.getLogger(__name__)
 
+PROVIDER_PREFIX = {
+    "openai": "",
+    "custom": "",
+    "openai-compatible": "",
+    "groq": "groq/",
+    "openrouter": "openrouter/",
+    "ollama": "ollama/",
+    "anthropic": "anthropic/",
+    "google": "gemini/",
+    "gemini": "gemini/",
+    "deepseek": "deepseek/",
+    "azure": "azure/",
+}
+
 
 class ResponseType(Enum):
     TOOL_CALL = "tool_call"
@@ -46,17 +60,7 @@ class LLMInterface:
         import litellm
         provider = (config.provider or "").lower()
 
-        # Build model ID with provider prefix for LiteLLM
-        if "/" in config.model:
-            model_id = config.model
-        elif provider == "groq":
-            model_id = f"groq/{config.model}"
-        elif provider == "openrouter":
-            model_id = f"openrouter/{config.model}"
-        elif provider == "ollama":
-            model_id = f"ollama/{config.model}"
-        else:
-            model_id = config.model
+        model_id = self._model_id_for_provider(provider, config.model)
 
         kwargs = {
             "model": model_id,
@@ -106,6 +110,12 @@ class LLMInterface:
             response = await litellm.acompletion(**kwargs)
             content = response.choices[0].message.content or ""
             return self._parse_json_response(content, response.usage.total_tokens if response.usage else 0)
+
+    def _model_id_for_provider(self, provider: str, model: str) -> str:
+        if "/" in model:
+            return model
+        prefix = PROVIDER_PREFIX.get((provider or "").lower(), "")
+        return f"{prefix}{model}"
 
     def _extract_tool_from_error(self, error_str: str) -> LLMResponse:
         match = re.search(r'"failed_generation"\s*:\s*"(\{[^}]+\})"', error_str)

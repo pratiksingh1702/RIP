@@ -38,6 +38,7 @@ class AgentBlock(Block):
         "properties": {
             "model": {"type": "string", "nullable": True},
             "provider": {"type": "string", "nullable": True},
+            "project_root": {"type": "string", "nullable": True},
         },
     }
     requires_capabilities = ["LLM", "NETWORK"]
@@ -64,7 +65,9 @@ class AgentBlock(Block):
                 query=query,
                 llm_config=llm_config,
                 project_id=ctx.project_id,
-                user_id=ctx.user_id,
+                user_id=ctx.user_id or "",
+                project_root=config.get("project_root"),
+                run_id=ctx.workflow_run_id,
             )
 
             return BlockResult(ok=result.status == "completed", output={

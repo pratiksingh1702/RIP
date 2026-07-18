@@ -945,6 +945,21 @@ class RipClient {
     return response.data as Map<String, dynamic>;
   }
 
+  /// Approve or reject a pending agent tool execution.
+  Future<Map<String, dynamic>> approveAgentTool({
+    required String runId,
+    required bool approved,
+    String? comment,
+    CancelToken? cancelToken,
+  }) async {
+    final response = await _dio.post('/gateway/api/agent/approve', data: {
+      'run_id': runId,
+      'approved': approved,
+      if (comment != null) 'comment': comment,
+    }, cancelToken: cancelToken);
+    return response.data as Map<String, dynamic>;
+  }
+
   /// List all agent runs
   Future<Map<String, dynamic>> listAgentRuns({CancelToken? cancelToken}) async {
     final response = await _dio.get('/gateway/api/agent/runs', cancelToken: cancelToken);
