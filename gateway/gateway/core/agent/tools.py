@@ -1,4 +1,4 @@
-﻿"""Tool definitions and registry for the Agent Runtime."""
+"""Tool definitions and registry for the Agent Runtime."""
 
 from __future__ import annotations
 
@@ -48,3 +48,4 @@ class ToolRegistry:
             }
             for t in self._tools.values()
         ]
+

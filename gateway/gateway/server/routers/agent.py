@@ -26,6 +26,7 @@ class AgentExecuteRequest(BaseModel):
 
 
 class AgentApproveRequest(BaseModel):
+    run_id: str
     approved: bool
     comment: str | None = None
 
@@ -67,6 +68,14 @@ async def _run_agent_background(run_id: str, runtime, query: str, llm_config, pr
         }
     except Exception as e:
         _agent_runs[run_id] = {"status": "failed", "error": str(e)}
+
+
+@router.post("/approve")
+async def approve_agent_tool(body: AgentApproveRequest):
+    """Approve or reject a pending agent tool execution."""
+    runtime = get_agent_runtime()
+    runtime.approve_tool(body.run_id, body.approved)
+    return {"run_id": body.run_id, "approved": body.approved}
 
 
 @router.get("/runs/{run_id}")
