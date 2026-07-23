@@ -1,7 +1,8 @@
-﻿import 'package:go_router/go_router.dart';
+import 'package:go_router/go_router.dart';
 import '../screens/splash_screen.dart';
 import '../screens/setup_screen.dart';
 import '../screens/chat_screen.dart';
+import '../screens/workspace_dashboard.dart';
 import '../screens/gateway_activity_screen.dart';
 import '../screens/gateway_audit_screen.dart';
 import '../screens/gateway_sources_screen.dart';
@@ -11,8 +12,9 @@ import '../screens/workflows_screen.dart';
 import '../screens/llm_settings_screen.dart';
 
 final appRouter = GoRouter(
-  initialLocation: '/splash',
+  initialLocation: '/workspace',
   routes: [
+    GoRoute(path: '/workspace', builder: (context, state) => const WorkspaceDashboard()),
     GoRoute(
       path: '/splash',
       builder: (context, state) => const SplashScreen(),

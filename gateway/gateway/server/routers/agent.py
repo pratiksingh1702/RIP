@@ -1,4 +1,4 @@
-﻿"""Agent Runtime API endpoints."""
+"""Agent Runtime API endpoints."""
 
 from __future__ import annotations
 
@@ -135,6 +135,30 @@ async def list_agent_runs():
     """List all agent runs."""
     return {"runs": [{"id": k, "status": v.get("status"), "query": v.get("query", "")[:100], "pending_approval": v.get("pending_approval")} for k, v in _agent_runs.items()]}
 
+
+
+# -- Workspace Endpoints --
+
+from gateway.core.workspace.memory import get_workspace_memory
+
+@router.get("/workspace/dashboard")
+async def workspace_dashboard(request: Request, project_id: str | None = None):
+    """Return everything needed for the workspace dashboard."""
+    memory = get_workspace_memory()
+    workspace_id = project_id or "default"
+    recent = await memory.get_recent(workspace_id, limit=15)
+    suggestions = await memory.get_suggestions(workspace_id, project_id)
+    total_used = sum(r.get("tokens_used", 0) for r in recent)
+    total_budgeted = sum(r.get("tokens_budgeted", 0) for r in recent)
+    savings = round((1 - total_used / max(total_budgeted, 1)) * 100, 1) if total_budgeted > 0 else 0
+    return {"recent_activity": recent, "suggestions": suggestions, "metrics": {"tokens_used": total_used, "tokens_budgeted": total_budgeted, "token_savings_pct": savings}}
+
+@router.get("/workspace/memory/search")
+async def search_memory(request: Request, q: str, project_id: str | None = None, limit: int = 5):
+    """Search workspace memory for past answers."""
+    memory = get_workspace_memory()
+    results = await memory.search(workspace_id=project_id or "default", query=q, limit=limit)
+    return {"results": results, "query": q}
 
 @router.get("/tools")
 async def list_agent_tools():

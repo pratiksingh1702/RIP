@@ -677,6 +677,21 @@ class WorkflowEngine:
 
                 run.state = state.to_dict()
                 await session.commit()
+                            # Record to workspace memory
+                try:
+                    from gateway.core.workspace.memory import get_workspace_memory
+                    await get_workspace_memory().record(
+                        workspace_id=project_id or 'default',
+                        project_id=project_id,
+                        category='execution',
+                        query=draft.name,
+                        summary=f"Workflow '{draft.name}' {run.status}",
+                        status=run.status,
+                        created_by=user_id,
+                    )
+                except Exception:
+                    pass
+                
 
                 await self.event_bus.publish(
                     "workflow.completed",

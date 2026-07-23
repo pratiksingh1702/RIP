@@ -515,7 +515,36 @@ async def run_workflow(draft_id: UUIDType, request: Request, body: RunWorkflowRe
         engine = get_workflow_engine()
         user_id = gateway_user_id(request)
         run = await engine.start_run(draft_id, body.query, user_id, body.project_id)
-        return {"run_id": run.id, "status": run.status}
+    
+        from gateway.core.workspace.memory import get_workspace_memory
+        await get_workspace_memory().record(
+            workspace_id=body.project_id or "default",
+            project_id=body.project_id,
+            category="execution",
+            query="Workflow execution",
+            summary=f"Workflow run started: {run.status}",
+            status=run.status,
+            created_by=user_id,
+        )
+    except Exception:
+        pass
+    
+    return {"run_id": run.id, "status": run.status}
+    # Record workflow execution to workspace memory
+    try:
+        from gateway.core.workspace.memory import get_workspace_memory
+        await get_workspace_memory().record(
+            workspace_id=body.project_id or 'default',
+            project_id=body.project_id,
+            category='execution',
+            query=f"Workflow execution",
+            summary=f"Workflow run {run_id} started with status {run.status}",
+            status=run.status,
+            created_by=user_id,
+        )
+    except Exception:
+        pass
+    
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

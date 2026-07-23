@@ -1,4 +1,4 @@
-"""Multi-source planner engine."""
+﻿"""Multi-source planner engine."""
 
 from datetime import datetime
 from typing import Any
@@ -32,7 +32,7 @@ class PlannerEngine:
         # Build queries
         queries = []
 
-        # Always-query sources.
+        # Always-query sources — workspace_memory is always included
         for query_spec in strategy["always_query"]:
             if query_spec["source"] in enabled_sources:
                 queries.append(
@@ -45,6 +45,20 @@ class PlannerEngine:
                         estimated_tokens=1500
                     )
                 )
+        
+        # Workspace Memory — always queried for past knowledge
+        if "workspace_memory" in enabled_sources:
+            queries.append(
+                self._build_query(
+                    source="workspace_memory",
+                    query_type="search",
+                    task=task,
+                    project_id=project_id,
+                    priority=1,
+                    estimated_tokens=500,
+                )
+            )
+        
         queries = self._require_rip_explain(queries, enabled_sources, task, project_id)
 
         # Conditional sources only run when their source is enabled and condition is met.
@@ -66,11 +80,10 @@ class PlannerEngine:
             )
         queries.extend(self._dynamic_source_queries(classification, task, enabled_sources, project_id))
 
-        # Build retrieval steps. Keep the required RIP explain query first so the
-        # most reliable context path is available before broader probes run.
+        # Build retrieval steps
         steps = self._build_retrieval_steps(queries)
 
-        # Allocate token budget
+        # Allocate token budget — includes workspace_memory weight
         token_allocation = allocate_token_budget(
             total_budget=max_tokens,
             token_weights=self._token_weights_with_dynamic_sources(
@@ -110,6 +123,8 @@ class PlannerEngine:
             query_params["project_id"] = project_id
         if source == "rip":
             query_params["limit"] = 10
+        elif source == "workspace_memory":
+            query_params["limit"] = 5
         elif source == "jira":
             ticket = self._extract_ticket(task)
             if ticket:
@@ -241,6 +256,9 @@ class PlannerEngine:
     ) -> dict[str, float]:
         """Give dynamic sources modest allocation without changing built-in weights."""
         weights = dict(base_weights)
+        # Ensure workspace_memory always has a weight
+        if "workspace_memory" not in weights:
+            weights["workspace_memory"] = 0.10
         for query in queries:
             if query.source not in weights:
                 weights[query.source] = 0.10 if query.priority <= 2 else 0.05
@@ -249,7 +267,6 @@ class PlannerEngine:
     def _extract_ticket(self, task: str) -> str | None:
         """Extract common Jira-style ticket identifiers from task text."""
         import re
-
         match = re.search(r"\b[A-Z][A-Z0-9]+-\d+\b", task)
         return match.group(0) if match else None
 

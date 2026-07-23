@@ -23,6 +23,7 @@ from gateway.core.agent.tools import ToolRegistry, ToolResult
 from gateway.core.agent.llm_interface import LLMInterface, LLMResponse, ResponseType
 from gateway.core.agent.planner import ExecutionPlanner, ExecutionPlan, Subtask, SubtaskStatus, get_execution_planner
 from gateway.core.agent.recovery import RecoveryEngine, RecoveryPlan, get_recovery_engine
+from gateway.core.workspace.memory import get_workspace_memory
 from gateway.core.agent.memory import ExecutionMemory, get_execution_memory
 from gateway.core.events import get_event_bus
 from gateway.core.events.pipeline import get_pipeline_event_bus
@@ -258,13 +259,8 @@ class AgentRuntime:
     # -- Execute --
 
     async def execute(
-        self,
-        query: str,
-        llm_config: LLMConfig,
-        project_id: str | None,
-        user_id: str,
-        project_root: str | None = None,
-        run_id: str | None = None,
+        self, query: str, llm_config: LLMConfig, project_id: str | None, user_id: str,
+        project_root: str | None = None, run_id: str | None = None,
         on_state_change: RunStateCallback | None = None,
     ) -> AgentResult:
         start_time = time.monotonic()
@@ -277,7 +273,6 @@ class AgentRuntime:
             return AgentResult(query=query, steps=[], changes_made=[], verification=None, summary=summary, tokens_total=0, duration_seconds=0, status="failed", error=summary)
 
         ctx = {"project_id": project_id, "user_id": user_id, "project_root": resolved_root}
-
         logger.info("AGENT: Starting - query=%s", query[:100])
         await self._emit_progress(run_id, "started", "Planning...", query)
         await self._notify_run_state(on_state_change, run_id, {"status": "running", "query": query, "steps": [], "changes_made": [], "project_id": project_id, "project_root": resolved_root})
@@ -305,12 +300,7 @@ class AgentRuntime:
                     break
 
                 results = await asyncio.gather(
-                    *[
-                        self._execute_ready_subtask(
-                            subtask, rip_context, memory_context, llm_config, ctx, run_id, query, on_state_change
-                        )
-                        for subtask in ready
-                    ],
+                    *[self._execute_ready_subtask(subtask, rip_context, memory_context, llm_config, ctx, run_id, query, on_state_change) for subtask in ready],
                     return_exceptions=True,
                 )
 
@@ -325,13 +315,7 @@ class AgentRuntime:
                     all_steps.extend(steps)
                     all_changes.extend(changes)
                     tokens_total += tokens
-                    await self._notify_run_state(on_state_change, run_id, {
-                        "status": "running",
-                        "steps": [asdict(s) for s in all_steps],
-                        "changes_made": all_changes,
-                        "tokens_total": tokens_total,
-                        "plan": [asdict(s) for s in plan.subtasks],
-                    })
+                    await self._notify_run_state(on_state_change, run_id, {"status": "running", "steps": [asdict(s) for s in all_steps], "changes_made": all_changes, "tokens_total": tokens_total, "plan": [asdict(s) for s in plan.subtasks]})
 
             if plan.has_failures:
                 status = "partial"
@@ -351,19 +335,21 @@ class AgentRuntime:
         duration = time.monotonic() - start_time
 
         await self._emit_progress(run_id, "completed", final_summary, query)
+
+        # Record to workspace memory
+        if project_id:
+            try:
+                await get_workspace_memory().record(
+                    workspace_id=project_id, project_id=project_id,
+                    category="execution", query=query, summary=final_summary,
+                    tokens_used=tokens_total, duration_seconds=duration,
+                    status=status, created_by=user_id,
+                )
+            except Exception:
+                pass
+
         result = AgentResult(query=query, steps=all_steps, changes_made=all_changes, verification=verification, summary=final_summary, tokens_total=tokens_total, duration_seconds=duration, status=status)
-        await self._notify_run_state(on_state_change, run_id, {
-            "status": result.status,
-            "query": query,
-            "steps": [asdict(s) for s in all_steps],
-            "changes_made": all_changes,
-            "verification": verification,
-            "summary": final_summary,
-            "tokens_total": tokens_total,
-            "duration_seconds": duration,
-            "error": result.error,
-            "pending_approval": None,
-        })
+        await self._notify_run_state(on_state_change, run_id, {"status": result.status, "query": query, "steps": [asdict(s) for s in all_steps], "changes_made": all_changes, "verification": verification, "summary": final_summary, "tokens_total": tokens_total, "duration_seconds": duration, "error": result.error, "pending_approval": None})
         return result
 
     async def _resolve_project_root(self, project_id: str | None, explicit_root: str | None) -> tuple[str | None, str | None]:
@@ -372,16 +358,13 @@ class AgentRuntime:
             if root.exists() and root.is_dir():
                 return str(root), None
             return None, f"Project root does not exist: {explicit_root}"
-
         if not project_id:
             return None, "Agent execution requires project_id so file tools are scoped to one indexed project"
-
         try:
             async with core_async_session_factory() as session:
                 project = await get_project(session, project_id)
         except Exception as e:
             return None, f"Could not resolve project_id {project_id}: {str(e)[:200]}"
-
         if project is None or not project.root:
             return None, f"No indexed root found for project_id {project_id}"
         root = Path(project.root).expanduser().resolve()
@@ -403,13 +386,9 @@ class AgentRuntime:
         subtask.status = SubtaskStatus.RUNNING
         await self._emit_progress(run_id, "subtask_start", subtask.title, query, {"subtask_id": subtask.id})
         await self._notify_run_state(on_state_change, run_id, {"status": "running", "current_subtask": asdict(subtask)})
-
         budgeted_rip = self._trim_context_to_budget(rip_context, 800)
-        steps, changes, tokens, sub_summary, sub_status, sub_error = await self._execute_subtask(
-            subtask, budgeted_rip, memory_context, llm_config, ctx, run_id, on_state_change
-        )
+        steps, changes, tokens, sub_summary, sub_status, sub_error = await self._execute_subtask(subtask, budgeted_rip, memory_context, llm_config, ctx, run_id, on_state_change)
         subtask.result_summary = sub_summary
-
         if sub_status == "completed":
             subtask.status = SubtaskStatus.COMPLETED
             await self._emit_progress(run_id, "subtask_done", f"Done: {subtask.title}", query, {"subtask_id": subtask.id})
@@ -417,7 +396,6 @@ class AgentRuntime:
             subtask.status = SubtaskStatus.FAILED
             subtask.error = sub_error
             await self._emit_progress(run_id, "subtask_failed", f"Failed: {subtask.title}", query, {"subtask_id": subtask.id, "error": sub_error})
-
         return steps, changes, tokens, sub_summary, sub_status, sub_error
 
     async def _classify_task(self, query: str) -> ClassificationResult:
@@ -447,92 +425,62 @@ class AgentRuntime:
     async def _execute_subtask(self, subtask, rip_context, memory_context, llm_config, ctx, run_id, on_state_change: RunStateCallback | None = None):
         tools_desc = self.tool_registry.get_for_llm()
         system_prompt = AGENT_SYSTEM_PROMPT
-
         context_str = json.dumps({"task": subtask.description, "files": rip_context.get("files", [])[:3], "context": str(rip_context.get("explain", ""))[:300]})
         memory_note = f"\nExecution memory for this project:\n{memory_context}" if memory_context else ""
-
-        messages = [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": f"Task: {subtask.title}\nContext: {context_str}{memory_note}\nStart by reading relevant files or listing directories."}
-        ]
-
+        messages = [{"role": "system", "content": system_prompt}, {"role": "user", "content": f"Task: {subtask.title}\nContext: {context_str}{memory_note}\nStart by reading relevant files or listing directories."}]
         steps, changes, tokens_total = [], [], 0
         final_summary, status, error = "", "completed", None
 
         try:
             for turn in range(min(subtask.estimated_turns + 3, 10)):
                 await self._emit_progress(run_id, "turn", f"Turn {turn + 1}", subtask.title)
-
                 response = await self.llm_interface.call_with_tools(messages, tools_desc, llm_config)
                 tokens_total += response.tokens_used
-
                 if response.type == ResponseType.TEXT:
                     steps.append(AgentStep(turn=turn+1, tool_name=None, tool_params=None, tool_result=None, llm_response=str(response.text)[:300], tokens_used=response.tokens_used, timestamp=datetime.now(UTC).isoformat()))
                     messages.append({"role": "assistant", "content": str(response.raw)[:500]})
                     continue
-
                 if response.type == ResponseType.TOOL_CALL:
                     tool_name = response.tool_name or ""
                     tool_params = response.tool_params or {}
                     tool = self.tool_registry.get(tool_name)
-
                     if not tool:
                         result = ToolResult(ok=False, error=f"Unknown tool: {tool_name}")
                     else:
                         result = await self._execute_tool(tool, tool_name, tool_params, ctx, run_id, subtask.id, on_state_change)
-
                     steps.append(AgentStep(turn=turn+1, tool_name=tool_name, tool_params=tool_params, tool_result={"ok": result.ok, "output": str(result.output)[:300] if result.output else None, "error": result.error}, llm_response=str(response.raw)[:300], tokens_used=response.tokens_used, timestamp=datetime.now(UTC).isoformat()))
                     messages.append({"role": "assistant", "content": str(response.raw)[:300]})
-
                     if tool_name in ("write_file", "apply_patch"):
                         self._record_memory(ctx, tool_params, result, tool_name)
-
                     if not result.ok:
-                        recovery_message = await self._recovery_message(
-                            subtask=subtask,
-                            turn=turn,
-                            tool_name=tool_name,
-                            tool_params=tool_params,
-                            result=result,
-                            steps=steps,
-                            ctx=ctx,
-                            llm_config=llm_config,
-                            run_id=run_id,
-                        )
+                        recovery_message = await self._recovery_message(subtask=subtask, turn=turn, tool_name=tool_name, tool_params=tool_params, result=result, steps=steps, ctx=ctx, llm_config=llm_config, run_id=run_id)
                         messages.append({"role": "user", "content": recovery_message})
                     else:
                         messages.append({"role": "user", "content": "Result: OK"})
-
                     if tool_name in ("write_file", "apply_patch") and result.ok:
                         changes.append({"tool": tool_name, "params": tool_params, "result": str(result.output)[:200]})
-
                     if tool_name == "finish":
                         final_summary = str(tool_params.get("summary", "Done."))
                         break
                     continue
-
                 if response.type == ResponseType.FINISH:
                     final_summary = str(response.finish_summary or "Done.")
                     break
             else:
                 final_summary = "Completed after max turns."
-
         except Exception as e:
             logger.error("AGENT: Subtask failed: %s", e)
             status, error = "failed", str(e)[:200]
-
         return steps, changes, tokens_total, final_summary, status, error
 
     async def _execute_tool(self, tool, tool_name: str, tool_params: dict, ctx: dict, run_id: str, subtask_id: str, on_state_change: RunStateCallback | None) -> ToolResult:
         await self._emit_progress(run_id, "tool_start", f"{tool_name}", "", {"tool": tool_name, "params": self._safe_tool_params(tool_params), "subtask_id": subtask_id})
         await self._notify_run_state(on_state_change, run_id, {"status": "running", "last_tool": {"tool": tool_name, "params": self._safe_tool_params(tool_params), "subtask_id": subtask_id}})
-
         requires_approval = tool.requires_approval or (tool_name == "run_command" and not self._is_allowlisted_command(str(tool_params.get("command", ""))))
         if requires_approval:
             approved = await self._request_approval(run_id, tool_name, tool_params, on_state_change)
             if not approved:
                 return ToolResult(ok=False, error="Approval denied")
-
         if tool_name in ("write_file", "apply_patch"):
             path = str(tool_params.get("path", ""))
             full, error = self._resolve_safe_path(path, ctx)
@@ -551,14 +499,7 @@ class AgentRuntime:
                     self._active_write_paths.get(run_id, set()).discard(active_path)
         else:
             result = await tool.handler(tool_params, ctx)
-
-        await self._emit_progress(
-            run_id,
-            "tool_done" if result.ok else "tool_failed",
-            f"{tool_name}: {'ok' if result.ok else result.error}",
-            "",
-            {"tool": tool_name, "ok": result.ok, "subtask_id": subtask_id},
-        )
+        await self._emit_progress(run_id, "tool_done" if result.ok else "tool_failed", f"{tool_name}: {'ok' if result.ok else result.error}", "", {"tool": tool_name, "ok": result.ok, "subtask_id": subtask_id})
         return result
 
     def _safe_tool_params(self, params: dict) -> dict:
@@ -574,39 +515,22 @@ class AgentRuntime:
         if not project_id:
             return
         try:
-            self.memory.record_result(
-                project_id=str(project_id),
-                file_path=str(tool_params.get("path", "")),
-                success=result.ok,
-                error=result.error,
-                tool_name=tool_name,
-            )
+            self.memory.record_result(project_id=str(project_id), file_path=str(tool_params.get("path", "")), success=result.ok, error=result.error, tool_name=tool_name)
         except Exception:
             logger.debug("AGENT: memory record failed", exc_info=True)
 
     async def _recovery_message(self, subtask, turn: int, tool_name: str, tool_params: dict, result: ToolResult, steps: list[AgentStep], ctx: dict, llm_config: LLMConfig, run_id: str) -> str:
         error = result.error or "unknown error"
-        recovery_plan = await self.recovery.attempt_recovery(
-            step_id=f"{subtask.id}:{tool_name}",
-            tool_name=tool_name,
-            error=error,
-            original_query=subtask.description,
-            recent_context=[{"tool": s.tool_name, "result": s.tool_result} for s in steps[-5:]],
-            llm_config=llm_config,
-        )
+        recovery_plan = await self.recovery.attempt_recovery(step_id=f"{subtask.id}:{tool_name}", tool_name=tool_name, error=error, original_query=subtask.description, recent_context=[{"tool": s.tool_name, "result": s.tool_result} for s in steps[-5:]], llm_config=llm_config)
         if recovery_plan is None or not recovery_plan.recoverable:
             explanation = recovery_plan.explanation if recovery_plan else "max retries reached"
             await self._emit_progress(run_id, "recovery_failed", f"{tool_name}: {explanation}", subtask.title, {"tool": tool_name, "subtask_id": subtask.id})
             return f"Result: Error: {error}. Recovery exhausted: {explanation}."
-
         await self._emit_progress(run_id, "recovery", f"Retrying {tool_name}: {recovery_plan.recovery_action}", subtask.title, {"tool": tool_name, "subtask_id": subtask.id, "attempt": self.recovery.retry_counts.get(f"{subtask.id}:{tool_name}", 0), "max_attempts": self.recovery.MAX_RETRIES})
         if recovery_plan.should_rollback and tool_name in ("write_file", "apply_patch"):
             rollback = await self._rollback_change(tool_params, ctx)
             await self._emit_progress(run_id, "rollback", rollback.error or "Rollback completed", subtask.title, {"tool": tool_name, "ok": rollback.ok, "subtask_id": subtask.id})
-        return (
-            f"Result: Error: {error}. Recovery guidance: {recovery_plan.recovery_action}. "
-            f"Try: {recovery_plan.alternative_approach}."
-        )
+        return f"Result: Error: {error}. Recovery guidance: {recovery_plan.recovery_action}. Try: {recovery_plan.alternative_approach}."
 
     async def _rollback_change(self, params: dict, ctx: dict) -> ToolResult:
         path = str(params.get("path", ""))
@@ -628,19 +552,7 @@ class AgentRuntime:
         except ValueError:
             return False
         normalized = [p.lower().strip('"') for p in parts]
-        allowed_prefixes = [
-            ["pytest"],
-            ["python", "-m", "py_compile"],
-            ["python3", "-m", "py_compile"],
-            ["npm", "test"],
-            ["npx", "eslint"],
-            ["npx", "tsc", "--noemit"],
-            ["dart", "analyze"],
-            ["ruff", "check"],
-            ["go", "build"],
-            ["go", "vet"],
-            ["cargo", "check"],
-        ]
+        allowed_prefixes = [["pytest"], ["python", "-m", "py_compile"], ["python3", "-m", "py_compile"], ["npm", "test"], ["npx", "eslint"], ["npx", "tsc", "--noemit"], ["dart", "analyze"], ["ruff", "check"], ["go", "build"], ["go", "vet"], ["cargo", "check"]]
         return any(normalized[:len(prefix)] == prefix for prefix in allowed_prefixes)
 
     async def _request_approval(self, run_id, tool_name, params, on_state_change: RunStateCallback | None = None):

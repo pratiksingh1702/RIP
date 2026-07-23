@@ -1,4 +1,8 @@
-"""API response schemas."""
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>3D Scene</title>
 
 from __future__ import annotations
 
