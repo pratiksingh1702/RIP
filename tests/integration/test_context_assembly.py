@@ -1,4 +1,10 @@
-﻿"""Integration tests for workspace knowledge, memory, goals, entities."""
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "gateway"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "gateway" / "gateway"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
+"""Integration tests for workspace knowledge, memory, goals, entities."""
 import pytest
 from gateway.core.workspace.memory import get_workspace_memory
 from gateway.core.workspace.knowledge import get_workspace_knowledge

@@ -1,0 +1,34 @@
+{
+  "projects": {
+    "fb8a1079-02b4-5355-9425-593637c4b2f0": {
+      "files": {
+        "test_hello.py": {
+          "risk_level": "high",
+          "times_modified": 1,
+          "last_error": "Approval denied",
+          "successful_patterns": []
+        }
+      },
+      "successful_tools": [],
+      "failed_patterns": [
+        "write_file on test_hello.py: Approval denied"
+      ],
+      "last_run_at": "2026-07-23T09:04:45.633452+00:00"
+    },
+    "a9033895-5ad8-5152-97ce-cb7b805a460b": {
+      "files": {
+        "./C:/Users/Dell/Downloads/RIP/hi.py": {
+          "risk_level": "high",
+          "times_modified": 1,
+          "last_error": "Approval denied",
+          "successful_patterns": []
+        }
+      },
+      "successful_tools": [],
+      "failed_patterns": [
+        "write_file on ./C:/Users/Dell/Downloads/RIP/hi.py: Approval denied"
+      ],
+      "last_run_at": "2026-07-23T08:51:05.756133+00:00"
+    }
+  }
+}

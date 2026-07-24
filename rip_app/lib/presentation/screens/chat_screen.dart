@@ -666,6 +666,8 @@ class _FloatingHeader extends ConsumerWidget {
                         onPressed: onNewChatTap,
                       ),
                       const SizedBox(width: 8),
+                      _GlassIconButton(icon: Icons.dashboard_rounded, tooltip: 'Dashboard', onPressed: () => context.push('/workspace')),
+                      const SizedBox(width: 8),
                       _GlassIconButton(
                         icon: Icons.tune_rounded,
                         tooltip: 'Settings',

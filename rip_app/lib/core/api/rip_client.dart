@@ -1,4 +1,4 @@
-﻿import 'package:dio/dio.dart';
+import 'package:dio/dio.dart';
 import '../exceptions.dart';
 import '../../data/models/project.dart';
 import '../../data/models/search_result.dart';
@@ -928,6 +928,7 @@ class RipClient {
     String? modelPreference,
     String? projectId,
     int maxTurns = 50,
+    bool directMode = false,
     CancelToken? cancelToken,
   }) async {
     final response = await _dio.post('/gateway/api/agent/execute', data: {
@@ -935,6 +936,7 @@ class RipClient {
       if (modelPreference != null) 'model_preference': modelPreference,
       if (projectId != null) 'project_id': projectId,
       'max_turns': maxTurns,
+      if (directMode) 'direct_mode': true,
     }, cancelToken: cancelToken);
     return response.data as Map<String, dynamic>;
   }
@@ -967,6 +969,13 @@ class RipClient {
   }
 
   /// List available agent tools
+  
+  /// Get workspace dashboard data
+  Future<Map<String, dynamic>> getDashboard(String projectId, {CancelToken? cancelToken}) async {
+    final response = await _dio.get('/gateway/api/agent/workspace/dashboard', queryParameters: {'project_id': projectId}, cancelToken: cancelToken);
+    return response.data as Map<String, dynamic>;
+  }
+
   Future<Map<String, dynamic>> listAgentTools({CancelToken? cancelToken}) async {
     final response = await _dio.get('/gateway/api/agent/tools', cancelToken: cancelToken);
     return response.data as Map<String, dynamic>;

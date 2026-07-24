@@ -25,6 +25,7 @@ class AgentExecuteRequest(BaseModel):
     project_id: str | None = None
     project_root: str | None = None
     max_turns: int = 50
+    direct_mode: bool = False  # Skip Gateway pipeline, go direct to agent
 
 
 class AgentApproveRequest(BaseModel):
@@ -54,14 +55,14 @@ async def execute_agent(request: Request, body: AgentExecuteRequest):
         }
 
         runtime = get_agent_runtime()
-        asyncio.create_task(_run_agent_background(run_id, runtime, body.query, llm_config, project_id, user_id, body.project_root))
+        asyncio.create_task(_run_agent_background(run_id, runtime, body.query, llm_config, project_id, user_id, body.project_root, body.direct_mode))
 
         return {"run_id": run_id, "status": "running"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-async def _run_agent_background(run_id: str, runtime, query: str, llm_config, project_id: str | None, user_id: str, project_root: str | None):
+async def _run_agent_background(run_id: str, runtime, query: str, llm_config, project_id: str | None, user_id: str, project_root: str | None, direct_mode: bool = False):
     try:
         async def update_run_state(rid: str, updates: dict[str, Any]) -> None:
             current = _agent_runs.setdefault(rid, {"id": rid, "query": query})
@@ -77,6 +78,7 @@ async def _run_agent_background(run_id: str, runtime, query: str, llm_config, pr
             project_root=project_root,
             run_id=run_id,
             on_state_change=update_run_state,
+            direct_mode=direct_mode,
         )
         _agent_runs[run_id] = {
             "id": run_id,
@@ -144,10 +146,13 @@ from gateway.core.workspace.memory import get_workspace_memory
 @router.get("/workspace/dashboard")
 async def workspace_dashboard(request: Request, project_id: str | None = None):
     """Return everything needed for the workspace dashboard."""
+    from gateway.core.workspace.memory import get_workspace_memory
+    from gateway.core.workspace.knowledge import get_workspace_knowledge
     memory = get_workspace_memory()
+    knowledge = get_workspace_knowledge()
     workspace_id = project_id or "default"
     recent = await memory.get_recent(workspace_id, limit=15)
-    suggestions = await memory.get_suggestions(workspace_id, project_id)
+    suggestions = await knowledge.get_suggestions(workspace_id, project_id)
     total_used = sum(r.get("tokens_used", 0) for r in recent)
     total_budgeted = sum(r.get("tokens_budgeted", 0) for r in recent)
     savings = round((1 - total_used / max(total_budgeted, 1)) * 100, 1) if total_budgeted > 0 else 0

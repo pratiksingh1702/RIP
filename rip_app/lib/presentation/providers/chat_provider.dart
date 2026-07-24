@@ -593,6 +593,7 @@ class ChatNotifier extends Notifier<List<Message>> {
         final client = ref.read(ripClientProvider);
         final result = await client.executeAgent(
           query: taskQuery,
+          directMode: true,
           projectId: projectId,
           modelPreference: cmd.flagValue('model'),
           cancelToken: cancelToken,

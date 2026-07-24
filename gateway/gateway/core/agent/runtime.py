@@ -1,4 +1,4 @@
-﻿"""Gateway-controlled Agent Runtime. The LLM reasons, the Gateway executes."""
+"""Gateway-controlled Agent Runtime. The LLM reasons, the Gateway executes."""
 
 from __future__ import annotations
 
@@ -262,7 +262,8 @@ class AgentRuntime:
         self, query: str, llm_config: LLMConfig, project_id: str | None, user_id: str,
         project_root: str | None = None, run_id: str | None = None,
         on_state_change: RunStateCallback | None = None,
-    ) -> AgentResult:
+        direct_mode: bool = False,
+        ) -> AgentResult:
         start_time = time.monotonic()
         run_id = run_id or str(uuid4())
         resolved_root, root_error = await self._resolve_project_root(project_id, project_root)
@@ -277,9 +278,12 @@ class AgentRuntime:
         await self._emit_progress(run_id, "started", "Planning...", query)
         await self._notify_run_state(on_state_change, run_id, {"status": "running", "query": query, "steps": [], "changes_made": [], "project_id": project_id, "project_root": resolved_root})
 
-        rip_context = await self._gather_budgeted_context(query, project_id, self.MAX_CONTEXT_TOKENS)
+        rip_context = {} if direct_mode else await self._gather_budgeted_context(query, project_id, self.MAX_CONTEXT_TOKENS)
         memory_context = self.memory.get_context(project_id) if project_id else ""
-        plan = await self.planner.plan(query, rip_context, llm_config)
+        if direct_mode:
+            plan = ExecutionPlan(query=query, subtasks=[Subtask(id="1", title=query, description=query, estimated_turns=5)], total_estimated_turns=5)
+        else:
+            plan = await self.planner.plan(query, rip_context, llm_config)
 
         await self._emit_progress(run_id, "planned", f"{len(plan.subtasks)} subtasks", query)
         await self._notify_run_state(on_state_change, run_id, {"status": "running", "plan": [asdict(s) for s in plan.subtasks]})

@@ -127,5 +127,29 @@ class WorkspaceKnowledge:
             return True
         except Exception: return False
 
+    async def get_suggestions(self, workspace_id: str, project_id: str | None = None) -> list[dict]:
+        """Generate suggestions from workspace patterns."""
+        suggestions = []
+        try:
+            async with async_session_factory() as session:
+                r = await session.execute(text("""
+                    SELECT files_changed, COUNT(*) as cnt FROM workspace_memory
+                    WHERE workspace_id=:ws AND category='execution' AND files_changed IS NOT NULL
+                    GROUP BY files_changed HAVING cnt > 3 ORDER BY cnt DESC LIMIT 5
+                """), {"ws": workspace_id})
+                for row in r.fetchall():
+                    files = json.loads(row[0]) if row[0] else []
+                    if files:
+                        suggestions.append({"type":"frequent_changes","message":f"{files[0]} changed {row[1]} times","files":files[:3],"count":row[1]})
+                r = await session.execute(text("""
+                    SELECT query, summary, COUNT(*) as cnt FROM workspace_memory
+                    WHERE workspace_id=:ws AND status='failed' GROUP BY query HAVING cnt > 1 ORDER BY cnt DESC LIMIT 3
+                """), {"ws": workspace_id})
+                for row in r.fetchall():
+                    suggestions.append({"type":"recurring_failure","message":f"'{row[0][:80]}' failed {row[2]} times","query":row[0],"summary":row[1]})
+        except Exception as e:
+            logger.error("KNOWLEDGE: Suggestions failed: %s", e)
+        return suggestions
+
 _knowledge = WorkspaceKnowledge()
 def get_workspace_knowledge() -> WorkspaceKnowledge: return _knowledge
