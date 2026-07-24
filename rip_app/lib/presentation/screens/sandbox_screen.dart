@@ -25,7 +25,8 @@ class _SandboxScreenState extends ConsumerState<SandboxScreen> {
     }
   }
 
-  void _createSandbox(String environment) {
+  void _createSandbox(dynamic template) {
+    final environment = template is String ? template : (template.id ?? 'python');
     final projectId = widget.projectId ?? 'default';
     ref.read(sandboxProvider.notifier).createSandbox(projectId, environment: environment);
     setState(() => _showEnvPicker = false);
@@ -42,8 +43,16 @@ class _SandboxScreenState extends ConsumerState<SandboxScreen> {
         title: Text(state.sandbox?.environment ?? 'Project Sandbox'),
         actions: [
           if (state.sandbox != null) ...[
-            IconButton(icon: const Icon(Icons.camera_alt_outlined), tooltip: 'Snapshot', onPressed: () {}),
-            IconButton(icon: const Icon(Icons.folder_open), tooltip: 'Files', onPressed: () {}),
+            IconButton(
+              icon: const Icon(Icons.camera_alt_outlined),
+              tooltip: 'Snapshot',
+              onPressed: () {},
+            ),
+            IconButton(
+              icon: const Icon(Icons.folder_open),
+              tooltip: 'Files',
+              onPressed: () {},
+            ),
           ],
         ],
       ),
@@ -52,17 +61,27 @@ class _SandboxScreenState extends ConsumerState<SandboxScreen> {
           : state.isLoading
               ? const Center(child: CircularProgressIndicator())
               : state.error != null
-                  ? Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-                      const Icon(Icons.error_outline, color: Colors.red, size: 48),
-                      const SizedBox(height: 16),
-                      Text(state.error!, style: const TextStyle(color: Colors.red)),
-                      const SizedBox(height: 16),
-                      ElevatedButton(onPressed: () => setState(() => _showEnvPicker = true), child: const Text('Try Again')),
-                    ]))
-                  : Column(children: [
-                      if (state.sandbox != null) SandboxStatusBar(),
-                      const Expanded(child: TerminalView()),
-                    ]),
+                  ? Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(Icons.error_outline, color: Colors.red, size: 48),
+                          const SizedBox(height: 16),
+                          Text(state.error!, style: const TextStyle(color: Colors.red)),
+                          const SizedBox(height: 16),
+                          ElevatedButton(
+                            onPressed: () => setState(() => _showEnvPicker = true),
+                            child: const Text('Try Again'),
+                          ),
+                        ],
+                      ),
+                    )
+                  : Column(
+                      children: [
+                        if (state.sandbox != null) const SandboxStatusBar(),
+                        const Expanded(child: TerminalView()),
+                      ],
+                    ),
     );
   }
 }

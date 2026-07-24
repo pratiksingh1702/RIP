@@ -1,7 +1,7 @@
 import 'dart:ui';
-
 import 'package:flutter/material.dart';
 import 'app_colors.dart';
+import 'app_text_styles.dart';
 
 class ChatChromeTheme extends ThemeExtension<ChatChromeTheme> {
   const ChatChromeTheme({
@@ -17,26 +17,26 @@ class ChatChromeTheme extends ThemeExtension<ChatChromeTheme> {
     required this.bottomFadeHeight,
   });
 
-  const ChatChromeTheme.dark()
+  const ChatChromeTheme.light()
       : fadeColor = AppColors.background,
         composerSurface = AppColors.surface,
-        controlSurface = AppColors.surface,
-        suggestionSurface = AppColors.surfaceVariant,
+        controlSurface = const Color(0xFFF0F2F7),
+        suggestionSurface = AppColors.primaryLight,
         borderColor = AppColors.border,
         focusBorderColor = AppColors.primary,
-        shadowColor = Colors.black,
+        shadowColor = const Color(0x0F1C1831),
         composerRadius = 28,
         composerExpandedRadius = 26,
         bottomFadeHeight = 190;
 
-  const ChatChromeTheme.light()
-      : fadeColor = const Color(0xFFF6F7FB),
-        composerSurface = Colors.white,
-        controlSurface = const Color(0xFFE8EBF2),
-        suggestionSurface = const Color(0xFFF0F2F7),
-        borderColor = const Color(0xFFD6DAE3),
+  const ChatChromeTheme.dark()
+      : fadeColor = AppColors.codeBg,
+        composerSurface = AppColors.surface,
+        controlSurface = AppColors.surfaceVariant,
+        suggestionSurface = AppColors.primaryContainer,
+        borderColor = AppColors.border,
         focusBorderColor = AppColors.primary,
-        shadowColor = const Color(0xFF64748B),
+        shadowColor = Colors.black,
         composerRadius = 28,
         composerExpandedRadius = 26,
         bottomFadeHeight = 190;
@@ -99,69 +99,71 @@ class ChatChromeTheme extends ThemeExtension<ChatChromeTheme> {
 }
 
 abstract final class AppTheme {
+  /// Canonical Light Theme matching base_design.md
   static ThemeData get ripLightTheme {
     final lightBase = ThemeData(brightness: Brightness.light);
     return ThemeData(
       useMaterial3: true,
       brightness: Brightness.light,
-      scaffoldBackgroundColor: const Color(0xFFF6F7FB),
+      scaffoldBackgroundColor: AppColors.background, // #FAFAFC
       colorScheme: const ColorScheme.light(
-        primary: AppColors.primary,
+        primary: AppColors.primary, // #5F3ADD
         onPrimary: Colors.white,
-        primaryContainer: Color(0xFFE9DDFF),
-        onPrimaryContainer: Color(0xFF2E1065),
-        surface: Colors.white,
-        onSurface: Color(0xFF111827),
-        onSurfaceVariant: Color(0xFF5B6472),
-        outline: Color(0xFFD6DAE3),
+        primaryContainer: AppColors.primaryLight,
+        onPrimaryContainer: AppColors.primaryDark,
+        surface: AppColors.surface, // #FFFFFF
+        onSurface: AppColors.textPrimary, // #1B1730
+        onSurfaceVariant: AppColors.textSecondary, // #6B6580
+        outline: AppColors.border, // #ECEAF3
+        error: AppColors.danger, // #EF4444
       ),
-      appBarTheme: const AppBarTheme(
-        backgroundColor: Color(0xFFF6F7FB),
+      appBarTheme: AppBarTheme(
+        backgroundColor: AppColors.background,
         elevation: 0,
         centerTitle: false,
-        iconTheme: IconThemeData(color: Color(0xFF111827)),
+        iconTheme: const IconThemeData(color: AppColors.textPrimary),
+        titleTextStyle: AppTextStyles.headlineLg,
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: const Color(0xFFF0F2F7),
+        fillColor: AppColors.surface,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(24),
-          borderSide: BorderSide.none,
+          borderSide: const BorderSide(color: AppColors.border),
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(26),
-          borderSide: BorderSide.none,
+          borderRadius: BorderRadius.circular(24),
+          borderSide: const BorderSide(color: AppColors.border),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(26),
-          borderSide: BorderSide(color: AppColors.primary.withValues(alpha: 0.46)),
+          borderRadius: BorderRadius.circular(24),
+          borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
         ),
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        hintStyle: const TextStyle(color: Color(0xFF5B6472), fontSize: 14),
+        hintStyle: AppTextStyles.bodySm,
       ),
       chipTheme: ChipThemeData(
-        backgroundColor: Colors.white,
-        selectedColor: const Color(0xFFE9DDFF),
-        disabledColor: const Color(0xFFF0F2F7),
-        labelStyle: const TextStyle(color: Color(0xFF111827), fontSize: 12),
-        secondaryLabelStyle: const TextStyle(color: Color(0xFF111827), fontSize: 12),
-        side: const BorderSide(color: Color(0xFFD6DAE3)),
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        backgroundColor: AppColors.surface,
+        selectedColor: AppColors.primaryLight,
+        disabledColor: AppColors.surfaceVariant,
+        labelStyle: AppTextStyles.bodySm.copyWith(color: AppColors.textPrimary),
+        secondaryLabelStyle: AppTextStyles.bodySm.copyWith(color: AppColors.textPrimary),
+        side: const BorderSide(color: AppColors.border),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(9999)),
       ),
       cardTheme: CardThemeData(
-        color: Colors.white,
-        elevation: 8,
-        shadowColor: const Color(0xFF64748B).withValues(alpha: 0.18),
+        color: AppColors.surface, // White bg
+        elevation: 0, // Flat at rest per base_design.md
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(22),
-          side: const BorderSide(color: Color(0xFFD6DAE3)),
+          borderRadius: BorderRadius.circular(12), // 12px radius
+          side: const BorderSide(color: AppColors.border), // 1px #ECEAF3 border
         ),
       ),
-      iconTheme: const IconThemeData(color: Color(0xFF111827)),
+      iconTheme: const IconThemeData(color: AppColors.textPrimary),
       textTheme: lightBase.textTheme.apply(
-        bodyColor: const Color(0xFF111827),
-        displayColor: const Color(0xFF111827),
+        bodyColor: AppColors.textPrimary,
+        displayColor: AppColors.textPrimary,
       ),
       extensions: const <ThemeExtension<dynamic>>[
         ChatChromeTheme.light(),
@@ -169,12 +171,13 @@ abstract final class AppTheme {
     );
   }
 
+  /// Canonical Dark Theme (for Code/Terminal surfaces or dark preference)
   static ThemeData get ripDarkTheme {
     final darkBase = ThemeData(brightness: Brightness.dark);
     return ThemeData(
       useMaterial3: true,
       brightness: Brightness.dark,
-      scaffoldBackgroundColor: AppColors.background,
+      scaffoldBackgroundColor: AppColors.codeBg,
       colorScheme: const ColorScheme.dark(
         primary: AppColors.primary,
         onPrimary: Colors.white,
@@ -184,48 +187,39 @@ abstract final class AppTheme {
         onSurface: AppColors.textPrimary,
         onSurfaceVariant: AppColors.textSecondary,
         outline: AppColors.border,
+        error: AppColors.danger,
       ),
-      appBarTheme: const AppBarTheme(
-        backgroundColor: AppColors.background,
+      appBarTheme: AppBarTheme(
+        backgroundColor: AppColors.codeBg,
         elevation: 0,
         centerTitle: false,
-        iconTheme: IconThemeData(color: Colors.white),
+        iconTheme: const IconThemeData(color: Colors.white),
+        titleTextStyle: AppTextStyles.headlineLg.copyWith(color: Colors.white),
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: AppColors.surfaceVariant,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(24),
-          borderSide: BorderSide.none,
+          borderSide: const BorderSide(color: AppColors.border),
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(26),
-          borderSide: BorderSide.none,
+          borderRadius: BorderRadius.circular(24),
+          borderSide: const BorderSide(color: AppColors.border),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(26),
-          borderSide: BorderSide(color: AppColors.primary.withValues(alpha: 0.42)),
+          borderRadius: BorderRadius.circular(24),
+          borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
         ),
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        hintStyle: const TextStyle(color: AppColors.textSecondary, fontSize: 14),
-      ),
-      chipTheme: ChipThemeData(
-        backgroundColor: AppColors.surface,
-        selectedColor: AppColors.primaryContainer,
-        disabledColor: AppColors.surface,
-        labelStyle: const TextStyle(color: AppColors.textPrimary, fontSize: 12),
-        secondaryLabelStyle: const TextStyle(color: AppColors.textPrimary, fontSize: 12),
-        side: const BorderSide(color: AppColors.border),
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        hintStyle: AppTextStyles.bodySm,
       ),
       cardTheme: CardThemeData(
         color: AppColors.surface,
-        elevation: 10,
-        shadowColor: Colors.black.withValues(alpha: 0.28),
+        elevation: 0,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(22),
-          side: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
+          borderRadius: BorderRadius.circular(12),
+          side: const BorderSide(color: AppColors.border),
         ),
       ),
       iconTheme: const IconThemeData(color: AppColors.textPrimary),
@@ -238,4 +232,8 @@ abstract final class AppTheme {
       ],
     );
   }
+
+  // Alias for backward compatibility
+  static ThemeData get lightTheme => ripLightTheme;
+  static ThemeData get darkTheme => ripDarkTheme;
 }

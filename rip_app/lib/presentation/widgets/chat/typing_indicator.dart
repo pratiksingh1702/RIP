@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
-
-import '../../../core/design/app_colors.dart';
+import '../../../core/design/design.dart';
 
 class TypingIndicator extends StatelessWidget {
   const TypingIndicator({
@@ -14,80 +13,67 @@ class TypingIndicator extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Align(
-      alignment: Alignment.centerLeft,
-      child: Container(
-        margin: const EdgeInsets.fromLTRB(14, 7, 50, 7),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
-        decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.075),
-          borderRadius: const BorderRadius.only(
-            topLeft: Radius.circular(8),
-            topRight: Radius.circular(24),
-            bottomRight: Radius.circular(24),
-            bottomLeft: Radius.circular(24),
-          ),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.07)),
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.symmetric(vertical: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+      decoration: const BoxDecoration(
+        color: AppColors.surface,
+        border: Border(
+          top: BorderSide(color: AppColors.border, width: 1),
+          bottom: BorderSide(color: AppColors.border, width: 1),
         ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const _TypingDot(),
-            const SizedBox(width: 4),
-            const _TypingDot(delay: Duration(milliseconds: 150)),
-            const SizedBox(width: 4),
-            const _TypingDot(delay: Duration(milliseconds: 300)),
-            const SizedBox(width: 12),
-            Flexible(
-              child: Text(
-                label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  color: AppColors.textSecondary.withValues(alpha: 0.88),
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                ),
+      ),
+      child: Row(
+        children: [
+          const RipMascotWidget(
+            pose: RipMascotPose.thinking,
+            width: 28,
+            height: 28,
+          ),
+          const SizedBox(width: 12),
+          const _AnimatedTypingDots(),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AppTextStyles.bodySm.copyWith(
+                color: AppColors.textSecondary,
+                fontWeight: FontWeight.w600,
               ),
             ),
-            if (onStop != null) ...[
-              const SizedBox(width: 10),
-              _StopButton(onPressed: onStop!),
-            ],
+          ),
+          if (onStop != null) ...[
+            const SizedBox(width: 10),
+            RipButton.secondary(
+              label: 'Stop',
+              icon: const Icon(Icons.stop_rounded, size: 16),
+              onPressed: onStop,
+            ),
+
           ],
-        ),
+        ],
       ),
     );
   }
 }
 
-class _StopButton extends StatelessWidget {
-  const _StopButton({required this.onPressed});
-
-  final VoidCallback onPressed;
+class _AnimatedTypingDots extends StatelessWidget {
+  const _AnimatedTypingDots();
 
   @override
   Widget build(BuildContext context) {
-    return Tooltip(
-      message: 'Stop request',
-      child: InkWell(
-        customBorder: const CircleBorder(),
-        onTap: onPressed,
-        child: Container(
-          width: 30,
-          height: 30,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: Colors.white.withValues(alpha: 0.08),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.10)),
-          ),
-          child: const Icon(
-            Icons.stop_rounded,
-            color: AppColors.error,
-            size: 17,
-          ),
-        ),
-      ),
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: const [
+        _TypingDot(delay: Duration(milliseconds: 0)),
+        SizedBox(width: 4),
+        _TypingDot(delay: Duration(milliseconds: 160)),
+        SizedBox(width: 4),
+        _TypingDot(delay: Duration(milliseconds: 320)),
+      ],
     );
   }
 }
@@ -95,7 +81,7 @@ class _StopButton extends StatelessWidget {
 class _TypingDot extends StatefulWidget {
   final Duration delay;
 
-  const _TypingDot({this.delay = Duration.zero});
+  const _TypingDot({required this.delay});
 
   @override
   State<_TypingDot> createState() => _TypingDotState();
@@ -133,9 +119,9 @@ class _TypingDotState extends State<_TypingDot> with SingleTickerProviderStateMi
     return FadeTransition(
       opacity: _animation,
       child: Container(
-        width: 8,
-        height: 8,
-        decoration: BoxDecoration(
+        width: 7,
+        height: 7,
+        decoration: const BoxDecoration(
           color: AppColors.primary,
           shape: BoxShape.circle,
         ),

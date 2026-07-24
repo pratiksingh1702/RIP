@@ -1,4 +1,4 @@
-﻿import 'dart:ui';
+import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -95,10 +95,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   }
 
   
-  void _openSandbox() {
-    final projectId = ref.read(activeProjectIdProvider);
-    context.go('/sandbox/${projectId ?? 'default'}');
-  }
+
   Future<void> _sendMessage() async {
     final text = _textController.text.trim();
     if (text.isEmpty) return;
@@ -240,11 +237,21 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     return Scaffold(
       extendBodyBehindAppBar: true,
       drawer: const AppDrawer(),
+      drawerEdgeDragWidth: MediaQuery.sizeOf(context).width * 0.4,
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: Builder(
         builder: (context) {
-          return Stack(
-            children: [
+          return GestureDetector(
+            onHorizontalDragEnd: (details) {
+              // Open drawer when swiping rightwards (positive velocity)
+              if ((details.primaryVelocity ?? 0) > 250) {
+                HapticFeedback.selectionClick();
+                Scaffold.of(context).openDrawer();
+              }
+            },
+            child: Stack(
+              children: [
+
               ColoredBox(color: Theme.of(context).scaffoldBackgroundColor),
               Column(
                 children: [
@@ -348,12 +355,16 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                 ),
               ),
             ],
-          );
-        },
-      ),
-    );
-  }
+          ),
+        );
+      },
+    ),
+  );
 }
+
+}
+
+
 
 String _workflowId(Map<String, dynamic> workflow) {
   return workflow['draft_id']?.toString() ??
@@ -625,11 +636,11 @@ class _FloatingHeader extends ConsumerWidget {
                           mainAxisAlignment: MainAxisAlignment.center,
                           crossAxisAlignment: CrossAxisAlignment.center,
                           children: [
-                            Text(
-                              'RIP Â· Repository Intelligence',
+                            const Text(
+                              'RIP • Repository Intelligence',
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
+                              style: TextStyle(
                                 color: AppColors.textPrimary,
                                 fontSize: 17,
                                 fontWeight: FontWeight.w700,
@@ -638,7 +649,7 @@ class _FloatingHeader extends ConsumerWidget {
                             AnimatedSwitcher(
                               duration: const Duration(milliseconds: 180),
                               child: activeSession == null
-                                  ? Text(
+                                  ? const Text(
                                       'Start a new chat',
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
@@ -649,18 +660,19 @@ class _FloatingHeader extends ConsumerWidget {
                                       ),
                                     )
                                   : Text(
-                                      '${activeSession.title}${project != null ? ' Â· ' + project!.projectName : ''}',
+                                      '${activeSession.title}${project != null ? ' • ${project!.projectName}' : ''}',
                                       key: ValueKey(activeSession.id),
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
-                                      style: TextStyle(
-                                        color: AppColors.textSecondary
-                                            .withValues(alpha: 0.78),
+                                      style: const TextStyle(
+                                        color: AppColors.textSecondary,
                                         fontSize: 11,
                                         fontWeight: FontWeight.w500,
                                       ),
                                     ),
                             ),
+
+
                           ],
                         ),
                       ),

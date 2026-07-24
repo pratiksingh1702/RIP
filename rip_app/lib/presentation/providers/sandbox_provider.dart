@@ -2,8 +2,9 @@
 import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
-import '../core/api/rip_client.dart';
-import '../data/models/sandbox.dart';
+import '../../core/api/rip_client.dart';
+import 'connection_provider.dart';
+import '../../data/models/sandbox.dart';
 
 class SandboxNotifier extends StateNotifier<SandboxState> {
   final RipClient _client;

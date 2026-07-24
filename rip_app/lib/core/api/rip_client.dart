@@ -1061,30 +1061,36 @@ class RipClient {
   // ─── Sandbox ───────────────────────────────────────────────────────────
 
   Future<Map<String, dynamic>> createSandbox(String projectId, String environment) async {
-    return _post('/gateway/api/sandbox/create', {
+    final response = await _dio.post('/gateway/api/sandbox/create', data: {
       'project_id': projectId,
       'environment': environment,
     });
+    return response.data as Map<String, dynamic>;
   }
 
   Future<Map<String, dynamic>> getSandboxStatus(String sandboxId) async {
-    return _get('/gateway/api/sandbox/status/$sandboxId');
+    final response = await _dio.get('/gateway/api/sandbox/status/$sandboxId');
+    return response.data as Map<String, dynamic>;
   }
 
   Future<Map<String, dynamic>> getSandboxTemplates() async {
-    return _get('/gateway/api/sandbox/environments');
+    final response = await _dio.get('/gateway/api/sandbox/environments');
+    return response.data as Map<String, dynamic>;
   }
 
   Future<Map<String, dynamic>> listSandboxFiles(String sandboxId, {String path = '/workspace'}) async {
-    return _get('/gateway/api/sandbox/$sandboxId/files', queryParameters: {'path': path});
+    final response = await _dio.get('/gateway/api/sandbox/$sandboxId/files', queryParameters: {'path': path});
+    return response.data as Map<String, dynamic>;
   }
 
   Future<Map<String, dynamic>> stopSandbox(String sandboxId) async {
-    return _post('/gateway/api/sandbox/$sandboxId/stop', {});
+    final response = await _dio.post('/gateway/api/sandbox/$sandboxId/stop');
+    return response.data as Map<String, dynamic>;
   }
 
   Future<Map<String, dynamic>> destroySandbox(String sandboxId) async {
-    return _delete('/gateway/api/sandbox/$sandboxId');
+    final response = await _dio.delete('/gateway/api/sandbox/$sandboxId');
+    return response.data as Map<String, dynamic>;
   }
 
 }

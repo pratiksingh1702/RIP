@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../core/design/design.dart';
 import '../providers/settings_provider.dart';
 import '../providers/gateway_provider.dart';
 import '../../core/api/rip_client.dart';
@@ -20,7 +21,9 @@ class _SetupScreenState extends ConsumerState<SetupScreen> {
   final _minPerSourceController = TextEditingController(text: '500');
   String _role = 'developer';
   bool _isTestingConnection = false;
+  bool _isConnected = false;
   String? _connectionError;
+  bool _showAdvancedSettings = false;
 
   @override
   void initState() {
@@ -51,7 +54,7 @@ class _SetupScreenState extends ConsumerState<SetupScreen> {
         _role = '${defaults['default_role'] ?? role}';
       });
     } catch (_) {
-      // Defaults are optional during first setup, before the server is reachable.
+      // Defaults are optional during first setup
     }
   }
 
@@ -59,6 +62,7 @@ class _SetupScreenState extends ConsumerState<SetupScreen> {
     setState(() {
       _isTestingConnection = true;
       _connectionError = null;
+      _isConnected = false;
     });
 
     try {
@@ -80,7 +84,9 @@ class _SetupScreenState extends ConsumerState<SetupScreen> {
         if (mounted) {
           ref.read(gatewayRoleProvider.notifier).state = _role;
           await _saveGatewayDefaults(client);
-          context.go('/chat');
+          setState(() {
+            _isConnected = true;
+          });
         }
       } else {
         setState(() {
@@ -96,6 +102,10 @@ class _SetupScreenState extends ConsumerState<SetupScreen> {
         _isTestingConnection = false;
       });
     }
+  }
+
+  void _onContinue() {
+    context.go('/chat');
   }
 
   @override
@@ -120,144 +130,231 @@ class _SetupScreenState extends ConsumerState<SetupScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Setup RIP'),
-      ),
+      backgroundColor: AppColors.background,
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              ClipRRect(
-                borderRadius: BorderRadius.circular(20),
-                child: Image.asset(
-                  'assets/images/app_icon.png',
-                  width: 120,
-                  height: 120,
-                  fit: BoxFit.cover,
-                ),
-              ),
-              const SizedBox(height: 24),
-              Text(
-                'Connect to RIP Server',
-                style: Theme.of(context).textTheme.headlineMedium,
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Enter your server details to get started',
-                style: Theme.of(context).textTheme.bodyLarge,
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 32),
-              TextField(
-                controller: _serverUrlController,
-                decoration: const InputDecoration(
-                  labelText: 'Server URL',
-                  hintText: 'http://localhost:8000',
-                  prefixIcon: Icon(Icons.link),
-                ),
-                keyboardType: TextInputType.url,
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: _apiKeyController,
-                decoration: const InputDecoration(
-                  labelText: 'API Key (optional)',
-                  hintText: 'Enter your API key if required',
-                  prefixIcon: Icon(Icons.key),
-                ),
-                obscureText: true,
-              ),
-              const SizedBox(height: 16),
-              DropdownButtonFormField<String>(
-                value: _role,
-                decoration: const InputDecoration(
-                  labelText: 'Default role',
-                  prefixIcon: Icon(Icons.admin_panel_settings_outlined),
-                ),
-                items: const [
-                  DropdownMenuItem(value: 'junior_dev', child: Text('Junior developer')),
-                  DropdownMenuItem(value: 'developer', child: Text('Developer')),
-                  DropdownMenuItem(value: 'senior_dev', child: Text('Senior developer')),
-                  DropdownMenuItem(value: 'ci_agent', child: Text('CI agent')),
-                ],
-                onChanged: (value) {
-                  if (value != null) setState(() => _role = value);
-                },
-              ),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _maxTokensController,
-                      decoration: const InputDecoration(
-                        labelText: 'Token budget',
-                        prefixIcon: Icon(Icons.speed_rounded),
-                      ),
-                      keyboardType: TextInputType.number,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: TextField(
-                      controller: _reserveController,
-                      decoration: const InputDecoration(
-                        labelText: 'Reserve %',
-                        prefixIcon: Icon(Icons.pie_chart_outline_rounded),
-                      ),
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: _minPerSourceController,
-                decoration: const InputDecoration(
-                  labelText: 'Minimum per source',
-                  prefixIcon: Icon(Icons.account_tree_outlined),
-                ),
-                keyboardType: TextInputType.number,
-              ),
-              if (_connectionError != null) ...[
-                const SizedBox(height: 16),
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.errorContainer,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text(
-                    _connectionError!,
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.onErrorContainer,
-                    ),
-                  ),
-                ),
-              ],
-              const SizedBox(height: 32),
-              ElevatedButton(
-                onPressed: _isTestingConnection ? null : _testConnection,
-                child: _isTestingConnection
-                    ? const Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2),
+        child: Column(
+          children: [
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    const SizedBox(height: 12),
+                    // Header Title (Match image)
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Text(
+                          '👋 ',
+                          style: TextStyle(fontSize: 24),
+                        ),
+                        Text(
+                          'Welcome to RIP!',
+                          style: AppTextStyles.headlineLg.copyWith(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 24,
+                            color: AppColors.textPrimary,
                           ),
-                          SizedBox(width: 12),
-                          Text('Connecting...'),
-                        ],
-                      )
-                    : const Text('Connect'),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      "Let's connect to your server\nand unlock the magic.",
+                      textAlign: TextAlign.center,
+                      style: AppTextStyles.bodySm.copyWith(
+                        color: AppColors.textSecondary,
+                        height: 1.4,
+                      ),
+                    ),
+                    const SizedBox(height: 28),
+
+                    // Standard Form Controls (Match image)
+                    RipTextField(
+                      label: 'Server URL',
+                      controller: _serverUrlController,
+                      hintText: 'https://rip.yourserver.com',
+                      keyboardType: TextInputType.url,
+                    ),
+                    const SizedBox(height: 16),
+                    RipTextField(
+                      label: 'API Key',
+                      controller: _apiKeyController,
+                      hintText: '••••••••••••',
+                      isPassword: true,
+                    ),
+                    const SizedBox(height: 24),
+
+                    // Primary Test Connection Button (Match image)
+                    RipButton.primary(
+                      label: _isTestingConnection ? 'Testing Connection...' : 'Test Connection',
+                      onPressed: _isTestingConnection ? null : _testConnection,
+                      isLoading: _isTestingConnection,
+                      isFullWidth: true,
+                    ),
+
+                    // Connection Error Feedback
+                    if (_connectionError != null) ...[
+                      const SizedBox(height: 16),
+                      RipImpactCard(
+                        title: 'Connection Error',
+                        description: _connectionError!,
+                        severity: RipImpactSeverity.high,
+                      ),
+                    ],
+
+                    // Inline Success Confirmation (Match image)
+                    if (_isConnected) ...[
+                      const SizedBox(height: 16),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFDCFCE7),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: const Color(0xFF86EFAC), width: 1),
+                        ),
+                        child: Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(4),
+                              decoration: const BoxDecoration(
+                                color: Color(0xFF22C55E),
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(
+                                Icons.check_rounded,
+                                color: Colors.white,
+                                size: 14,
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                'Connected successfully! 🎉',
+                                style: AppTextStyles.bodyMdBold.copyWith(
+                                  color: const Color(0xFF15803D),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      // Primary Continue Button (Match image)
+                      RipButton.primary(
+                        label: 'Continue',
+                        onPressed: _onContinue,
+                        isFullWidth: true,
+                      ),
+                    ],
+
+                    const SizedBox(height: 20),
+
+                    // Advanced Gateway Options Toggle
+                    InkWell(
+                      onTap: () {
+                        setState(() {
+                          _showAdvancedSettings = !_showAdvancedSettings;
+                        });
+                      },
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              'Advanced Gateway Settings',
+                              style: AppTextStyles.bodySm.copyWith(
+                                color: AppColors.primary,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            Icon(
+                              _showAdvancedSettings
+                                  ? Icons.keyboard_arrow_up_rounded
+                                  : Icons.keyboard_arrow_down_rounded,
+                              size: 18,
+                              color: AppColors.primary,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+
+                    if (_showAdvancedSettings) ...[
+                      const SizedBox(height: 12),
+                      RipCard(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          children: [
+                            DropdownButtonFormField<String>(
+                              initialValue: _role,
+                              style: AppTextStyles.bodyMd,
+                              decoration: const InputDecoration(
+                                labelText: 'Default Role',
+                              ),
+                              items: const [
+                                DropdownMenuItem(value: 'junior_dev', child: Text('Junior developer')),
+                                DropdownMenuItem(value: 'developer', child: Text('Developer')),
+                                DropdownMenuItem(value: 'senior_dev', child: Text('Senior developer')),
+                                DropdownMenuItem(value: 'ci_agent', child: Text('CI agent')),
+                              ],
+                              onChanged: (value) {
+                                if (value != null) setState(() => _role = value);
+                              },
+                            ),
+                            const SizedBox(height: 12),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: RipTextField(
+                                    label: 'Token Budget',
+                                    controller: _maxTokensController,
+                                    keyboardType: TextInputType.number,
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: RipTextField(
+                                    label: 'Reserve %',
+                                    controller: _reserveController,
+                                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 12),
+                            RipTextField(
+                              label: 'Minimum Per Source',
+                              controller: _minPerSourceController,
+                              keyboardType: TextInputType.number,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
               ),
-            ],
-          ),
+            ),
+
+            // Seated Bottom Mascot Hero (Match image)
+            Padding(
+              padding: const EdgeInsets.only(top: 8, bottom: 16),
+              child: RipMascotWidget(
+                pose: _isConnected
+                    ? RipMascotPose.success
+                    : (_connectionError != null
+                        ? RipMascotPose.error
+                        : RipMascotPose.waving),
+                width: 130,
+                height: 130,
+              ),
+            ),
+
+          ],
         ),
       ),
     );

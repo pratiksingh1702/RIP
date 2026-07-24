@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/design/app_colors.dart';
+import '../../../core/design/design.dart';
 import '../../../data/models/message.dart';
 import '../../../utils/date_formatter.dart';
 import '../../providers/chat_provider.dart';
@@ -17,82 +17,73 @@ class UserMessage extends ConsumerWidget {
     return Align(
       alignment: Alignment.centerRight,
       child: Container(
-        margin: const EdgeInsets.fromLTRB(58, 7, 14, 7),
+        margin: const EdgeInsets.fromLTRB(60, 8, 16, 8),
         child: ConstrainedBox(
           constraints: BoxConstraints(
             maxWidth: MediaQuery.of(context).size.width * 0.78,
           ),
-          child: DecoratedBox(
-            decoration: BoxDecoration(
+          child: Container(
+            decoration: const BoxDecoration(
               color: AppColors.primary,
-              borderRadius: const BorderRadius.only(
-                topLeft: Radius.circular(24),
-                topRight: Radius.circular(24),
-                bottomLeft: Radius.circular(24),
-                bottomRight: Radius.circular(8),
+              borderRadius: BorderRadius.only(
+                topLeft: Radius.circular(20),
+                topRight: Radius.circular(20),
+                bottomLeft: Radius.circular(20),
+                bottomRight: Radius.circular(4),
               ),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.22),
-                  blurRadius: 24,
-                  offset: const Offset(0, 12),
+                  color: Color(0x1F5F3ADD),
+                  blurRadius: 16,
+                  offset: Offset(0, 6),
                 ),
               ],
             ),
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 13, 16, 10),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    message.content,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 15,
-                      height: 1.42,
-                      fontWeight: FontWeight.w500,
-                    ),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  message.content,
+                  style: AppTextStyles.bodyMd.copyWith(
+                    color: Colors.white,
+                    fontSize: 15,
+                    height: 1.45,
                   ),
-                  const SizedBox(height: 7),
-                  Text(
-                    DateFormatter.formatTime(message.timestamp),
-                    style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.62),
-                      fontSize: 10,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      _MessageActionButton(
-                        icon: Icons.copy_rounded,
-                        tooltip: 'Copy',
-                        onTap: () {
-                          HapticFeedback.selectionClick();
-                          Clipboard.setData(
-                            ClipboardData(text: message.content),
-                          );
-                        },
+                ),
+                const SizedBox(height: 6),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      DateFormatter.formatTime(message.timestamp),
+                      style: AppTextStyles.bodySmMuted.copyWith(
+                        color: Colors.white.withValues(alpha: 0.7),
+                        fontSize: 10,
                       ),
-                      const SizedBox(width: 6),
-                      _MessageActionButton(
-                        icon: Icons.refresh_rounded,
-                        tooltip: 'Resend',
-                        onTap: () {
-                          HapticFeedback.selectionClick();
-                          ref
-                              .read(chatProvider.notifier)
-                              .resendMessage(message.content);
-                        },
-                      ),
-                    ],
-                  ),
-                ],
-              ),
+                    ),
+                    const SizedBox(width: 10),
+                    _UserActionButton(
+                      icon: Icons.copy_rounded,
+                      tooltip: 'Copy',
+                      onTap: () {
+                        HapticFeedback.selectionClick();
+                        Clipboard.setData(ClipboardData(text: message.content));
+                      },
+                    ),
+                    const SizedBox(width: 6),
+                    _UserActionButton(
+                      icon: AppIcons.refresh,
+                      tooltip: 'Resend',
+                      onTap: () {
+                        HapticFeedback.selectionClick();
+                        ref.read(chatProvider.notifier).resendMessage(message.content);
+                      },
+                    ),
+                  ],
+                ),
+              ],
             ),
           ),
         ),
@@ -101,8 +92,8 @@ class UserMessage extends ConsumerWidget {
   }
 }
 
-class _MessageActionButton extends StatelessWidget {
-  const _MessageActionButton({
+class _UserActionButton extends StatelessWidget {
+  const _UserActionButton({
     required this.icon,
     required this.tooltip,
     required this.onTap,
@@ -116,17 +107,16 @@ class _MessageActionButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return Tooltip(
       message: tooltip,
-      child: GestureDetector(
+      child: InkWell(
         onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
         child: Container(
-          width: 30,
-          height: 30,
+          padding: const EdgeInsets.all(4),
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            color: Colors.white.withValues(alpha: 0.12),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.14)),
+            color: Colors.white.withValues(alpha: 0.15),
           ),
-          child: Icon(icon, color: Colors.white, size: 15),
+          child: Icon(icon, color: Colors.white, size: 13),
         ),
       ),
     );

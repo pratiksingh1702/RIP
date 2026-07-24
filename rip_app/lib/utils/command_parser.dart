@@ -122,9 +122,7 @@ class CommandParser {
       case 'terminal':
         return ParsedCommand(type: CommandType.terminal, arguments: args, flags: flags);
       case 'agent':
-        return ParsedCommand(type: CommandType.sandbox,
-  terminal,
-  agent, arguments: args, flags: flags);
+        return ParsedCommand(type: CommandType.agent, arguments: args, flags: flags);
       default:
         return ParsedCommand(type: CommandType.unknown);
     }

@@ -1,7 +1,7 @@
-﻿import 'package:go_router/go_router.dart';
+import 'package:go_router/go_router.dart';
 import '../screens/splash_screen.dart';
 import '../screens/setup_screen.dart';
-
+import '../screens/chat_screen.dart';
 import '../screens/sandbox_screen.dart';
 import '../screens/workspace_dashboard.dart';
 import '../screens/gateway_activity_screen.dart';
@@ -15,15 +15,18 @@ import '../screens/llm_settings_screen.dart';
 final appRouter = GoRouter(
   initialLocation: '/chat',
   routes: [
-      GoRoute(
-    path: '/sandbox',
-    builder: (context, state) => const SandboxScreen(),
-  ),
-  GoRoute(
-    path: '/sandbox/:projectId',
-    builder: (context, state) => SandboxScreen(projectId: state.pathParameters['projectId']),
-  ),
-  , builder: (context, state) => const ChatScreen()),
+    GoRoute(
+      path: '/chat',
+      builder: (context, state) => const ChatScreen(),
+    ),
+    GoRoute(
+      path: '/sandbox',
+      builder: (context, state) => const SandboxScreen(),
+    ),
+    GoRoute(
+      path: '/sandbox/:projectId',
+      builder: (context, state) => SandboxScreen(projectId: state.pathParameters['projectId']),
+    ),
     GoRoute(path: '/workspace', builder: (context, state) => const WorkspaceDashboard()),
     GoRoute(path: '/splash', builder: (context, state) => const SplashScreen()),
     GoRoute(path: '/setup', builder: (context, state) => const SetupScreen()),
@@ -40,4 +43,3 @@ final appRouter = GoRouter(
     GoRoute(path: '/mcp-export', builder: (context, state) => const McpExportScreen()),
   ],
 );
-

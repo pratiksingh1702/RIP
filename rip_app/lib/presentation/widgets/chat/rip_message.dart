@@ -3,8 +3,8 @@ import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import '../../../core/design/app_colors.dart';
-import '../../../core/design/app_text_styles.dart';
+
+import '../../../core/design/design.dart';
 import '../../../data/models/message.dart';
 import '../../../data/models/project.dart';
 import '../../../data/models/rip_response.dart';
@@ -32,12 +32,13 @@ class RipMessage extends ConsumerWidget {
       if (message.trace != null) {
         return _AssistantShell(
           timestamp: message.timestamp,
+          isLoading: true,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
               PipelineStepList(trace: message.trace!),
-              const SizedBox(height: 10),
+              const SizedBox(height: 12),
               _AssistantActionButton(
                 icon: Icons.stop_rounded,
                 tooltip: 'Stop',
@@ -57,70 +58,60 @@ class RipMessage extends ConsumerWidget {
 
     return _AssistantShell(
       timestamp: message.timestamp,
+      isLoading: false,
       child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (message.trace != null && message.trace!.hasEvents) ...[
+            PipelineSummaryChip(trace: message.trace!),
+            const SizedBox(height: 12),
+          ],
+
+          // Content blocks
+          if (hasBlocks)
+            ...message.blocks!.map((block) => _buildBlockWidget(context, ref, block))
+          else
+            MarkdownBody(
+              data: message.content,
+              styleSheet: _markdownStyle(),
+            ),
+          if (_workflowRunIds(message.content) != null) ...[
+            const SizedBox(height: 12),
+            _WorkflowRunOpenButton(ids: _workflowRunIds(message.content)!),
+          ],
+          const SizedBox(height: 14),
+          _RepositorySearchFooter(
+            project: project,
+            timestamp: message.timestamp,
+          ),
+          const SizedBox(height: 12),
+          Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              if (message.trace != null && message.trace!.hasEvents) ...[
-                PipelineSummaryChip(trace: message.trace!),
-                const SizedBox(height: 10),
-              ],
-
-              // Content blocks
-              if (hasBlocks)
-                ...message.blocks!.map((block) => _buildBlockWidget(context, ref, block))
-              else
-                MarkdownBody(
-                  data: message.content,
-                  styleSheet: _markdownStyle(),
-                ),
-              if (_workflowRunIds(message.content) != null) ...[
-                const SizedBox(height: 10),
-                _WorkflowRunOpenButton(ids: _workflowRunIds(message.content)!),
-              ],
-              const SizedBox(height: 10),
-              _RepositorySearchFooter(
-                project: project,
-                timestamp: message.timestamp,
+              _AssistantActionButton(
+                icon: AppIcons.delete != Icons.delete ? Icons.copy_rounded : AppIcons.add,
+                tooltip: 'Copy',
+                label: 'Copy',
+                onTap: () {
+                  HapticFeedback.selectionClick();
+                  Clipboard.setData(ClipboardData(text: message.content));
+                },
               ),
-              const SizedBox(height: 10),
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  _AssistantActionButton(
-                    icon: Icons.copy_rounded,
-                    tooltip: 'Copy',
-                    onTap: () {
-                      HapticFeedback.selectionClick();
-                      Clipboard.setData(ClipboardData(text: message.content));
-                    },
-                  ),
-                  const SizedBox(width: 6),
-                  _AssistantActionButton(
-                    icon: Icons.refresh_rounded,
-                    tooltip: 'Regenerate',
-                    onTap: () {
-                      HapticFeedback.selectionClick();
-                      ref
-                          .read(chatProvider.notifier)
-                          .regenerateFromAssistant(message.id);
-                    },
-                  ),
-                  const SizedBox(width: 6),
-                  _AssistantActionButton(
-                    icon: Icons.replay_rounded,
-                    tooltip: 'Resend prompt',
-                    onTap: () {
-                      HapticFeedback.selectionClick();
-                      ref
-                          .read(chatProvider.notifier)
-                          .regenerateFromAssistant(message.id);
-                    },
-                  ),
-                ],
-                ),
+              const SizedBox(width: 8),
+              _AssistantActionButton(
+                icon: AppIcons.refresh,
+                tooltip: 'Regenerate',
+                label: 'Regenerate',
+                onTap: () {
+                  HapticFeedback.selectionClick();
+                  ref.read(chatProvider.notifier).regenerateFromAssistant(message.id);
+                },
+              ),
             ],
           ),
+        ],
+      ),
     );
   }
 
@@ -200,40 +191,40 @@ class RipMessage extends ConsumerWidget {
     return MarkdownStyleSheet(
       p: AppTextStyles.bodyMd.copyWith(
         fontSize: 15,
-        height: 1.5,
-        color: AppColors.textPrimary.withValues(alpha: 0.94),
+        height: 1.55,
+        color: AppColors.textPrimary,
       ),
       strong: const TextStyle(
         color: AppColors.textPrimary,
-        fontWeight: FontWeight.w800,
+        fontWeight: FontWeight.w700,
       ),
       blockquote: AppTextStyles.bodyMd.copyWith(
         color: AppColors.textSecondary,
         height: 1.45,
       ),
       blockquoteDecoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.055),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.primary.withValues(alpha: 0.24)),
+        color: AppColors.primaryLight,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.primary.withValues(alpha: 0.2)),
       ),
       code: AppTextStyles.mono.copyWith(
-        color: const Color(0xFFE5E7EB),
-        backgroundColor: Colors.white.withValues(alpha: 0.08),
+        color: AppColors.primary,
+        backgroundColor: AppColors.primaryLight,
         fontSize: 13,
       ),
       codeblockDecoration: BoxDecoration(
-        color: const Color(0xFF0B1020),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.07)),
+        color: const Color(0xFF0F172A),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.border),
       ),
-      codeblockPadding: const EdgeInsets.all(14),
+      codeblockPadding: const EdgeInsets.all(16),
       listBullet: AppTextStyles.bodyMd.copyWith(
         color: AppColors.textSecondary,
         height: 1.5,
       ),
       tableHead: AppTextStyles.bodyMdBold,
       tableBody: AppTextStyles.bodyMd,
-      tableBorder: TableBorder.all(color: Colors.white.withValues(alpha: 0.07)),
+      tableBorder: TableBorder.all(color: AppColors.border),
     );
   }
 }
@@ -245,101 +236,72 @@ class _WorkflowRunOpenButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return OutlinedButton.icon(
+    return RipButton.secondary(
+      label: ids['run_id'] == null ? 'Open workflow' : 'Open flow run',
+      icon: const Icon(AppIcons.workflows, size: 16),
       onPressed: () {
         HapticFeedback.selectionClick();
         context.push('/workflows', extra: ids);
       },
-      icon: const Icon(Icons.account_tree_rounded, size: 18),
-      label: Text(
-        ids['run_id'] == null ? 'Open workflow' : 'Open flow run',
-        overflow: TextOverflow.ellipsis,
-      ),
     );
+
   }
 }
 
+/// Full-width modern Assistant Response container
 class _AssistantShell extends StatelessWidget {
   final Widget child;
   final DateTime timestamp;
+  final bool isLoading;
 
   const _AssistantShell({
     required this.child,
     required this.timestamp,
+    this.isLoading = false,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Align(
-      alignment: Alignment.centerLeft,
-      child: Container(
-        margin: const EdgeInsets.fromLTRB(14, 7, 50, 7),
-        padding: const EdgeInsets.fromLTRB(16, 14, 16, 11),
-        decoration: BoxDecoration(
-          color: AppColors.surface.withValues(alpha: 0.96),
-          borderRadius: const BorderRadius.only(
-            topLeft: Radius.circular(8),
-            topRight: Radius.circular(24),
-            bottomRight: Radius.circular(24),
-            bottomLeft: Radius.circular(24),
-          ),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.075)),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.18),
-              blurRadius: 26,
-              offset: const Offset(0, 14),
-            ),
-          ],
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.symmetric(vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+      decoration: const BoxDecoration(
+        color: AppColors.surface,
+        border: Border(
+          top: BorderSide(color: AppColors.border, width: 1),
+          bottom: BorderSide(color: AppColors.border, width: 1),
         ),
-        child: ConstrainedBox(
-          constraints: BoxConstraints(
-            maxWidth: MediaQuery.of(context).size.width * 0.86,
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
             children: [
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    width: 22,
-                    height: 22,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(9),
-                      color: AppColors.primary,
-                    ),
-                    child: const Icon(
-                      Icons.bolt_rounded,
-                      size: 14,
-                      color: Colors.white,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    'Repository Intelligence',
-                    style: AppTextStyles.bodySmMuted.copyWith(
-                      fontWeight: FontWeight.w800,
-                      color: AppColors.textPrimary,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    DateFormatter.formatTime(timestamp),
-                    style: TextStyle(
-                      color: AppColors.textSecondary.withValues(alpha: 0.62),
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
+              RipMascotWidget(
+                pose: isLoading ? RipMascotPose.thinking : RipMascotPose.happy,
+                width: 28,
+                height: 28,
               ),
-              const SizedBox(height: 10),
-              child,
+              const SizedBox(width: 10),
+              Text(
+                'Repository Intelligence',
+                style: AppTextStyles.bodyMdBold.copyWith(
+                  color: AppColors.primary,
+                  fontSize: 14,
+                ),
+              ),
+              const Spacer(),
+              Text(
+                DateFormatter.formatTime(timestamp),
+                style: AppTextStyles.bodySmMuted.copyWith(fontSize: 11),
+              ),
             ],
           ),
-        ),
+          const SizedBox(height: 14),
+          child,
+        ],
       ),
     );
   }
@@ -362,15 +324,19 @@ class _RepositorySearchFooter extends StatelessWidget {
         ? 'Searched $entityCount entities in $projectName'
         : 'Searched indexed graph in $projectName';
 
-    return Text(
-      '$scope - ${DateFormatter.formatTime(timestamp)}',
-      maxLines: 1,
-      overflow: TextOverflow.ellipsis,
-      style: TextStyle(
-        color: AppColors.textSecondary.withValues(alpha: 0.72),
-        fontSize: 11,
-        fontWeight: FontWeight.w700,
-      ),
+    return Row(
+      children: [
+        const Icon(Icons.saved_search_rounded, size: 14, color: AppColors.textSecondary),
+        const SizedBox(width: 6),
+        Expanded(
+          child: Text(
+            '$scope • ${DateFormatter.formatTime(timestamp)}',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: AppTextStyles.bodySmMuted.copyWith(fontSize: 11),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -380,27 +346,45 @@ class _AssistantActionButton extends StatelessWidget {
     required this.icon,
     required this.tooltip,
     required this.onTap,
+    this.label,
   });
 
   final IconData icon;
   final String tooltip;
   final VoidCallback onTap;
+  final String? label;
 
   @override
   Widget build(BuildContext context) {
     return Tooltip(
       message: tooltip,
-      child: GestureDetector(
+      child: InkWell(
         onTap: onTap,
+        borderRadius: BorderRadius.circular(20),
         child: Container(
-          width: 30,
-          height: 30,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
           decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: Colors.white.withValues(alpha: 0.055),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+            color: AppColors.background,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: AppColors.border, width: 1),
           ),
-          child: Icon(icon, color: AppColors.textSecondary, size: 15),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, color: AppColors.textSecondary, size: 14),
+              if (label != null) ...[
+                const SizedBox(width: 6),
+                Text(
+                  label!,
+                  style: AppTextStyles.bodySm.copyWith(
+                    fontSize: 12,
+                    color: AppColors.textSecondary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ],
+          ),
         ),
       ),
     );

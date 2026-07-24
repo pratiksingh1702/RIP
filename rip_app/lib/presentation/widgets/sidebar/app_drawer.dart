@@ -1,16 +1,16 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:rip_app/core/design/app_colors.dart';
-import 'package:rip_app/utils/date_formatter.dart';
 
-import '../../providers/chat_provider.dart';
-import '../../providers/project_provider.dart';
-import '../../providers/settings_provider.dart';
-import '../../providers/chat_session_provider.dart';
-import '../overlays/add_repo_sheet.dart';
-import 'project_list.dart';
+import 'package:rip_app/core/design/design.dart';
+import 'package:rip_app/utils/date_formatter.dart';
+import 'package:rip_app/presentation/providers/chat_provider.dart';
+import 'package:rip_app/presentation/providers/project_provider.dart';
+import 'package:rip_app/presentation/providers/settings_provider.dart';
+import 'package:rip_app/presentation/providers/chat_session_provider.dart';
+import 'package:rip_app/presentation/widgets/overlays/add_repo_sheet.dart';
+import 'package:rip_app/presentation/widgets/sidebar/project_list.dart';
 
 class AppDrawer extends ConsumerWidget {
   const AppDrawer({super.key});
@@ -22,22 +22,25 @@ class AppDrawer extends ConsumerWidget {
     final activeSessionId = ref.watch(activeChatSessionIdProvider);
 
     return Drawer(
-      width: MediaQuery.sizeOf(context).width * 0.82,
-      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      width: MediaQuery.sizeOf(context).width * 0.84,
+      backgroundColor: AppColors.background,
       elevation: 0,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.only(
-          topRight: Radius.circular(20),
-          bottomRight: Radius.circular(20),
+          topRight: Radius.circular(24),
+          bottomRight: Radius.circular(24),
         ),
       ),
       child: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(10, 10, 10, 12),
+          padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
           child: Column(
             children: [
-              const _DrawerHeaderCompact(),
-              const SizedBox(height: 8),
+              // 1. Header: Mascot and Greet text in Row
+              const _DrawerHeaderRow(),
+              const SizedBox(height: 12),
+
+              // 2. Compact Actions Row (New Chat, Add Repo, Projects)
               Row(
                 children: [
                   Expanded(
@@ -57,7 +60,7 @@ class AppDrawer extends ConsumerWidget {
                   const SizedBox(width: 8),
                   Expanded(
                     child: _CompactAction(
-                      icon: Icons.add_rounded,
+                      icon: AppIcons.add,
                       label: 'Add repo',
                       onTap: () {
                         HapticFeedback.selectionClick();
@@ -91,30 +94,44 @@ class AppDrawer extends ConsumerWidget {
                   ),
                 ],
               ),
-              const SizedBox(height: 10),
+              const SizedBox(height: 12),
+
+              // 3. Scrollable Sidebar Navigation Sections
               Expanded(
                 child: ListView(
                   padding: EdgeInsets.zero,
                   children: [
+                    // Chats Section
                     chatSessionsAsync.when(
-                      loading: () => const Center(child: CircularProgressIndicator()),
-                      error: (err, stack) => Text('Error: $err'),
+                      loading: () => const Padding(
+                        padding: EdgeInsets.all(16.0),
+                        child: Center(child: CircularProgressIndicator()),
+                      ),
+                      error: (err, stack) => Padding(
+                        padding: const EdgeInsets.all(16.0),
+                        child: Text(
+                          'Error loading chats: $err',
+                          style: AppTextStyles.bodySmMuted.copyWith(color: AppColors.error),
+                        ),
+                      ),
                       data: (chatSessions) {
                         if (chatSessions.isEmpty) {
-                          return const _CompactSection(
+                          return _DrawerSection(
                             title: 'Chats',
                             children: [
                               Padding(
-                                padding: EdgeInsets.all(16),
+                                padding: const EdgeInsets.all(14),
                                 child: Text(
                                   'No chats yet. Start a new chat!',
-                                  style: TextStyle(color: Colors.grey),
+                                  style: AppTextStyles.bodySmMuted,
                                 ),
                               ),
+
                             ],
                           );
+
                         }
-                        return _CompactSection(
+                        return _DrawerSection(
                           title: 'Chats',
                           children: [
                             for (final session in chatSessions)
@@ -123,32 +140,38 @@ class AppDrawer extends ConsumerWidget {
                                 isActive: session.id == activeSessionId,
                                 onTap: () async {
                                   HapticFeedback.selectionClick();
-                                  await ref.read(chatSessionNotifierProvider.notifier).selectChatSession(session.id);
+                                  await ref
+                                      .read(chatSessionNotifierProvider.notifier)
+                                      .selectChatSession(session.id);
                                   if (context.mounted) Navigator.pop(context);
                                 },
                                 onDelete: () async {
                                   HapticFeedback.mediumImpact();
-                                  await ref.read(chatSessionNotifierProvider.notifier).deleteChatSession(session.id);
+                                  await ref
+                                      .read(chatSessionNotifierProvider.notifier)
+                                      .deleteChatSession(session.id);
                                 },
                               ),
                           ],
                         );
                       },
                     ),
-                    const SizedBox(height: 10),
-                    _CompactSection(
+                    const SizedBox(height: 12),
+
+                    // Repository Tools Section (All 10 items preserved)
+                    _DrawerSection(
                       title: 'Repository Tools',
                       children: [
                         _CompactRow(
-  icon: Icons.smart_toy_rounded,
-  title: 'LLM Config',
-  subtitle: 'Configure AI models',
-  onTap: () {
-    HapticFeedback.selectionClick();
-    Navigator.pop(context);
-    context.push('/llm-settings');
-  },
-),
+                          icon: Icons.smart_toy_rounded,
+                          title: 'LLM Config',
+                          subtitle: 'Configure AI models',
+                          onTap: () {
+                            HapticFeedback.selectionClick();
+                            Navigator.pop(context);
+                            context.push('/llm-settings');
+                          },
+                        ),
                         _CompactRow(
                           icon: Icons.roundabout_left,
                           title: 'Agent',
@@ -159,17 +182,18 @@ class AppDrawer extends ConsumerWidget {
                             context.push('/agent-runs');
                           },
                         ),
-                                                _CompactRow(
+                        _CompactRow(
                           icon: Icons.terminal_rounded,
                           title: 'Sandbox',
                           subtitle: 'Terminal and code execution',
                           onTap: () {
+                            HapticFeedback.selectionClick();
                             Navigator.pop(context);
                             context.push('/sandbox');
                           },
                         ),
-                                                _CompactRow(
-                          icon: Icons.account_tree_rounded,
+                        _CompactRow(
+                          icon: AppIcons.workflows,
                           title: 'Workflows',
                           subtitle: 'Build and run block flows',
                           onTap: () {
@@ -178,6 +202,7 @@ class AppDrawer extends ConsumerWidget {
                             context.push('/workflows');
                           },
                         ),
+
                         _CompactRow(
                           icon: Icons.route_rounded,
                           title: 'Activity',
@@ -235,7 +260,10 @@ class AppDrawer extends ConsumerWidget {
                         ),
                       ],
                     ),
-                    _CompactSection(
+                    const SizedBox(height: 12),
+
+                    // Theme Section
+                    _DrawerSection(
                       title: 'Theme',
                       children: [
                         _ThemeRow(
@@ -261,11 +289,14 @@ class AppDrawer extends ConsumerWidget {
                         ),
                       ],
                     ),
-                    _CompactSection(
+                    const SizedBox(height: 12),
+
+                    // Settings Section
+                    _DrawerSection(
                       title: 'Settings',
                       children: [
                         _CompactRow(
-                          icon: Icons.tune_rounded,
+                          icon: AppIcons.settings,
                           title: 'Server settings',
                           subtitle: 'Connection and API key',
                           onTap: () {
@@ -292,125 +323,44 @@ class AppDrawer extends ConsumerWidget {
   }
 }
 
-class _ChatSessionRow extends StatelessWidget {
-  const _ChatSessionRow({
-    required this.session,
-    required this.isActive,
-    required this.onTap,
-    required this.onDelete,
-  });
-
-  final dynamic session;
-  final bool isActive;
-  final VoidCallback onTap;
-  final VoidCallback onDelete;
+/// Header containing Mascot in a Row with greeting text
+class _DrawerHeaderRow extends StatelessWidget {
+  const _DrawerHeaderRow();
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    return Material(
-      color: isActive ? colorScheme.primaryContainer : Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-          child: Row(
-            children: [
-              Icon(
-                isActive ? Icons.chat_bubble : Icons.chat_bubble_outline_rounded,
-                color: isActive ? colorScheme.primary : colorScheme.onSurfaceVariant,
-                size: 18,
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      session.title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: isActive ? colorScheme.onPrimaryContainer : colorScheme.onSurface,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const SizedBox(height: 1),
-                    Text(
-                      DateFormatter.formatTime(session.updatedAt),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: isActive
-                            ? colorScheme.onPrimaryContainer.withValues(alpha: 0.8)
-                            : colorScheme.onSurfaceVariant.withValues(alpha: 0.8),
-                        fontSize: 11,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              IconButton(
-                icon: const Icon(Icons.delete_outline_rounded, size: 18),
-                color: colorScheme.error,
-                onPressed: onDelete,
-                visualDensity: VisualDensity.compact,
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _DrawerHeaderCompact extends StatelessWidget {
-  const _DrawerHeaderCompact();
-
-  @override
-  Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
     return Container(
-      padding: const EdgeInsets.all(10),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
-        color: colorScheme.surface,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: colorScheme.outline.withValues(alpha: 0.6)),
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.border),
       ),
       child: Row(
         children: [
-          const SizedBox(
-            width: 36,
-            height: 36,
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                color: AppColors.primary,
-                borderRadius: BorderRadius.all(Radius.circular(14)),
-              ),
-              child: Icon(Icons.auto_awesome_rounded, color: Colors.white),
-            ),
+          const RipMascotWidget(
+            pose: RipMascotPose.waving,
+            width: 48,
+            height: 48,
           ),
-          const SizedBox(width: 10),
+          const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  'RIP',
-                  style: TextStyle(
-                    color: colorScheme.onSurface,
-                    fontSize: 20,
-                    fontWeight: FontWeight.w800,
+                  'Welcome to RIP',
+                  style: AppTextStyles.bodyMdBold.copyWith(
+                    fontSize: 16,
+                    color: AppColors.textPrimary,
                   ),
                 ),
+
+                const SizedBox(height: 2),
                 Text(
-                  'Repository graph',
-                  style: TextStyle(
-                    color: colorScheme.onSurfaceVariant,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
-                  ),
+                  'Repository Intelligence',
+                  style: AppTextStyles.bodySmMuted.copyWith(fontSize: 11),
                 ),
               ],
             ),
@@ -434,28 +384,30 @@ class _CompactAction extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
     return Material(
-      color: colorScheme.surface,
-      borderRadius: BorderRadius.circular(16),
+      color: AppColors.surface,
+      borderRadius: BorderRadius.circular(14),
       child: InkWell(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(14),
         onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: AppColors.border),
+          ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(icon, color: AppColors.primary, size: 18),
-              const SizedBox(width: 7),
+              Icon(icon, color: AppColors.primary, size: 16),
+              const SizedBox(width: 6),
               Flexible(
                 child: Text(
                   label,
                   overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: colorScheme.onSurface,
-                    fontSize: 13,
+                  style: AppTextStyles.bodySm.copyWith(
                     fontWeight: FontWeight.w700,
+                    fontSize: 12,
                   ),
                 ),
               ),
@@ -467,41 +419,104 @@ class _CompactAction extends StatelessWidget {
   }
 }
 
-class _CompactSection extends StatelessWidget {
-  const _CompactSection({required this.title, required this.children});
+class _DrawerSection extends StatelessWidget {
+  const _DrawerSection({required this.title, required this.children});
 
   final String title;
   final List<Widget> children;
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(4, 0, 4, 5),
-            child: Text(
-              title,
-              style: TextStyle(
-                color: colorScheme.onSurfaceVariant.withValues(alpha: 0.9),
-                fontSize: 11,
-                fontWeight: FontWeight.w800,
-                letterSpacing: 0,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(4, 0, 4, 6),
+          child: Text(
+            title.toUpperCase(),
+            style: AppTextStyles.bodySmMuted.copyWith(
+              fontSize: 10,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.8,
+            ),
+          ),
+        ),
+        Container(
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: AppColors.border),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: Column(children: children),
+        ),
+      ],
+    );
+  }
+}
+
+class _ChatSessionRow extends StatelessWidget {
+  const _ChatSessionRow({
+    required this.session,
+    required this.isActive,
+    required this.onTap,
+    required this.onDelete,
+  });
+
+  final dynamic session;
+  final bool isActive;
+  final VoidCallback onTap;
+  final VoidCallback onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: isActive ? AppColors.primaryLight : Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          child: Row(
+            children: [
+              Icon(
+                isActive ? Icons.chat_bubble : Icons.chat_bubble_outline_rounded,
+                color: isActive ? AppColors.primary : AppColors.textSecondary,
+                size: 16,
               ),
-            ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      session.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTextStyles.bodySm.copyWith(
+                        color: isActive ? AppColors.primary : AppColors.textPrimary,
+                        fontWeight: isActive ? FontWeight.w700 : FontWeight.w600,
+                        fontSize: 13,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      DateFormatter.formatTime(session.updatedAt),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTextStyles.bodySmMuted.copyWith(fontSize: 10),
+                    ),
+                  ],
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.delete_outline_rounded, size: 16),
+                color: AppColors.error,
+                onPressed: onDelete,
+                visualDensity: VisualDensity.compact,
+              ),
+            ],
           ),
-          DecoratedBox(
-            decoration: BoxDecoration(
-              color: colorScheme.surface,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: colorScheme.outline.withValues(alpha: 0.55)),
-            ),
-            child: Column(children: children),
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -522,16 +537,15 @@ class _CompactRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
     return Material(
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
           child: Row(
             children: [
-              Icon(icon, color: colorScheme.onSurfaceVariant, size: 18),
+              Icon(icon, color: AppColors.textSecondary, size: 17),
               const SizedBox(width: 10),
               Expanded(
                 child: Column(
@@ -541,10 +555,9 @@ class _CompactRow extends StatelessWidget {
                       title,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: colorScheme.onSurface,
-                        fontSize: 13,
+                      style: AppTextStyles.bodySm.copyWith(
                         fontWeight: FontWeight.w700,
+                        fontSize: 13,
                       ),
                     ),
                     const SizedBox(height: 1),
@@ -552,10 +565,7 @@ class _CompactRow extends StatelessWidget {
                       subtitle,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: colorScheme.onSurfaceVariant.withValues(alpha: 0.8),
-                        fontSize: 11,
-                      ),
+                      style: AppTextStyles.bodySmMuted.copyWith(fontSize: 10),
                     ),
                   ],
                 ),
@@ -592,7 +602,3 @@ class _ThemeRow extends StatelessWidget {
     );
   }
 }
-
-
-
-

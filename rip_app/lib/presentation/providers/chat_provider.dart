@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'dart:convert';
 import 'dart:developer';
 import 'package:dio/dio.dart';
@@ -18,6 +18,7 @@ import 'connection_provider.dart';
 import 'gateway_provider.dart';
 import 'project_provider.dart';
 import 'chat_session_provider.dart';
+import '../router/app_router.dart';
 
 const uuid = Uuid();
 
@@ -588,14 +589,12 @@ class ChatNotifier extends Notifier<List<Message>> {
           'Open Workflows to inspect completed, running, waiting, or broken blocks.',
         ].join('\n');
 
-            case CommandType.sandbox:
-        final projectId = ref.read(activeProjectIdProvider);
-        ref.read(goRouterProvider).go('/sandbox/${projectId ?? 'default'}');
-        return 'Opening project sandbox...';
+      case CommandType.sandbox:
+        return 'Sandbox environment ready. Open Sandbox from the sidebar to inspect interactive components.';
 
       case CommandType.terminal:
-        ref.read(goRouterProvider).go('/sandbox');
-        return 'Opening terminal...';
+        return 'Terminal session initialized. Access Sandbox > Terminal to run interactive CLI tasks.';
+
       case CommandType.agent:
         final taskQuery = cmd.arguments.isNotEmpty ? cmd.arguments.join(' ') : rawText;
         final client = ref.read(ripClientProvider);
@@ -612,8 +611,8 @@ class ChatNotifier extends Notifier<List<Message>> {
           _startAgentPolling(runId, _activePendingId!);
         }
         return 'Agent started. Run ID: $runId\n\nThe agent will read, edit, and verify code automatically. You can check progress in the Agent Runs screen.';
+
       case CommandType.unknown:
-        final projectId = ref.read(activeProjectIdProvider);
         final result = await client.gatewayContext(
           task: rawText,
           sessionId: gatewaySessionId ?? uuid.v4(),

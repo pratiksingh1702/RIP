@@ -1,7 +1,7 @@
 ﻿import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../data/models/sandbox.dart';
-import '../providers/sandbox_provider.dart';
+import '../../../data/models/sandbox.dart';
+import '../../providers/sandbox_provider.dart';
 
 class EnvironmentPicker extends ConsumerWidget {
   final Function(SandboxTemplate) onSelect;
