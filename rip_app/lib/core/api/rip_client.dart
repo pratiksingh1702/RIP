@@ -1,4 +1,4 @@
-import 'package:dio/dio.dart';
+﻿import 'package:dio/dio.dart';
 import '../exceptions.dart';
 import '../../data/models/project.dart';
 import '../../data/models/search_result.dart';
@@ -1058,7 +1058,33 @@ class RipClient {
     return response.data as Map<String, dynamic>;
   }
 
+  // ─── Sandbox ───────────────────────────────────────────────────────────
+
+  Future<Map<String, dynamic>> createSandbox(String projectId, String environment) async {
+    return _post('/gateway/api/sandbox/create', {
+      'project_id': projectId,
+      'environment': environment,
+    });
+  }
+
+  Future<Map<String, dynamic>> getSandboxStatus(String sandboxId) async {
+    return _get('/gateway/api/sandbox/status/$sandboxId');
+  }
+
+  Future<Map<String, dynamic>> getSandboxTemplates() async {
+    return _get('/gateway/api/sandbox/environments');
+  }
+
+  Future<Map<String, dynamic>> listSandboxFiles(String sandboxId, {String path = '/workspace'}) async {
+    return _get('/gateway/api/sandbox/$sandboxId/files', queryParameters: {'path': path});
+  }
+
+  Future<Map<String, dynamic>> stopSandbox(String sandboxId) async {
+    return _post('/gateway/api/sandbox/$sandboxId/stop', {});
+  }
+
+  Future<Map<String, dynamic>> destroySandbox(String sandboxId) async {
+    return _delete('/gateway/api/sandbox/$sandboxId');
+  }
+
 }
-
-
-

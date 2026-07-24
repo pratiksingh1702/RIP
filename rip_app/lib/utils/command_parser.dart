@@ -1,4 +1,4 @@
-enum CommandType {
+﻿enum CommandType {
   search,
   explain,
   trace,
@@ -11,6 +11,8 @@ enum CommandType {
   projects,
   deadCode,
   workflow,
+  sandbox,
+  terminal,
   agent,
   unknown,
 }
@@ -115,8 +117,14 @@ class CommandParser {
             type: CommandType.deadCode, arguments: args, flags: flags);
       case 'workflow':
         return ParsedCommand(type: CommandType.workflow, arguments: args, flags: flags);
+            case 'sandbox':
+        return ParsedCommand(type: CommandType.sandbox, arguments: args, flags: flags);
+      case 'terminal':
+        return ParsedCommand(type: CommandType.terminal, arguments: args, flags: flags);
       case 'agent':
-        return ParsedCommand(type: CommandType.agent, arguments: args, flags: flags);
+        return ParsedCommand(type: CommandType.sandbox,
+  terminal,
+  agent, arguments: args, flags: flags);
       default:
         return ParsedCommand(type: CommandType.unknown);
     }
@@ -232,7 +240,16 @@ class CommandParser {
         'description': 'Attach and run a workflow from this chat message'
       },
             {
-        'name': '/agent <task>',
+                'name': '/sandbox',
+        'description': 'Open project sandbox terminal',
+        'flags': [],
+      },
+      {
+        'name': '/terminal',
+        'description': 'Open terminal in sandbox',
+        'flags': [],
+      },
+      {        'name': '/agent <task>',
         'description': 'Run autonomous agent for engineering tasks',
         'flags': [
           {'name': '--model', 'description': 'LLM model preference', 'value': '<name>'},
@@ -248,4 +265,5 @@ class _ParsedParts {
 
   const _ParsedParts({required this.arguments, required this.flags});
 }
+
 

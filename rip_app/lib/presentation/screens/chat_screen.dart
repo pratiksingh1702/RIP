@@ -1,4 +1,4 @@
-import 'dart:ui';
+﻿import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -94,6 +94,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     }
   }
 
+  
+  void _openSandbox() {
+    final projectId = ref.read(activeProjectIdProvider);
+    context.go('/sandbox/${projectId ?? 'default'}');
+  }
   Future<void> _sendMessage() async {
     final text = _textController.text.trim();
     if (text.isEmpty) return;
@@ -621,7 +626,7 @@ class _FloatingHeader extends ConsumerWidget {
                           crossAxisAlignment: CrossAxisAlignment.center,
                           children: [
                             Text(
-                              'RIP · Repository Intelligence',
+                              'RIP Â· Repository Intelligence',
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: const TextStyle(
@@ -644,7 +649,7 @@ class _FloatingHeader extends ConsumerWidget {
                                       ),
                                     )
                                   : Text(
-                                      '${activeSession.title}${project != null ? ' · ' + project!.projectName : ''}',
+                                      '${activeSession.title}${project != null ? ' Â· ' + project!.projectName : ''}',
                                       key: ValueKey(activeSession.id),
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
@@ -1473,7 +1478,7 @@ class _PremiumEmptyState extends StatelessWidget {
             Text(
               project == null
                   ? 'RIP indexes repositories into a graph so you can trace architecture, dependencies, workflows, and symbols.'
-                  : '${project!.filesCount} files · ${project!.entitiesCount} entities · ${_primaryLanguage(project!)} · indexed ${_indexedLabel(project!)}',
+                  : '${project!.filesCount} files Â· ${project!.entitiesCount} entities Â· ${_primaryLanguage(project!)} Â· indexed ${_indexedLabel(project!)}',
               textAlign: TextAlign.center,
               style: TextStyle(
                 color: colorScheme.onSurfaceVariant.withValues(alpha: 0.9),
@@ -1630,3 +1635,4 @@ class _GlassIconButton extends StatelessWidget {
     );
   }
 }
+

@@ -36,6 +36,7 @@ from server.routers.ws import router as ws_router
 from server.runtime import ServerRuntime
 
 from gateway.server.routers import (
+    sandbox as gateway_sandbox,
     agent as gateway_agent,
     active_project as gateway_active_project,
     audit as gateway_audit,
@@ -51,6 +52,7 @@ from gateway.server.routers import (
     workflows as gateway_workflows,
 )
 from gateway.core.blocks import register_all_blocks
+# Sandbox imported on demand in lifespan
 from gateway.core.llm_pool import seed_llm_configs
 from gateway.core.prompts import seed_prompt_templates
 from gateway.core.sources.registry import get_source_registry as get_gateway_source_registry
@@ -175,8 +177,16 @@ def create_app() -> FastAPI:
         tags=["gateway-agent"],
         dependencies=[Depends(verify_api_key)],
     )
-    app.include_router(ws_router)
+    
+    app.include_router(
+        gateway_sandbox.router,
+        prefix="/gateway/api/sandbox",
+        tags=["gateway-sandbox"],
+        dependencies=[Depends(verify_api_key)],
+    )
+
     return app
 
 
 app = create_app()
+

@@ -159,7 +159,16 @@ class AppDrawer extends ConsumerWidget {
                             context.push('/agent-runs');
                           },
                         ),
-                        _CompactRow(
+                                                _CompactRow(
+                          icon: Icons.terminal_rounded,
+                          title: 'Sandbox',
+                          subtitle: 'Terminal and code execution',
+                          onTap: () {
+                            Navigator.pop(context);
+                            context.push('/sandbox');
+                          },
+                        ),
+                                                _CompactRow(
                           icon: Icons.account_tree_rounded,
                           title: 'Workflows',
                           subtitle: 'Build and run block flows',
@@ -583,6 +592,7 @@ class _ThemeRow extends StatelessWidget {
     );
   }
 }
+
 
 
 

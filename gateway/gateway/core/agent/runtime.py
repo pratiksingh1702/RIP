@@ -1,4 +1,4 @@
-"""Gateway-controlled Agent Runtime. The LLM reasons, the Gateway executes."""
+﻿"""Gateway-controlled Agent Runtime. The LLM reasons, the Gateway executes."""
 
 from __future__ import annotations
 
@@ -35,7 +35,9 @@ from gateway.core.tokenizer.counter import get_token_counter
 from gateway.core.classifier.engine import ClassifierEngine
 from gateway.core.classifier.models import ClassificationResult, IntentType
 from gateway.config import settings
-from core.projects import get_project
+from gateway.core.sandbox.orchestrator import get_orchestrator as get_sandbox_orchestrator
+from gateway.core.sandbox.security import get_security_policy
+
 from core.storage.database import async_session_factory as core_async_session_factory
 
 logger = logging.getLogger(__name__)
@@ -620,3 +622,4 @@ _agent_runtime = AgentRuntime()
 
 def get_agent_runtime() -> AgentRuntime:
     return _agent_runtime
+

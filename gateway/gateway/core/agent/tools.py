@@ -1,4 +1,4 @@
-"""Tool definitions and registry for the Agent Runtime."""
+﻿"""Tool definitions and registry for the Agent Runtime."""
 
 from __future__ import annotations
 
@@ -24,6 +24,8 @@ class ToolResult:
 
 
 class ToolRegistry:
+    """Sandbox-aware tool registry — tools resolve paths relative to sandbox workspace when active."""
+
     def __init__(self):
         self._tools: dict[str, ToolDefinition] = {}
 
@@ -48,4 +50,3 @@ class ToolRegistry:
             }
             for t in self._tools.values()
         ]
-

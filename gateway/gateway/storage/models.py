@@ -1,4 +1,4 @@
-"""ORM models for Context Gateway."""
+﻿"""ORM models for Context Gateway."""
 
 from __future__ import annotations
 
@@ -474,11 +474,13 @@ class GatewaySetting(Base):
     )
 
 
+
+# ---- Sandbox Models ----
+
+
 class AuditLog(Base):
     """Access decision audit logs."""
-
     __tablename__ = "audit_logs"
-
     id: Mapped[UUIDType] = mapped_column(PortableUUID, primary_key=True, default=uuid4)
     timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
     session_id: Mapped[str] = mapped_column(String(100), nullable=False)
@@ -488,3 +490,45 @@ class AuditLog(Base):
     source: Mapped[str | None] = mapped_column(String(100))
     allowed: Mapped[bool] = mapped_column(Boolean, nullable=False)
     reason: Mapped[str | None] = mapped_column(Text)
+
+class SandboxSessionModel(Base):
+    """Active sandbox session tracking."""
+    __tablename__ = "sandbox_sessions"
+    id: Mapped[UUIDType] = mapped_column(PortableUUID, primary_key=True, default=uuid4)
+    sandbox_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    project_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    user_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    environment: Mapped[str] = mapped_column(String(50), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), default="running")
+    commands_count: Mapped[int] = mapped_column(Integer, default=0)
+    is_shared: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+    ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+class SandboxSnapshot(Base):
+    """Saved sandbox state."""
+    __tablename__ = "sandbox_snapshots"
+    id: Mapped[UUIDType] = mapped_column(PortableUUID, primary_key=True, default=uuid4)
+    sandbox_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    snapshot_tag: Mapped[str] = mapped_column(String(100), nullable=False)
+    label: Mapped[str | None] = mapped_column(String(255))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+
+class SandboxCommandLog(Base):
+    """Audit log for sandbox commands."""
+    __tablename__ = "sandbox_command_log"
+    id: Mapped[UUIDType] = mapped_column(PortableUUID, primary_key=True, default=uuid4)
+    sandbox_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    user_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    project_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    command: Mapped[str] = mapped_column(Text, nullable=False)
+    sanitized_command: Mapped[str] = mapped_column(Text, nullable=False)
+    exit_code: Mapped[int] = mapped_column(Integer, nullable=False)
+    output_preview: Mapped[str | None] = mapped_column(Text)
+    duration_ms: Mapped[int] = mapped_column(Integer, nullable=False)
+    risk_level: Mapped[str] = mapped_column(String(20), nullable=False)
+    needed_approval: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+
+
+   

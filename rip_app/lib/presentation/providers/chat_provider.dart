@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 import 'dart:convert';
 import 'dart:developer';
 import 'package:dio/dio.dart';
@@ -588,6 +588,14 @@ class ChatNotifier extends Notifier<List<Message>> {
           'Open Workflows to inspect completed, running, waiting, or broken blocks.',
         ].join('\n');
 
+            case CommandType.sandbox:
+        final projectId = ref.read(activeProjectIdProvider);
+        ref.read(goRouterProvider).go('/sandbox/${projectId ?? 'default'}');
+        return 'Opening project sandbox...';
+
+      case CommandType.terminal:
+        ref.read(goRouterProvider).go('/sandbox');
+        return 'Opening terminal...';
       case CommandType.agent:
         final taskQuery = cmd.arguments.isNotEmpty ? cmd.arguments.join(' ') : rawText;
         final client = ref.read(ripClientProvider);
@@ -696,3 +704,4 @@ class ChatNotifier extends Notifier<List<Message>> {
 }
 
 final chatProvider = NotifierProvider<ChatNotifier, List<Message>>(ChatNotifier.new);
+
