@@ -249,6 +249,68 @@ class PlannerEngine:
             )
         return queries
 
+    def plan_medium(self, classification, task: str, max_tokens: int = 6000, project_id: str | None = None) -> Plan:
+        """Medium path: RIP + Memory + Knowledge. All parallel, no forced sequential explain."""
+        enabled_sources = self.source_registry.enabled_source_names(project_id=project_id)
+        queries = []
+        for qs in [
+            {"source": "workspace_memory", "type": "search", "priority": 1, "tokens": 500},
+            {"source": "workspace_knowledge", "type": "search", "priority": 1, "tokens": 500},
+            {"source": "rip", "type": "search", "priority": 1, "tokens": 1500},
+        ]:
+            if qs["source"] in enabled_sources or qs["source"] in ("workspace_memory", "workspace_knowledge"):
+                queries.append(self._build_query(source=qs["source"], query_type=qs["type"], task=task, project_id=project_id, priority=qs["priority"], estimated_tokens=qs["tokens"]))
+        steps = [RetrievalStep(queries=queries, parallel=True, condition="always")]
+        token_allocation = allocate_token_budget(total_budget=max_tokens, token_weights={"rip": 0.50, "workspace_memory": 0.25, "workspace_knowledge": 0.25}, enabled_sources=list(set(q.source for q in queries)))
+        return Plan(classification=classification, steps=steps, token_budget=max_tokens, token_allocation=token_allocation, estimated_tokens_raw=sum(q.estimated_tokens for q in queries), created_at=datetime.utcnow())
+
+    def plan_deep(self, classification, task: str, max_tokens: int = 12000, project_id: str | None = None, role: str = "developer") -> Plan:
+        """Deep path: Full pipeline with permission pre-filter."""
+        from gateway.core.permissions.models import UserRole as UR
+        try: user_role = UR(role)
+        except ValueError: user_role = UR.DEVELOPER
+        strategy = STRATEGY_TABLE.get(classification.intent, STRATEGY_TABLE[IntentType.INVESTIGATION])
+        enabled_sources = self.source_registry.enabled_source_names(project_id=project_id)
+        allowed_sources = self._pre_filter_sources(enabled_sources, user_role, classification.domain)
+        queries = []
+        for ws_source in ["workspace_memory", "workspace_knowledge"]:
+            queries.append(self._build_query(source=ws_source, query_type="search", task=task, project_id=project_id, priority=1, estimated_tokens=500))
+        if "rip" in allowed_sources:
+            queries.append(self._build_query(source="rip", query_type="explain", task=task, project_id=project_id, priority=1, estimated_tokens=2000))
+        for qs in strategy.get("always_query", []):
+            if qs["source"] in allowed_sources and qs["source"] != "rip":
+                queries.append(self._build_query(source=qs["source"], query_type=qs["type"], task=task, project_id=project_id, priority=1, estimated_tokens=1500))
+        for qs in strategy.get("conditional_query", []):
+            if qs["source"] in allowed_sources and self._condition_matches(qs.get("condition", "always"), task):
+                queries.append(self._build_query(source=qs["source"], query_type=qs["type"], task=task, project_id=project_id, priority=2, estimated_tokens=1000))
+        for record in self.source_registry.dynamic_source_records(project_id=project_id):
+            if record.name in allowed_sources:
+                queries.append(self._build_query(source=record.name, query_type="search", task=task, project_id=project_id, priority=2, estimated_tokens=600))
+        explain_qs = [q for q in queries if q.source == "rip" and q.query_type == "explain"]
+        other_qs = [q for q in queries if not (q.source == "rip" and q.query_type == "explain")]
+        steps = []
+        if explain_qs: steps.append(RetrievalStep(queries=explain_qs, parallel=False, condition="always"))
+        if other_qs: steps.append(RetrievalStep(queries=other_qs, parallel=True, condition="always"))
+        if not steps: steps = [RetrievalStep(queries=queries, parallel=True, condition="always")]
+        weights = strategy.get("token_weights", {"rip": 0.50, "github": 0.25, "workspace_memory": 0.10, "workspace_knowledge": 0.10, "jira": 0.05})
+        token_allocation = allocate_token_budget(total_budget=max_tokens, token_weights=weights, enabled_sources=list(set(q.source for q in queries)))
+        return Plan(classification=classification, steps=steps, token_budget=max_tokens, token_allocation=token_allocation, estimated_tokens_raw=sum(q.estimated_tokens for q in queries), created_at=datetime.utcnow())
+
+    def _pre_filter_sources(self, enabled_sources: list[str], role, domain: str) -> list[str]:
+        """Permission pre-filter: remove blocked sources BEFORE retrieval."""
+        from gateway.core.permissions.roles import DEFAULT_POLICIES, SENSITIVE_DOMAINS
+        from gateway.core.permissions.models import UserRole as UR
+        policy = DEFAULT_POLICIES.get(role, DEFAULT_POLICIES.get(UR.DEVELOPER))
+        if not policy: return enabled_sources
+        allowed = []
+        for source in enabled_sources:
+            if source in ("rip", "workspace_memory", "workspace_knowledge", "workspace_goals", "entity_graph"):
+                allowed.append(source); continue
+            source_ok = "*" in (getattr(policy, 'allowed_sources', []) or []) or source in (getattr(policy, 'allowed_sources', []) or [])
+            domain_ok = not (domain in SENSITIVE_DOMAINS) or getattr(policy, 'can_access_sensitive_domains', True)
+            if source_ok and domain_ok: allowed.append(source)
+        return allowed
+
     def _token_weights_with_dynamic_sources(
         self,
         base_weights: dict[str, float],

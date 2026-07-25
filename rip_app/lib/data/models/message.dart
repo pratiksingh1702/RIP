@@ -13,6 +13,10 @@ class Message extends Equatable {
   final List<RipResponseBlock>? blocks;
   final PipelineTrace? trace;
   final bool isLoading;
+  final bool needsClarification;
+  final List<String>? suggestedInterpretations;
+  final String? pathType;
+  final double? pathConfidence;
 
   const Message({
     required this.id,
@@ -24,6 +28,10 @@ class Message extends Equatable {
     this.blocks,
     this.trace,
     this.isLoading = false,
+    this.needsClarification = false,
+    this.suggestedInterpretations,
+    this.pathType,
+    this.pathConfidence,
   });
 
   Message copyWith({
@@ -36,6 +44,10 @@ class Message extends Equatable {
     List<RipResponseBlock>? blocks,
     PipelineTrace? trace,
     bool? isLoading,
+    bool? needsClarification,
+    List<String>? suggestedInterpretations,
+    String? pathType,
+    double? pathConfidence,
   }) {
     return Message(
       id: id ?? this.id,
@@ -47,6 +59,10 @@ class Message extends Equatable {
       blocks: blocks ?? this.blocks,
       trace: trace ?? this.trace,
       isLoading: isLoading ?? this.isLoading,
+      needsClarification: needsClarification ?? this.needsClarification,
+      suggestedInterpretations: suggestedInterpretations ?? this.suggestedInterpretations,
+      pathType: pathType ?? this.pathType,
+      pathConfidence: pathConfidence ?? this.pathConfidence,
     );
   }
 
@@ -61,5 +77,9 @@ class Message extends Equatable {
         blocks,
         trace,
         isLoading,
+        needsClarification,
+        suggestedInterpretations,
+        pathType,
+        pathConfidence,
       ];
 }

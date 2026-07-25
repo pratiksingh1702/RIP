@@ -18,7 +18,6 @@ import 'connection_provider.dart';
 import 'gateway_provider.dart';
 import 'project_provider.dart';
 import 'chat_session_provider.dart';
-import '../router/app_router.dart';
 
 const uuid = Uuid();
 
@@ -656,6 +655,14 @@ class ChatNotifier extends Notifier<List<Message>> {
 
   String _formatGatewayContext(Map<String, dynamic> result) {
     final buffer = StringBuffer();
+    if (result['needs_clarification'] == true) {
+      buffer.writeln('Could you please clarify your request?\n');
+      final interpretations = result['suggested_interpretations'] as List? ?? const [];
+      for (final interp in interpretations) {
+        buffer.writeln('- $interp');
+      }
+      return buffer.toString();
+    }
     final intent = result['intent'];
     final domain = result['domain'];
     _lastGatewaySessionId = result['session_id'] as String?;

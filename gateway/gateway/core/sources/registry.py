@@ -1,4 +1,4 @@
-"""Source registry to manage available data sources."""
+﻿"""Source registry to manage available data sources."""
 
 import structlog
 
@@ -13,6 +13,7 @@ from .jira import JiraSource
 from .rip_client import RIPSource
 from .slack import SlackSource
 from .workspace_memory_source import WorkspaceMemorySource
+from .workspace_knowledge_source import WorkspaceKnowledgeSource
 
 logger = structlog.get_logger(__name__)
 
@@ -26,8 +27,8 @@ class SourceRegistry:
         self._records: dict[str, SourceRecord] = {}
         self._project_id: str | None = None
         self._user_id: str | None = None
-        self._initialize_sources()     
-        self._sources["workspace_memory"] = WorkspaceMemorySource()
+        self._initialize_sources()
+        self._register_workspace_sources()
 
     def _initialize_sources(self) -> None:
         """Initialize all configured sources."""
@@ -41,6 +42,15 @@ class SourceRegistry:
         self._sources["slack"] = SlackSource(enabled=settings.slack_mcp_enabled)
         self._health["slack"] = settings.slack_mcp_enabled
 
+    def _register_workspace_sources(self) -> None:
+        """Ensure workspace sources are always available, even after refresh()."""
+        if "workspace_memory" not in self._sources:
+            self._sources["workspace_memory"] = WorkspaceMemorySource()
+            self._health["workspace_memory"] = True
+        if "workspace_knowledge" not in self._sources:
+            self._sources["workspace_knowledge"] = WorkspaceKnowledgeSource()
+            self._health["workspace_knowledge"] = True
+
     def register_source(self, source: BaseSource) -> None:
         """Register an additional source."""
         self._sources[source.name] = source
@@ -52,6 +62,7 @@ class SourceRegistry:
             records = await source_store.list_sources(project_id=project_id, user_id=user_id)
         except Exception as exc:
             logger.warning("Failed to refresh persistent source registry", error=str(exc))
+            self._register_workspace_sources()
             return
         self._project_id = project_id
         self._user_id = user_id
@@ -66,6 +77,8 @@ class SourceRegistry:
         self._sources = next_sources
         self._health = next_health
         self._records = next_records
+        # Always re-add workspace sources after refresh (they get wiped by the replacement)
+        self._register_workspace_sources()
 
     def _source_from_record(self, record: SourceRecord) -> BaseSource:
         if record.name == "rip":
@@ -110,10 +123,17 @@ class SourceRegistry:
         return self.get_health(name)
 
     def enabled_source_names(self, project_id: str | None = None) -> list[str]:
+        """Return enabled source names. Workspace sources are always included."""
+        self._register_workspace_sources()
         if project_id != self._project_id:
             logger.debug("Source registry project differs from requested project", requested=project_id, active=self._project_id)
         enabled = []
+        for ws_name in ["workspace_memory", "workspace_knowledge"]:
+            if ws_name in self._sources:
+                enabled.append(ws_name)
         for name, source in self._sources.items():
+            if name in ("workspace_memory", "workspace_knowledge"):
+                continue
             record = self._records.get(name)
             if record is not None:
                 if record.protected or record.enabled:

@@ -1,4 +1,6 @@
-﻿import 'package:dio/dio.dart';
+import 'dart:async';
+import 'dart:convert';
+import 'package:dio/dio.dart';
 import '../exceptions.dart';
 import '../../data/models/project.dart';
 import '../../data/models/search_result.dart';
@@ -1091,6 +1093,19 @@ class RipClient {
   Future<Map<String, dynamic>> destroySandbox(String sandboxId) async {
     final response = await _dio.delete('/gateway/api/sandbox/$sandboxId');
     return response.data as Map<String, dynamic>;
+  }
+
+  Future<Stream<Map<String, dynamic>>> contextStream(String task, {String? projectId, String? sessionId}) async {
+    final response = await _dio.post(
+      '/gateway/api/context/stream',
+      data: {'task': task, 'project_id': projectId, 'session_id': sessionId},
+      options: Options(responseType: ResponseType.stream),
+    );
+    return (response.data.stream as Stream<List<int>>)
+        .transform(utf8.decoder)
+        .transform(const LineSplitter())
+        .where((line) => line.startsWith('data: '))
+        .map((line) => jsonDecode(line.substring(6)) as Map<String, dynamic>);
   }
 
 }

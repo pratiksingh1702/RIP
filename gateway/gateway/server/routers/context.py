@@ -1,4 +1,4 @@
-"""Context API router."""
+﻿"""Context API router."""
 
 from fastapi import APIRouter, HTTPException, Request
 
@@ -12,6 +12,22 @@ pipeline = GatewayPipeline()
 
 
 @router.post("", response_model=GetContextResponse)
+@router.post("/stream")
+async def get_context_stream(request: GetContextRequest, http_request: Request):
+    """Stream context results via SSE as they become available."""
+    from fastapi.responses import StreamingResponse
+    async def event_stream():
+        try:
+            context_package = await pipeline.get_context(task=request.task, max_tokens=request.max_tokens, role=request.role, trace_session_id=request.session_id, project_id=request.project_id, user_id=gateway_user_id(http_request))
+            import json as _json
+            for i, item in enumerate(context_package.context):
+                yield f"data: {_json.dumps({'index':i,'total':len(context_package.context),'source':item.source,'content':item.content[:500]})}\n\n"
+            yield f"data: {_json.dumps({'type':'complete','session_id':context_package.session_id,'intent':context_package.intent,'tokens_used':context_package.tokens_used})}\n\n"
+        except Exception as e:
+            yield f"data: {{\"type\":\"error\",\"message\":\"{str(e)}\"}}\n\n"
+    return StreamingResponse(event_stream(), media_type="text/event-stream")
+
+
 @router.post("/", response_model=GetContextResponse)
 async def get_context(request: GetContextRequest, http_request: Request):
     """Get context for a coding task."""
