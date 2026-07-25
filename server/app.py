@@ -32,6 +32,8 @@ from server.routers.api_keys import router as api_keys_router
 from server.routers.git import router as git_router
 from server.routers.projects import router as projects_router
 from server.routers.runtime import health_router
+from server.routers.file_tree import router as file_tree_router
+from server.routers.git_metadata import router as git_metadata_router
 from server.routers.ws import router as ws_router
 from server.runtime import ServerRuntime
 
@@ -184,6 +186,8 @@ def create_app() -> FastAPI:
         tags=["gateway-sandbox"],
         dependencies=[Depends(verify_api_key)],
     )
+    app.include_router(file_tree_router, dependencies=[Depends(verify_api_key)])
+    app.include_router(git_metadata_router, dependencies=[Depends(verify_api_key)])
 
     return app
 

@@ -1,4 +1,4 @@
-﻿enum CommandType {
+enum CommandType {
   search,
   explain,
   trace,
@@ -247,9 +247,11 @@ class CommandParser {
         'description': 'Open terminal in sandbox',
         'flags': [],
       },
-      {        'name': '/agent <task>',
+      {
+        'name': '/agent <task>',
         'description': 'Run autonomous agent for engineering tasks',
         'flags': [
+          {'name': '--direct', 'description': 'Direct mode (default: true)', 'value': 'true'},
           {'name': '--model', 'description': 'LLM model preference', 'value': '<name>'},
         ],
       },

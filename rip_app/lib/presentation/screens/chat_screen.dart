@@ -15,6 +15,7 @@ import '../providers/chat_provider.dart';
 import '../providers/connection_provider.dart';
 import '../providers/project_provider.dart';
 import '../providers/chat_session_provider.dart';
+import '../providers/gateway_provider.dart';
 import '../widgets/chat/chat_bubble.dart';
 import '../widgets/common/error_banner.dart';
 import '../widgets/sidebar/app_drawer.dart';
@@ -571,15 +572,6 @@ class _FloatingHeader extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final chatSessionsAsync = ref.watch(chatSessionsProvider);
-    final sessions = chatSessionsAsync.value ?? [];
-    final activeSession = sessions.isNotEmpty 
-        ? sessions.firstWhere(
-            (s) => s.id == activeSessionId,
-            orElse: () => sessions.first,
-          )
-        : null;
-
     final top = MediaQuery.paddingOf(context).top;
     final chrome = Theme.of(context).extension<ChatChromeTheme>() ??
         const ChatChromeTheme.dark();
@@ -630,53 +622,11 @@ class _FloatingHeader extends ConsumerWidget {
                         tooltip: 'Menu',
                         onPressed: onMenuTap,
                       ),
-                      const SizedBox(width: 12),
+                      const SizedBox(width: 8),
                       Expanded(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          crossAxisAlignment: CrossAxisAlignment.center,
-                          children: [
-                            const Text(
-                              'RIP • Repository Intelligence',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                color: AppColors.textPrimary,
-                                fontSize: 17,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                            AnimatedSwitcher(
-                              duration: const Duration(milliseconds: 180),
-                              child: activeSession == null
-                                  ? const Text(
-                                      'Start a new chat',
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: TextStyle(
-                                        color: AppColors.textSecondary,
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    )
-                                  : Text(
-                                      '${activeSession.title}${project != null ? ' • ${project!.projectName}' : ''}',
-                                      key: ValueKey(activeSession.id),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: const TextStyle(
-                                        color: AppColors.textSecondary,
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                    ),
-                            ),
-
-
-                          ],
-                        ),
+                        child: _HeaderDropdownSelector(project: project),
                       ),
-                      const SizedBox(width: 12),
+                      const SizedBox(width: 8),
                       _GlassIconButton(
                         icon: Icons.add_comment_rounded,
                         tooltip: 'New Chat',
@@ -697,6 +647,371 @@ class _FloatingHeader extends ConsumerWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _HeaderDropdownSelector extends ConsumerStatefulWidget {
+  const _HeaderDropdownSelector({
+    required this.project,
+  });
+
+  final Project? project;
+
+  @override
+  ConsumerState<_HeaderDropdownSelector> createState() =>
+      __HeaderDropdownSelectorState();
+}
+
+class __HeaderDropdownSelectorState
+    extends ConsumerState<_HeaderDropdownSelector> {
+  bool _showProjectSelector = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final chrome = Theme.of(context).extension<ChatChromeTheme>() ??
+        const ChatChromeTheme.dark();
+
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onVerticalDragEnd: (details) {
+        final dy = details.primaryVelocity ?? 0;
+        if (dy < -100) {
+          // Swiped UPWARD -> Switch to Project dropdown
+          if (!_showProjectSelector) {
+            HapticFeedback.mediumImpact();
+            setState(() => _showProjectSelector = true);
+          }
+        } else if (dy > 100) {
+          // Swiped DOWNWARD -> Switch to LLM Config dropdown
+          if (_showProjectSelector) {
+            HapticFeedback.mediumImpact();
+            setState(() => _showProjectSelector = false);
+          }
+        }
+      },
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(20),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 220),
+            margin: const EdgeInsets.symmetric(vertical: 2),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+            decoration: BoxDecoration(
+              color: chrome.controlSurface.withValues(alpha: 0.45),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                color: Colors.white.withValues(alpha: 0.15),
+                width: 1,
+              ),
+            ),
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 240),
+              transitionBuilder: (child, animation) {
+                final slideAnimation = Tween<Offset>(
+                  begin: const Offset(0, 0.2),
+                  end: Offset.zero,
+                ).animate(animation);
+                return FadeTransition(
+                  opacity: animation,
+                  child: SlideTransition(position: slideAnimation, child: child),
+                );
+              },
+              child: _showProjectSelector
+                  ? _buildProjectDropdown(context)
+                  : _buildLlmDropdown(context),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLlmDropdown(BuildContext context) {
+    final llmConfigsAsync = ref.watch(gatewayLlmConfigsProvider);
+    final preferredConfigId = ref.watch(preferredLLMConfigProvider);
+    final configs = llmConfigsAsync.value ?? [];
+
+    Map<String, dynamic>? selectedConfig;
+    if (preferredConfigId != null && configs.isNotEmpty) {
+      try {
+        selectedConfig = configs.firstWhere(
+          (c) => c['id']?.toString() == preferredConfigId,
+        );
+      } catch (_) {
+        selectedConfig = configs.first;
+      }
+    } else if (configs.isNotEmpty) {
+      selectedConfig = configs.first;
+    }
+
+    final displayName = selectedConfig != null
+        ? (selectedConfig['model']?.toString() ??
+            selectedConfig['id']?.toString() ??
+            'Select Model')
+        : 'Select Model';
+
+    return PopupMenuButton<String>(
+      key: const ValueKey('llm_header_dropdown'),
+      tooltip: 'Change LLM',
+      offset: const Offset(0, 40),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: Colors.white.withValues(alpha: 0.12)),
+      ),
+      color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.96),
+      elevation: 0,
+      onSelected: (val) {
+        HapticFeedback.selectionClick();
+        if (val == '__manage__') {
+          context.push('/llm-settings');
+        } else {
+          ref.read(preferredLLMConfigProvider.notifier).state = val;
+        }
+      },
+      itemBuilder: (context) {
+        final items = <PopupMenuEntry<String>>[];
+
+        items.add(
+          const PopupMenuItem<String>(
+            enabled: false,
+            child: Row(
+              children: [
+                Icon(Icons.psychology_rounded, size: 16, color: AppColors.primary),
+                SizedBox(width: 8),
+                Text(
+                  'LLM Models',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+        items.add(const PopupMenuDivider());
+
+        if (configs.isEmpty) {
+          items.add(
+            const PopupMenuItem<String>(
+              enabled: false,
+              child: Text('No models loaded', style: TextStyle(fontSize: 13)),
+            ),
+          );
+        } else {
+          for (final cfg in configs) {
+            final id = cfg['id']?.toString() ?? '';
+            final provider = cfg['provider']?.toString() ?? '';
+            final model = cfg['model']?.toString() ?? id;
+            final isSelected = (preferredConfigId == id) || (preferredConfigId == null && cfg == configs.first);
+
+            items.add(
+              PopupMenuItem<String>(
+                value: id,
+                child: Row(
+                  children: [
+                    Icon(
+                      isSelected ? Icons.check_circle_rounded : Icons.radio_button_unchecked_rounded,
+                      size: 18,
+                      color: isSelected ? AppColors.primary : Colors.grey,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            model,
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                              color: AppColors.textPrimary,
+                            ),
+                          ),
+                          if (provider.isNotEmpty)
+                            Text(
+                              provider,
+                              style: const TextStyle(
+                                fontSize: 11,
+                                color: AppColors.textSecondary,
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }
+        }
+
+        items.add(const PopupMenuDivider());
+        items.add(
+          const PopupMenuItem<String>(
+            value: '__manage__',
+            child: Row(
+              children: [
+                Icon(Icons.tune_rounded, size: 18, color: AppColors.primary),
+                SizedBox(width: 10),
+                Text('Manage LLM Settings', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+              ],
+            ),
+          ),
+        );
+
+        return items;
+      },
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(Icons.psychology_rounded, size: 16, color: AppColors.primary),
+          const SizedBox(width: 6),
+          Flexible(
+            child: Text(
+              displayName,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: AppColors.textPrimary,
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+          const SizedBox(width: 4),
+          const Icon(Icons.keyboard_arrow_down_rounded, size: 18, color: AppColors.textSecondary),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildProjectDropdown(BuildContext context) {
+    final projectsAsync = ref.watch(projectListProvider);
+    final activeProjectId = ref.watch(activeProjectIdProvider);
+    final projects = projectsAsync.value ?? [];
+
+    final activeProject = widget.project;
+    final displayName = activeProject?.projectName ?? 'Select Project';
+
+    return PopupMenuButton<String>(
+      key: const ValueKey('project_header_dropdown'),
+      tooltip: 'Change Project',
+      offset: const Offset(0, 40),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: Colors.white.withValues(alpha: 0.12)),
+      ),
+      color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.96),
+      elevation: 0,
+      onSelected: (val) async {
+        HapticFeedback.selectionClick();
+        await ref.read(activeProjectNotifierProvider.notifier).setActiveProject(val);
+      },
+      itemBuilder: (context) {
+        final items = <PopupMenuEntry<String>>[];
+
+        items.add(
+          const PopupMenuItem<String>(
+            enabled: false,
+            child: Row(
+              children: [
+                Icon(Icons.account_tree_rounded, size: 16, color: AppColors.primary),
+                SizedBox(width: 8),
+                Text(
+                  'Projects',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+        items.add(const PopupMenuDivider());
+
+        if (projects.isEmpty) {
+          items.add(
+            const PopupMenuItem<String>(
+              enabled: false,
+              child: Text('No projects indexed', style: TextStyle(fontSize: 13)),
+            ),
+          );
+        } else {
+          for (final p in projects) {
+            final isSelected = p.projectId == activeProjectId;
+            items.add(
+              PopupMenuItem<String>(
+                value: p.projectId,
+                child: Row(
+                  children: [
+                    Icon(
+                      isSelected ? Icons.check_circle_rounded : Icons.radio_button_unchecked_rounded,
+                      size: 18,
+                      color: isSelected ? AppColors.primary : Colors.grey,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            p.projectName,
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                              color: AppColors.textPrimary,
+                            ),
+                          ),
+                          Text(
+                            '${p.filesCount} files • ${p.entitiesCount} entities',
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: AppColors.textSecondary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }
+        }
+
+        return items;
+      },
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(Icons.account_tree_rounded, size: 16, color: AppColors.primary),
+          const SizedBox(width: 6),
+          Flexible(
+            child: Text(
+              displayName,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: AppColors.textPrimary,
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+          const SizedBox(width: 4),
+          const Icon(Icons.keyboard_arrow_down_rounded, size: 18, color: AppColors.textSecondary),
+        ],
       ),
     );
   }
@@ -737,7 +1052,7 @@ class _BottomComposerFade extends StatelessWidget {
   }
 }
 
-class _FloatingComposer extends StatelessWidget {
+class _FloatingComposer extends StatefulWidget {
   const _FloatingComposer({
     required this.controller,
     required this.focusNode,
@@ -761,25 +1076,98 @@ class _FloatingComposer extends StatelessWidget {
   final ValueChanged<String> onProjectSelected;
 
   @override
+  State<_FloatingComposer> createState() => _FloatingComposerState();
+}
+
+class _FloatingComposerState extends State<_FloatingComposer> {
+  @override
+  void initState() {
+    super.initState();
+    widget.controller.addListener(_onTextChanged);
+  }
+
+  @override
+  void dispose() {
+    widget.controller.removeListener(_onTextChanged);
+    super.dispose();
+  }
+
+  void _onTextChanged() {
+    setState(() {});
+  }
+
+  void _acceptSuggestion(String suffix) {
+    if (suffix.isEmpty) return;
+    HapticFeedback.lightImpact();
+    final newText = widget.controller.text + suffix;
+    widget.controller.value = TextEditingValue(
+      text: newText,
+      selection: TextSelection.collapsed(offset: newText.length),
+    );
+  }
+
+  String _getInlineSuggestionSuffix(String input) {
+    if (input.isEmpty) return '';
+    final trimmed = input.trimLeft();
+
+    if (trimmed.startsWith('/')) {
+      final slashBody = trimmed.substring(1);
+      if (slashBody.isEmpty) return 'agent --direct ';
+
+      final commands = CommandParser.getAvailableCommands();
+      for (final cmd in commands) {
+        final nameWithArgs = cmd['name'].toString();
+        final nameOnly = nameWithArgs.split(' ').first;
+        final cmdName = nameOnly.replaceFirst('/', '').toLowerCase();
+
+        if (cmdName.startsWith(slashBody.toLowerCase()) && cmdName.length > slashBody.length) {
+          final remaining = cmdName.substring(slashBody.length);
+          if (cmdName == 'agent') {
+            return '$remaining --direct ';
+          }
+          return '$remaining ';
+        } else if (cmdName == slashBody.toLowerCase()) {
+          if (cmdName == 'agent' && !trimmed.contains('--direct')) {
+            return ' --direct ';
+          }
+        }
+      }
+      return '';
+    }
+
+    final lower = trimmed.toLowerCase();
+    const presets = [
+      'explain system architecture',
+      'show project dependencies',
+      'trace query execution flow',
+      'find dead code in codebase',
+      'run autonomous agent task',
+      'search function implementation',
+    ];
+
+    for (final preset in presets) {
+      if (preset.startsWith(lower) && preset.length > lower.length) {
+        return preset.substring(lower.length);
+      }
+    }
+
+    return '';
+  }
+
+  @override
   Widget build(BuildContext context) {
     final bottom = MediaQuery.paddingOf(context).bottom;
-    final hasFocus = focusNode.hasFocus;
+    final hasFocus = widget.focusNode.hasFocus;
     final chrome = Theme.of(context).extension<ChatChromeTheme>() ??
         const ChatChromeTheme.dark();
-    final radius = expanded ? chrome.composerExpandedRadius : chrome.composerRadius;
+    final radius = widget.expanded ? 28.0 : 24.0;
+    final suffix = _getInlineSuggestionSuffix(widget.controller.text);
 
     return Padding(
-      padding: EdgeInsets.fromLTRB(18, 0, 18, bottom + 30),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 260),
-        curve: Curves.easeOutCubic,
+      padding: EdgeInsets.fromLTRB(18, 0, 18, bottom + 28),
+      child: Container(
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(radius),
-          border: Border.all(
-            color: hasFocus
-                ? chrome.focusBorderColor.withValues(alpha: 0.56)
-                : chrome.borderColor.withValues(alpha: 0.82),
-          ),
           boxShadow: [
             BoxShadow(
               color: chrome.shadowColor.withValues(alpha: 0.42),
@@ -790,111 +1178,192 @@ class _FloatingComposer extends StatelessWidget {
         ),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(radius),
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              color: chrome.composerSurface.withValues(alpha: 0.98),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(12, 9, 12, 9),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 240),
+              curve: Curves.easeOutCubic,
+              decoration: BoxDecoration(
+                color: chrome.composerSurface.withValues(alpha: 0.94),
+                borderRadius: BorderRadius.circular(radius),
+                border: Border.all(
+                  color: hasFocus
+                      ? AppColors.primary.withValues(alpha: 0.55)
+                      : chrome.borderColor.withValues(alpha: 0.82),
+                  width: 1,
+                ),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(12, 9, 12, 9),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
                     AnimatedSize(
-                      duration: const Duration(milliseconds: 220),
+                      duration: const Duration(milliseconds: 200),
                       curve: Curves.easeOutCubic,
-                      child: isBusy
+                      child: widget.isBusy
                           ? Padding(
-                              padding: const EdgeInsets.fromLTRB(4, 2, 4, 10),
-                              child: _ComposerLoadingBar(onStop: onStop),
+                              padding: const EdgeInsets.fromLTRB(4, 2, 4, 8),
+                              child: _ComposerLoadingBar(onStop: widget.onStop),
                             )
                           : const SizedBox.shrink(),
                     ),
                     AnimatedSize(
-                      duration: const Duration(milliseconds: 260),
+                      duration: const Duration(milliseconds: 240),
                       curve: Curves.easeOutCubic,
                       alignment: Alignment.topCenter,
-                      child: expanded
+                      child: widget.expanded
                           ? Padding(
-                              padding: const EdgeInsets.fromLTRB(4, 4, 4, 10),
+                              padding: const EdgeInsets.fromLTRB(4, 4, 4, 8),
                               child: _ComposerSuggestions(
-                                controller: controller,
-                                onCommandSelected: onCommandSelected,
-                                onProjectSelected: onProjectSelected,
+                                controller: widget.controller,
+                                onCommandSelected: widget.onCommandSelected,
+                                onProjectSelected: widget.onProjectSelected,
                               ),
                             )
                           : const SizedBox.shrink(),
                     ),
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        _ComposerButton(
-                          label: '@',
-                          tooltip: 'Projects',
-                          onPressed: () {
-                            controller.text = '@';
-                            controller.selection = TextSelection.collapsed(
-                              offset: controller.text.length,
-                            );
-                            focusNode.requestFocus();
-                          },
-                        ),
-                        Expanded(
-                          child: ConstrainedBox(
-                            constraints: const BoxConstraints(maxHeight: 136),
-                            child: TextField(
-                              controller: controller,
-                              focusNode: focusNode,
-                              cursorColor: AppColors.primary,
-                              minLines: 1,
-                              maxLines: 6,
-                              textInputAction: TextInputAction.newline,
-                              keyboardType: TextInputType.multiline,
-                              style: const TextStyle(
-                                color: AppColors.textPrimary,
-                                fontSize: 15,
-                                height: 1.35,
-                              ),
-                              decoration: InputDecoration(
-                                hintText: activeProjectName == null
-                                    ? 'Select a repository, then query architecture'
-                                    : 'Explore ${activeProjectName!}',
-                                hintStyle: TextStyle(
-                                  color: AppColors.textSecondary
-                                      .withValues(alpha: 0.72),
-                                  fontSize: 15,
+                    GestureDetector(
+                      onHorizontalDragEnd: (details) {
+                        if (details.primaryVelocity != null && details.primaryVelocity! > 50) {
+                          _acceptSuggestion(suffix);
+                        }
+                      },
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          _ComposerButton(
+                            label: '@',
+                            tooltip: 'Projects',
+                            onPressed: () {
+                              widget.controller.text = '@';
+                              widget.controller.selection = TextSelection.collapsed(
+                                offset: widget.controller.text.length,
+                              );
+                              widget.focusNode.requestFocus();
+                            },
+                          ),
+                          Expanded(
+                            child: Stack(
+                              alignment: Alignment.centerLeft,
+                              children: [
+                                if (suffix.isNotEmpty && widget.controller.text.isNotEmpty)
+                                  IgnorePointer(
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+                                      child: Text.rich(
+                                        TextSpan(
+                                          children: [
+                                            TextSpan(
+                                              text: widget.controller.text,
+                                              style: const TextStyle(
+                                                color: Colors.transparent,
+                                                fontSize: 14.5,
+                                                height: 1.35,
+                                                fontWeight: FontWeight.w500,
+                                              ),
+                                            ),
+                                            TextSpan(
+                                              text: suffix,
+                                              style: TextStyle(
+                                                color: AppColors.textSecondary.withValues(alpha: 0.42),
+                                                fontSize: 14.5,
+                                                height: 1.35,
+                                                fontWeight: FontWeight.w500,
+                                                fontStyle: FontStyle.italic,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                        maxLines: 4,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  ),
+                                ConstrainedBox(
+                                  constraints: const BoxConstraints(maxHeight: 136),
+                                  child: TextField(
+                                    controller: widget.controller,
+                                    focusNode: widget.focusNode,
+                                    cursorColor: AppColors.primary,
+                                    minLines: 1,
+                                    maxLines: 5,
+                                    textInputAction: TextInputAction.newline,
+                                    keyboardType: TextInputType.multiline,
+                                    style: const TextStyle(
+                                      color: AppColors.textPrimary,
+                                      fontSize: 14.5,
+                                      height: 1.35,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                    decoration: InputDecoration(
+                                      hintText: widget.activeProjectName == null
+                                          ? 'Select a repository, then query architecture'
+                                          : 'Explore ${widget.activeProjectName!}...',
+                                      hintStyle: TextStyle(
+                                        color: AppColors.textSecondary.withValues(alpha: 0.60),
+                                        fontSize: 14.0,
+                                      ),
+                                      filled: false,
+                                      isDense: true,
+                                      border: InputBorder.none,
+                                      enabledBorder: InputBorder.none,
+                                      focusedBorder: InputBorder.none,
+                                      contentPadding: const EdgeInsets.symmetric(
+                                        horizontal: 8,
+                                        vertical: 10,
+                                      ),
+                                    ),
+                                    onSubmitted: (_) => widget.onSend(),
+                                  ),
                                 ),
-                                filled: false,
-                                isDense: true,
-                                border: InputBorder.none,
-                                enabledBorder: InputBorder.none,
-                                focusedBorder: InputBorder.none,
-                                contentPadding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 12,
-                                ),
-                              ),
-                              onSubmitted: (_) => onSend(),
+                                if (suffix.isNotEmpty)
+                                  Positioned(
+                                    right: 4,
+                                    top: 2,
+                                    child: GestureDetector(
+                                      onTap: () => _acceptSuggestion(suffix),
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                        decoration: BoxDecoration(
+                                          color: AppColors.primary.withValues(alpha: 0.12),
+                                          borderRadius: BorderRadius.circular(6),
+                                          border: Border.all(color: AppColors.primary.withValues(alpha: 0.25)),
+                                        ),
+                                        child: Text(
+                                          'Swipe → to complete',
+                                          style: TextStyle(
+                                            fontSize: 9.5,
+                                            fontWeight: FontWeight.w600,
+                                            color: AppColors.primary.withValues(alpha: 0.85),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                              ],
                             ),
                           ),
-                        ),
-                        _ComposerButton(
-                          label: '/',
-                          tooltip: 'Commands',
-                          onPressed: () {
-                            controller.text = '/';
-                            controller.selection = TextSelection.collapsed(
-                              offset: controller.text.length,
-                            );
-                            focusNode.requestFocus();
-                          },
-                        ),
-                        const SizedBox(width: 4),
-                        isBusy
-                            ? _StopSendButton(onPressed: onStop)
-                            : _SendButton(onPressed: onSend),
-                      ],
+                          _ComposerButton(
+                            label: '/',
+                            tooltip: 'Commands & Flags',
+                            onPressed: () {
+                              widget.controller.text = '/';
+                              widget.controller.selection = TextSelection.collapsed(
+                                offset: widget.controller.text.length,
+                              );
+                              widget.focusNode.requestFocus();
+                            },
+                          ),
+                          const SizedBox(width: 4),
+                          widget.isBusy
+                              ? _StopSendButton(onPressed: widget.onStop)
+                              : _SendButton(onPressed: widget.onSend),
+                        ],
+                      ),
                     ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),
@@ -914,12 +1383,12 @@ class _ComposerLoadingBar extends StatelessWidget {
     final chrome = Theme.of(context).extension<ChatChromeTheme>() ??
         const ChatChromeTheme.dark();
     return ClipRRect(
-      borderRadius: BorderRadius.circular(18),
+      borderRadius: BorderRadius.circular(16),
       child: DecoratedBox(
         decoration: BoxDecoration(
           color: chrome.suggestionSurface.withValues(alpha: 0.42),
           border: Border.all(color: chrome.borderColor.withValues(alpha: 0.76)),
-          borderRadius: BorderRadius.circular(18),
+          borderRadius: BorderRadius.circular(16),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -930,7 +1399,7 @@ class _ComposerLoadingBar extends StatelessWidget {
               backgroundColor: Colors.transparent,
             ),
             Padding(
-              padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
+              padding: const EdgeInsets.fromLTRB(12, 7, 7, 7),
               child: Row(
                 children: [
                   const SizedBox(
@@ -990,10 +1459,13 @@ class _SendButton extends StatelessWidget {
       color: Colors.transparent,
       child: InkWell(
         customBorder: const CircleBorder(),
-        onTap: onPressed,
+        onTap: () {
+          HapticFeedback.lightImpact();
+          onPressed();
+        },
         child: Ink(
-          width: 42,
-          height: 42,
+          width: 40,
+          height: 40,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
             color: AppColors.primary,
@@ -1008,7 +1480,7 @@ class _SendButton extends StatelessWidget {
           child: const Icon(
             Icons.arrow_upward_rounded,
             color: Colors.white,
-            size: 22,
+            size: 20,
           ),
         ),
       ),
@@ -1029,8 +1501,8 @@ class _StopSendButton extends StatelessWidget {
         customBorder: const CircleBorder(),
         onTap: onPressed,
         child: Ink(
-          width: 42,
-          height: 42,
+          width: 40,
+          height: 40,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
             color: AppColors.error.withValues(alpha: 0.16),
@@ -1039,7 +1511,7 @@ class _StopSendButton extends StatelessWidget {
           child: const Icon(
             Icons.stop_rounded,
             color: AppColors.error,
-            size: 22,
+            size: 20,
           ),
         ),
       ),
@@ -1073,12 +1545,12 @@ class _ComposerButton extends StatelessWidget {
           label,
           style: const TextStyle(
             color: AppColors.textPrimary,
-            fontSize: 18,
+            fontSize: 16,
             fontWeight: FontWeight.w900,
           ),
         ),
         style: IconButton.styleFrom(
-          fixedSize: const Size(42, 42),
+          fixedSize: const Size(38, 38),
           backgroundColor: chrome.controlSurface,
           shape: const CircleBorder(),
         ),
@@ -1179,8 +1651,10 @@ class _ComposerSuggestions extends ConsumerWidget {
       }
     }
     final flags = (matchedCommand?['flags'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+
     return Column(
       mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _SuggestionList(
           emptyText: 'No commands found',
@@ -1196,14 +1670,21 @@ class _ComposerSuggestions extends ConsumerWidget {
         ),
         if (flags.isNotEmpty) ...[
           const SizedBox(height: 10),
+          Padding(
+            padding: const EdgeInsets.only(left: 2, bottom: 4),
+            child: Text(
+              'Optional Flags:',
+              style: TextStyle(
+                fontSize: 10.5,
+                fontWeight: FontWeight.w600,
+                color: AppColors.textSecondary.withValues(alpha: 0.65),
+              ),
+            ),
+          ),
           _FlagChips(
             flags: flags,
             onSelected: _insertFlag,
           ),
-                  if (commandToken == 'agent') ...[
-          const SizedBox(height: 10),
-          _LLMConfigChips(),
-        ],
         ],
       ],
     );
@@ -1217,7 +1698,9 @@ class _ComposerSuggestions extends ConsumerWidget {
     HapticFeedback.selectionClick();
     final name = flag['name'].toString();
     final current = controller.text;
-    final next = current.endsWith(' ') ? '$current$name ' : '$current $name ';
+    final valueStr = flag['value'] == 'true' ? '' : (flag['value'] != null ? ' ${flag['value']}' : '');
+    final flagText = '$name$valueStr';
+    final next = current.endsWith(' ') ? '$current$flagText ' : '$current $flagText ';
     controller.value = TextEditingValue(
       text: next,
       selection: TextSelection.collapsed(offset: next.length),
@@ -1252,22 +1735,23 @@ class _FlagChips extends StatelessWidget {
     return Align(
       alignment: Alignment.centerLeft,
       child: Wrap(
-        spacing: 8,
-        runSpacing: 8,
+        spacing: 6,
+        runSpacing: 6,
         children: [
           for (final flag in flags)
             Tooltip(
-              message: flag['description'].toString(),
+              message: flag['description']?.toString() ?? '',
               child: InkWell(
-                borderRadius: BorderRadius.circular(18),
+                borderRadius: BorderRadius.circular(8),
                 onTap: () => onSelected(flag),
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
-                    color: chrome.suggestionSurface.withValues(alpha: 0.72),
-                    borderRadius: BorderRadius.circular(18),
+                    color: chrome.controlSurface.withValues(alpha: 0.35),
+                    borderRadius: BorderRadius.circular(8),
                     border: Border.all(
-                      color: chrome.borderColor.withValues(alpha: 0.82),
+                      color: Colors.white.withValues(alpha: 0.08),
+                      width: 1,
                     ),
                   ),
                   child: Row(
@@ -1275,20 +1759,20 @@ class _FlagChips extends StatelessWidget {
                     children: [
                       Text(
                         flag['name'].toString(),
-                        style: const TextStyle(
-                          color: AppColors.textPrimary,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w800,
+                        style: TextStyle(
+                          color: AppColors.textSecondary.withValues(alpha: 0.8),
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
                       if (flag['value'] != null) ...[
-                        const SizedBox(width: 5),
+                        const SizedBox(width: 4),
                         Text(
-                          flag['value'].toString(),
+                          flag['value'] == 'true' ? '(default: true)' : flag['value'].toString(),
                           style: TextStyle(
-                            color: AppColors.textSecondary.withValues(alpha: 0.75),
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700,
+                            color: AppColors.textSecondary.withValues(alpha: 0.55),
+                            fontSize: 10,
+                            fontWeight: FontWeight.normal,
                           ),
                         ),
                       ],
@@ -1526,87 +2010,6 @@ class _PremiumEmptyState extends StatelessWidget {
     final parsed = DateTime.tryParse(project.indexedAt);
     if (parsed == null) return project.indexedAt.isEmpty ? 'unknown' : project.indexedAt;
     return DateFormatter.formatRelativeTime(parsed);
-  }
-}
-class _LLMConfigChips extends ConsumerWidget {
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final llmConfigsAsync = ref.watch(llmConfigsProvider);
-    return llmConfigsAsync.when(
-      loading: () => const SizedBox.shrink(),
-      error: (_, __) => const SizedBox.shrink(),
-      data: (configs) {
-        if (configs.isEmpty) return const SizedBox.shrink();
-        final chrome = Theme.of(context).extension<ChatChromeTheme>() ??
-            const ChatChromeTheme.dark();
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'LLM Configs',
-              style: TextStyle(
-                color: AppColors.textSecondary.withValues(alpha: 0.82),
-                fontSize: 12,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                for (final config in configs)
-                  Tooltip(
-                    message: '${config['provider']} / ${config['model']}',
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(18),
-                      onTap: () {
-                        HapticFeedback.selectionClick();
-                        final text = '/agent --model ${config['id']} ';
-                        // Use the controller to update text
-                        final controller = (context as Element).findAncestorWidgetOfExactType<_FloatingComposer>()?.controller;
-                        if (controller != null) {
-                          controller.text = text;
-                          controller.selection = TextSelection.collapsed(offset: text.length);
-                        }
-                      },
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-                        decoration: BoxDecoration(
-                          color: chrome.suggestionSurface.withValues(alpha: 0.72),
-                          borderRadius: BorderRadius.circular(18),
-                          border: Border.all(
-                            color: chrome.borderColor.withValues(alpha: 0.82),
-                          ),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              config['has_api_key'] == true ? Icons.vpn_key_rounded : Icons.cloud_outlined,
-                              size: 14,
-                              color: AppColors.textSecondary,
-                            ),
-                            const SizedBox(width: 6),
-                            Text(
-                              '${config['provider']}: ${config['model']}',
-                              style: const TextStyle(
-                                color: AppColors.textPrimary,
-                                fontSize: 12,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-          ],
-        );
-      },
-    );
   }
 }
 

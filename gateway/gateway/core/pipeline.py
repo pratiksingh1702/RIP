@@ -1,4 +1,4 @@
-﻿"""End-to-end pipeline orchestrator (Phase 10)."""
+"""End-to-end pipeline orchestrator (Phase 10)."""
 
 import re
 from typing import Any
@@ -166,7 +166,7 @@ class GatewayPipeline:
         except Exception:
             pass
         tokens_used = sum(len((c.content or "").split()) for c in context_items)
-        return ContextPackage(
+        pkg = ContextPackage(
             session_id=str(uuid4()),
             intent="recall",
             domain="general",
@@ -178,6 +178,7 @@ class GatewayPipeline:
             conflicts=[],
             warnings=[],
         )
+        return await self._ensure_human_readable(pkg)
 
     async def _execute_medium_path(
         self,
@@ -218,7 +219,7 @@ class GatewayPipeline:
             if not r.success
         ]
         tokens_retrieved = sum(r.token_count for r in successful)
-        return ContextPackage(
+        pkg = ContextPackage(
             session_id=str(uuid4()),
             intent=classification.intent.value,
             domain=classification.domain,
@@ -230,6 +231,7 @@ class GatewayPipeline:
             conflicts=[],
             warnings=warnings,
         )
+        return await self._ensure_human_readable(pkg)
 
     async def _execute_deep_path(
         self,
@@ -384,7 +386,7 @@ class GatewayPipeline:
             }
         )
 
-        return ContextPackage(
+        pkg = ContextPackage(
             session_id=session_id,
             intent=classification.intent.value,
             domain=classification.domain,
@@ -396,6 +398,7 @@ class GatewayPipeline:
             conflicts=[c.model_dump(mode="json") for c in conflicts],
             warnings=warnings,
         )
+        return await self._ensure_human_readable(pkg)
 
     def _coerce_role(self, role: str) -> UserRole:
         """Use configured default role if the caller sends an unknown value."""
@@ -463,6 +466,84 @@ class GatewayPipeline:
         if files:
             return f"{files[0]} is being edited in another active session"
         return "A file conflict was found with another active session"
+
+    async def _ensure_human_readable(self, package: ContextPackage) -> ContextPackage:
+        """Ensure all context texts in response package are human readable.
+        If non-human-readable content is detected, reformat/rewrite it using the currently configured LLM.
+        """
+        if not package or not package.context:
+            return package
+
+        for item in package.context:
+            if item.content and not self._is_human_readable(item.content):
+                logger.info(
+                    "Non-human-readable content detected in response context; converting using configured LLM",
+                    source=item.source,
+                )
+                item.content = await self._make_human_readable_with_llm(item.content)
+
+        return package
+
+    def _is_human_readable(self, text: str) -> bool:
+        """Check if content string is human readable."""
+        if not text or not text.strip():
+            return True
+
+        # Check null bytes or control character ratio
+        control_chars = sum(
+            1 for c in text if not c.isprintable() and c not in "\n\r\t"
+        )
+        if control_chars / len(text) > 0.03:
+            return False
+
+        # Check unicode replacement characters (corrupted encoding)
+        if text.count("\ufffd") > 2:
+            return False
+
+        # Check raw hex/binary escape sequences like \x80\x91...
+        hex_escapes = len(re.findall(r"\\x[0-9a-fA-F]{2}", text))
+        if hex_escapes > 3:
+            return False
+
+        # Check for exceptionally long continuous non-space tokens (e.g. raw base64 / binary dumps)
+        words = text.split()
+        if words and len(text) > 100:
+            max_word_len = max(len(w) for w in words)
+            if max_word_len > 150:
+                return False
+
+        return True
+
+    async def _make_human_readable_with_llm(self, text: str) -> str:
+        """Use currently configured LLM to convert non-human-readable text into clean human-readable text."""
+        prompt = (
+            "The following text or data in context response is not easily human readable "
+            "(it may contain raw binary dumps, corrupted characters, escaped sequences, or unformatted data).\n"
+            "Please convert and reformat it into clean, readable, clear human text. "
+            "Preserve all relevant technical facts and structure.\n\n"
+            f"Raw Content:\n{text[:4000]}"
+        )
+        try:
+            from gateway.core.llm_pool.router import get_llm_router
+
+            llm_router = get_llm_router()
+            config = await llm_router.get_config()
+            formatted = await llm_router.query_llm(
+                prompt=prompt,
+                config=config,
+                system_prompt="You are an expert assistant that converts raw, corrupted, binary, or obscure text into clean, readable human text.",
+                max_tokens=1500,
+                temperature=0.1,
+            )
+            if formatted and formatted.strip():
+                return formatted.strip()
+        except Exception as exc:
+            logger.warning("Failed to process text using configured LLM: %s", exc)
+
+        # Fallback cleanup if LLM is unavailable
+        cleaned = "".join(c for c in text if c.isprintable() or c in "\n\r\t")
+        cleaned = re.sub(r"\\x[0-9a-fA-F]{2}", "", cleaned)
+        return cleaned.strip()
 
 
 # Global pipeline instance

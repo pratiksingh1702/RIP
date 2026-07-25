@@ -631,24 +631,34 @@ class ChatNotifier extends Notifier<List<Message>> {
     WebSocketChannel? channel;
     try {
       final client = ref.read(ripClientProvider);
-      channel = WebSocketChannel.connect(
-        client.chatPipelineWebSocketUri(sessionId),
-      );
-      cancelToken.whenCancel.then((_) => channel?.sink.close());
-      await for (final raw in channel.stream) {
-        final decoded = jsonDecode(raw as String) as Map<String, dynamic>;
-        trace = trace.fold(PipelineEvent.fromJson(decoded));
-        state = state
-            .map((message) => message.id == sessionId
-                ? message.copyWith(trace: trace)
-                : message)
-            .toList();
-        if (trace.isComplete) break;
+      final uri = client.chatPipelineWebSocketUri(sessionId);
+      channel = WebSocketChannel.connect(uri);
+      await channel.ready.timeout(const Duration(seconds: 3));
+      cancelToken.whenCancel.then((_) {
+        try {
+          channel?.sink.close();
+        } catch (_) {}
+      });
+      await for (final raw in channel.stream.handleError((e) {
+        log('Pipeline WebSocket stream error: $e');
+      })) {
+        if (raw is String) {
+          final decoded = jsonDecode(raw) as Map<String, dynamic>;
+          trace = trace.fold(PipelineEvent.fromJson(decoded));
+          state = state
+              .map((message) => message.id == sessionId
+                  ? message.copyWith(trace: trace)
+                  : message)
+              .toList();
+          if (trace.isComplete) break;
+        }
       }
     } catch (e) {
       log('Pipeline stream unavailable: $e');
     } finally {
-      await channel?.sink.close();
+      try {
+        await channel?.sink.close();
+      } catch (_) {}
     }
     return trace;
   }

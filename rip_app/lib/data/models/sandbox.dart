@@ -1,4 +1,4 @@
-﻿/// Sandbox data models
+/// Sandbox data models
 class Sandbox {
   final String sandboxId;
   final String projectId;
@@ -8,6 +8,8 @@ class Sandbox {
   final String image;
   final String createdAt;
   final String? sessionId;
+
+  String get id => sandboxId;
 
   Sandbox({
     required this.sandboxId,

@@ -5,6 +5,7 @@ import os
 from typing import Annotated
 
 from fastapi import Depends, HTTPException, Request
+from starlette.requests import HTTPConnection
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -22,7 +23,7 @@ def get_valid_env_api_keys() -> set[str]:
 
 
 async def verify_api_key(
-    request: Request,
+    request: HTTPConnection,
     db: Annotated[AsyncSession, Depends(get_db_session)],
 ):
     """
@@ -31,6 +32,10 @@ async def verify_api_key(
     If no keys configured at all, allows all requests (development mode).
     """
     auth_header = request.headers.get("Authorization", "")
+    if not auth_header:
+        token = request.query_params.get("token")
+        if token:
+            auth_header = f"Bearer {token}"
 
     if not auth_header.startswith("Bearer "):
         # Check if we have any keys configured

@@ -3733,3 +3733,46 @@ server/schemas/responses.py
 | Database | 5 new tables: workspace_memory, workspace_knowledge, workspace_goals, workspace_entities, entity_relationships | (done) |
 | Integration Tests | 5 tests created (2 passing, 3 environment-dependent) | (done) |
 | Git | Committed and pushed to GitHub (43c3251) | (done) |
+
+---
+
+## Phase O — Three-Path Routing & Gateway Security Architecture
+
+### Checkpoint O.1: Three-Path Router Engine & Confidence Gating
+- [x] Implemented FAST path (~100ms) direct workspace memory/knowledge recall in `GatewayPipeline`
+- [x] Implemented MEDIUM path (~2-5s) parallel RIP search + workspace sources in `PlannerEngine.plan_medium`
+- [x] Implemented DEEP path (~30-120s) permission pre-filtered sequential RIP explain + parallel MCP fanout in `PlannerEngine.plan_deep`
+- [x] Implemented `RouterLLM` with confidence gating and auto-escalation in `gateway/gateway/core/router/llm_router.py`
+- [x] Verified route escalation thresholds (FAST < 0.70 → MEDIUM, MEDIUM < 0.60 → DEEP)
+
+### Checkpoint O.2: Route Caching & Security Provenance
+- [x] Implemented TTL-based `RouteCache` (5-minute TTL) with project invalidation in `gateway/gateway/core/router/cache.py`
+- [x] Implemented `ProvenanceTagger` and data wrapping in `gateway/gateway/core/security/provenance.py`
+- [x] Verified trust-level classification (Internal: RIP/Memory, External: GitHub/Slack/Jira)
+- [x] Verified end-to-end execution trace and system health
+
+---
+
+## Complete File Manifest (Phase O Additions & Trace Verification)
+
+### FILES MODIFIED & TRACED
+```
+gateway/gateway/server/routers/context.py
+gateway/gateway/core/pipeline.py
+gateway/gateway/core/planner/engine.py
+gateway/gateway/core/router/llm_router.py
+gateway/gateway/core/router/cache.py
+gateway/gateway/core/security/provenance.py
+documentation/internal/TASK.md
+```
+
+---
+
+## Final Checkpoint System State
+
+| Layer | Components | Status |
+|-------|-----------|--------|
+| Gateway Routing | Three-Path Engine (Fast/Medium/Deep), Router LLM, Confidence Gating | (done) |
+| Route Caching | In-Memory TTL Cache (5-min), Project Invalidation | (done) |
+| Security & Provenance | Trust Level Classification, Data Wrapping, Injection Scanner | (done) |
+| Execution Engine | Permission Pre-filtering, Parallel Fanout, SSE Event Streaming | (done) |
