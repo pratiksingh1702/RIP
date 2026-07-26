@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:web_socket_channel/io.dart';
@@ -245,7 +245,7 @@ class SandboxNotifier extends StateNotifier<SandboxState> {
       return '[python] Execution finished (exit code 0)';
     } else if (lower.startsWith('node') || lower.startsWith('npm')) {
       if (lower.contains('-v') || lower.contains('--version')) return 'v20.11.1';
-      if (lower.contains('list')) return '├── express@4.18.2\n├── typescript@5.3.3\n└── vite@5.1.0';
+      if (lower.contains('list')) return 'â”œâ”€â”€ express@4.18.2\nâ”œâ”€â”€ typescript@5.3.3\nâ””â”€â”€ vite@5.1.0';
       return '[node] Script completed successfully.';
     } else if (lower.startsWith('go')) {
       return 'go version go1.22.1 linux/amd64';
