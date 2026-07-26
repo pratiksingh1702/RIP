@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 """
 stream_agent.py — runs INSIDE the sandbox container, once, in the background.
 
@@ -39,83 +39,67 @@ PORT = int(os.environ.get("STREAM_AGENT_PORT", "7000"))
 END_MARKER = b"\x00__CMD_DONE__\x00"
 
 
-async def run_command_pty(command: str, workdir: str, writer: asyncio.StreamWriter) -> None:
-    """Fork a pty, exec `command` in it, and stream output back over `writer`."""
+async def handle_client(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
     pid, master_fd = pty.fork()
 
     if pid == 0:
         # ---- child process ----
-        try:
-            if workdir and os.path.isdir(workdir):
-                os.chdir(workdir)
-        except Exception:
-            pass
-        os.execvp("/bin/bash", ["/bin/bash", "-c", command])
-        os._exit(127)  # only reached if execvp itself fails
+        # Start bash as a login shell so it sources profiles
+        os.execvp("/bin/bash", ["/bin/bash", "-l"])
+        os._exit(127)
 
     # ---- parent process: give the pty a real size ----
-    # pty.fork() leaves winsize at 0x0, which some shells/kernels treat as
-    # "already at line width", corrupting or dropping the first character
-    # written on each line. Set a normal size immediately.
     try:
-        winsize = struct.pack("HHHH", 24, 80, 0, 0)  # rows, cols, xpixel, ypixel
+        winsize = struct.pack("HHHH", 24, 80, 0, 0)
         fcntl.ioctl(master_fd, termios.TIOCSWINSZ, winsize)
     except OSError:
         pass
 
-    # ---- parent process: read the pty master and forward immediately ----
-    loop = asyncio.get_event_loop()
     os.set_blocking(master_fd, False)
-    status = None
+    loop = asyncio.get_event_loop()
 
-    def _read_chunk() -> bytes:
-        try:
-            return os.read(master_fd, 4096)
-        except OSError:
-            return b""
+    # Forward output from PTY to TCP
+    async def forward_pty_to_writer():
+        def _read_chunk() -> bytes:
+            try:
+                return os.read(master_fd, 4096)
+            except OSError:
+                return b""
 
-    while True:
-        chunk = await loop.run_in_executor(None, _read_chunk)
-        if chunk:
-            writer.write(chunk)
-            await writer.drain()
-            continue
+        while True:
+            chunk = await loop.run_in_executor(None, _read_chunk)
+            if chunk:
+                writer.write(chunk)
+                await writer.drain()
+            else:
+                wpid, status = os.waitpid(pid, os.WNOHANG)
+                if wpid == pid:
+                    break
+                await asyncio.sleep(0.01)
+        writer.close()
 
-        wpid, status = os.waitpid(pid, os.WNOHANG)
-        if wpid == pid:
-            break
-        await asyncio.sleep(0.01)
+    output_task = asyncio.create_task(forward_pty_to_writer())
 
-    # Drain anything written between the last read and process exit
+    # Read from TCP and write to PTY
     try:
         while True:
-            chunk = os.read(master_fd, 4096)
-            if not chunk:
+            line = await reader.readline()
+            if not line:
                 break
-            writer.write(chunk)
-    except OSError:
-        pass
+            req = json.loads(line.decode("utf-8", errors="replace"))
+            command = req.get("command")
+            input_text = req.get("input")
 
-    try:
-        os.close(master_fd)
-    except OSError:
-        pass
-
-    exit_code = os.waitstatus_to_exitcode(status) if status is not None else -1
-    footer = json.dumps({"exit_code": exit_code}).encode()
-    writer.write(END_MARKER + footer + b"\n")
-    await writer.drain()
-
-
-async def handle_client(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
-    try:
-        line = await reader.readline()
-        if not line:
-            return
-        req = json.loads(line.decode("utf-8", errors="replace"))
-        command = req.get("command", "")
-        workdir = req.get("workdir", "/workspace")
-        await run_command_pty(command, workdir, writer)
+            if command is not None:
+                # To know when the command finishes, we append an echo command.
+                # Note: If the command is interactive, this echo will be in the input buffer
+                # and might be consumed by the command if it reads from stdin.
+                # However, for non-interactive commands this properly signals completion.
+                # This is a limitation of a persistent PTY session compared to one-off execs.
+                cmd_line = f"{command}\necho -ne '\\x00__CMD_DONE__\\x00{{\"exit_code\": $?}}\\n'\n"
+                os.write(master_fd, cmd_line.encode())
+            elif input_text is not None:
+                os.write(master_fd, input_text.encode())
     except Exception as e:
         try:
             writer.write(END_MARKER + json.dumps({"exit_code": -1, "error": str(e)}).encode() + b"\n")
@@ -124,6 +108,14 @@ async def handle_client(reader: asyncio.StreamReader, writer: asyncio.StreamWrit
             pass
     finally:
         writer.close()
+        try:
+            os.kill(pid, signal.SIGTERM)
+        except OSError:
+            pass
+        output_task.cancel()
+
+
+
 
 
 async def main() -> None:

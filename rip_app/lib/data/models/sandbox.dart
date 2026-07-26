@@ -1,4 +1,4 @@
-﻿/// Sandbox data models
+/// Sandbox data models
 class Sandbox {
   final String sandboxId;
   final String projectId;
@@ -8,6 +8,9 @@ class Sandbox {
   final String image;
   final String createdAt;
   final String? sessionId;
+  final String? name;
+  final String? description;
+  
   String get id => sandboxId;
   Sandbox({
     required this.sandboxId,
@@ -18,6 +21,8 @@ class Sandbox {
     this.image = '',
     required this.createdAt,
     this.sessionId,
+    this.name,
+    this.description,
   });
   factory Sandbox.fromJson(Map<String, dynamic> json) => Sandbox(
     sandboxId: json['sandbox_id'] ?? '',
@@ -28,11 +33,15 @@ class Sandbox {
     image: json['image'] ?? '',
     createdAt: json['created_at'] ?? '',
     sessionId: json['session_id'],
+    name: json['name'],
+    description: json['description'],
   );
   Map<String, dynamic> toJson() => {
     'sandbox_id': sandboxId,
     'project_id': projectId,
     'environment': environment,
+    'name': name,
+    'description': description,
   };
 }
 class SandboxStatus {

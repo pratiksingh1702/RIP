@@ -21,17 +21,21 @@ class _SandboxScreenState extends ConsumerState<SandboxScreen> {
   @override
   void initState() {
     super.initState();
-    final state = ref.read(sandboxProvider);
-    if (state.activeSandboxes.isEmpty && state.sandbox == null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        _autoCreateDefaultSandbox();
-      });
-    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _initializeSandboxes();
+    });
   }
 
-  void _autoCreateDefaultSandbox() {
+  Future<void> _initializeSandboxes() async {
+    final notifier = ref.read(sandboxProvider.notifier);
     final projectId = widget.projectId ?? 'default';
-    ref.read(sandboxProvider.notifier).createSandbox(projectId, environment: 'python');
+    
+    await notifier.loadExistingSandboxes(projectId: projectId);
+    
+    final state = ref.read(sandboxProvider);
+    if (state.activeSandboxes.isEmpty) {
+      notifier.createSandbox(projectId, environment: 'python');
+    }
   }
 
   void _createSandbox(SandboxTemplate template) {
@@ -132,6 +136,65 @@ class _SandboxScreenState extends ConsumerState<SandboxScreen> {
     );
   }
 
+  void _openEditSandboxModal(SandboxSession activeSession) {
+    HapticFeedback.selectionClick();
+    final nameController = TextEditingController(text: activeSession.sandbox.name);
+    final descController = TextEditingController(text: activeSession.sandbox.description);
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF13132B),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Edit Sandbox Details', style: TextStyle(color: Colors.white, fontSize: 16)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: nameController,
+              style: const TextStyle(color: Colors.white),
+              decoration: InputDecoration(
+                labelText: 'Name',
+                labelStyle: const TextStyle(color: Colors.white54),
+                enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.2))),
+                focusedBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFF818CF8))),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: descController,
+              style: const TextStyle(color: Colors.white),
+              maxLines: 3,
+              decoration: InputDecoration(
+                labelText: 'Description (Bio)',
+                labelStyle: const TextStyle(color: Colors.white54),
+                enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.2))),
+                focusedBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFF818CF8))),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel', style: TextStyle(color: Colors.white54)),
+          ),
+          TextButton(
+            onPressed: () {
+              ref.read(sandboxProvider.notifier).updateSandbox(
+                activeSession.sandbox.id,
+                name: nameController.text.trim().isEmpty ? null : nameController.text.trim(),
+                description: descController.text.trim().isEmpty ? null : descController.text.trim(),
+              );
+              Navigator.pop(context);
+            },
+            child: const Text('Save', style: TextStyle(color: Color(0xFF10B981))),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _showCornerInfoDialog(BuildContext context, SandboxSession? activeSession, int totalActive) {
     HapticFeedback.selectionClick();
     final env = activeSession?.sandbox.environment.toUpperCase() ?? 'NONE';
@@ -218,6 +281,7 @@ class _SandboxScreenState extends ConsumerState<SandboxScreen> {
                       Scaffold.of(context).openDrawer();
                     },
                     onNewSandboxTap: _openEnvSelectorModal,
+                    onEditSandboxTap: activeSession != null ? () => _openEditSandboxModal(activeSession) : null,
                     onFilesTap: _openFilesModal,
                     onInfoTap: () => _showCornerInfoDialog(context, activeSession, activeSessions.length),
                   ),
@@ -275,6 +339,7 @@ class _FloatingSandboxHeader extends ConsumerWidget {
   final List<SandboxSession> activeSessions;
   final VoidCallback onMenuTap;
   final VoidCallback onNewSandboxTap;
+  final VoidCallback? onEditSandboxTap;
   final VoidCallback onFilesTap;
   final VoidCallback onInfoTap;
 
@@ -283,6 +348,7 @@ class _FloatingSandboxHeader extends ConsumerWidget {
     required this.activeSessions,
     required this.onMenuTap,
     required this.onNewSandboxTap,
+    required this.onEditSandboxTap,
     required this.onFilesTap,
     required this.onInfoTap,
   });
@@ -318,6 +384,7 @@ class _FloatingSandboxHeader extends ConsumerWidget {
               activeSession: activeSession,
               activeSessions: activeSessions,
               onNewSandboxTap: onNewSandboxTap,
+              onEditSandboxTap: onEditSandboxTap,
             ),
           ),
           const SizedBox(width: 8),
@@ -395,17 +462,21 @@ class _HeaderSandboxDropdownSelector extends ConsumerWidget {
   final SandboxSession? activeSession;
   final List<SandboxSession> activeSessions;
   final VoidCallback onNewSandboxTap;
+  final VoidCallback? onEditSandboxTap;
 
   const _HeaderSandboxDropdownSelector({
     required this.activeSession,
     required this.activeSessions,
     required this.onNewSandboxTap,
+    required this.onEditSandboxTap,
   });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final activeId = activeSession?.sandbox.id;
-    final currentEnv = activeSession?.sandbox.environment.toUpperCase() ?? 'NO SANDBOX';
+    final currentEnv = activeSession?.sandbox.name?.isNotEmpty == true 
+        ? activeSession!.sandbox.name! 
+        : activeSession?.sandbox.environment.toUpperCase() ?? 'NO SANDBOX';
 
     return PopupMenuButton<String>(
       tooltip: 'Switch Sandbox Environment',
@@ -420,6 +491,8 @@ class _HeaderSandboxDropdownSelector extends ConsumerWidget {
         HapticFeedback.selectionClick();
         if (val == '__new__') {
           onNewSandboxTap();
+        } else if (val == '__edit__') {
+          onEditSandboxTap?.call();
         } else {
           ref.read(sandboxProvider.notifier).switchActiveSandbox(val);
         }
@@ -459,7 +532,9 @@ class _HeaderSandboxDropdownSelector extends ConsumerWidget {
         } else {
           for (final session in activeSessions) {
             final isCurrent = session.sandbox.id == activeId;
-            final envName = session.sandbox.environment.toUpperCase();
+            final envName = session.sandbox.name?.isNotEmpty == true
+                ? session.sandbox.name!
+                : session.sandbox.environment.toUpperCase();
 
             items.add(
               PopupMenuItem<String>(
@@ -496,6 +571,27 @@ class _HeaderSandboxDropdownSelector extends ConsumerWidget {
         }
 
         items.add(const PopupMenuDivider());
+        if (activeSession != null) {
+          items.add(
+            const PopupMenuItem<String>(
+              value: '__edit__',
+              child: Row(
+                children: [
+                  Icon(Icons.edit_rounded, color: Colors.white54, size: 18),
+                  SizedBox(width: 8),
+                  Text(
+                    'Edit Current Sandbox...',
+                    style: TextStyle(
+                      color: Colors.white70,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
         items.add(
           const PopupMenuItem<String>(
             value: '__new__',

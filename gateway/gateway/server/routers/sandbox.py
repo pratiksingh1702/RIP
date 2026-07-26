@@ -1,4 +1,4 @@
-﻿"""Sandbox REST + WebSocket API endpoints."""
+"""Sandbox REST + WebSocket API endpoints."""
 from __future__ import annotations
 import asyncio, json, logging
 from fastapi import APIRouter, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
@@ -15,6 +15,11 @@ from gateway.server.schemas.sandbox_requests import (
     CreateSandboxRequest, TerminalInputRequest, TerminalApproveRequest,
     FileWriteRequest, SnapshotRequest, RemoteConnectRequest
 )
+from pydantic import BaseModel
+
+class UpdateSandboxRequest(BaseModel):
+    name: str | None = None
+    description: str | None = None
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -58,6 +63,12 @@ async def start_sandbox(sandbox_id: str):
 async def destroy_sandbox(sandbox_id: str):
     ok = await get_orchestrator().destroy_sandbox(sandbox_id)
     return {"sandbox_id": sandbox_id, "destroyed": ok}
+
+@router.patch("/{sandbox_id}")
+async def update_sandbox(sandbox_id: str, body: UpdateSandboxRequest):
+    ok = await get_orchestrator().update_sandbox_metadata(sandbox_id, body.name, body.description)
+    if not ok: raise HTTPException(status_code=500, detail="Failed to update metadata")
+    return {"sandbox_id": sandbox_id, "updated": True}
 
 @router.get("/environments")
 async def list_environments():
@@ -169,21 +180,21 @@ async def terminal_websocket(websocket: WebSocket, sandbox_id: str, session_id: 
             if msg_type == "input":
                 command = msg.get("command", "")
                 if not command: continue
-                security = get_security_policy()
-                allowed, reason, risk = security.validate_command(command)
-                if not allowed:
-                    await websocket.send_json({"type": "blocked", "reason": reason})
-                    continue
-                if security.needs_approval(risk):
-                    # Run the wait in the background instead of blocking
-                    # this loop — otherwise we can never read the
-                    # 'approve' message that would satisfy it.
-                    task = asyncio.create_task(
-                        _await_approval(terminal, command, reason, risk.value, websocket, security)
-                    )
-                    pending_approval_tasks.append(task)
-                else:
+                if terminal.is_executing:
                     await terminal.write(command)
+                else:
+                    security = get_security_policy()
+                    allowed, reason, risk = security.validate_command(command)
+                    if not allowed:
+                        await websocket.send_json({"type": "blocked", "reason": reason})
+                        continue
+                    if security.needs_approval(risk):
+                        task = asyncio.create_task(
+                            _await_approval(terminal, command, reason, risk.value, websocket, security)
+                        )
+                        pending_approval_tasks.append(task)
+                    else:
+                        await terminal.write(command)
             elif msg_type == "approve":
                 cmd = msg.get("command", "")
                 if terminal.terminal_id in _approval_events:

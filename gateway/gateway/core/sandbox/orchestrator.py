@@ -1,6 +1,6 @@
-﻿"""Sandbox Orchestrator — Docker container lifecycle management."""
+"""Sandbox Orchestrator — Docker container lifecycle management."""
 from __future__ import annotations
-import asyncio, io, logging, os, tarfile
+import asyncio, io, logging, os, tarfile, json
 from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
@@ -15,10 +15,27 @@ class SandboxOrchestrator:
     STREAM_AGENT_PORT = 7000
     STREAM_AGENT_CONTAINER_PATH = "/opt/stream_agent.py"
     _AGENT_SCRIPT_PATH = os.path.join(os.path.dirname(__file__), "stream_agent.py")
+    _METADATA_PATH = os.path.join(os.path.dirname(__file__), "..", "..", "storage", "sandbox_metadata.json")
 
     def __init__(self):
         self._client = None
         self._ready = False
+        self._metadata_lock = asyncio.Lock()
+
+    async def _load_metadata(self) -> dict:
+        if not os.path.exists(self._METADATA_PATH): return {}
+        try:
+            with open(self._METADATA_PATH, "r") as f:
+                return json.load(f)
+        except Exception: return {}
+
+    async def _save_metadata(self, metadata: dict):
+        os.makedirs(os.path.dirname(self._METADATA_PATH), exist_ok=True)
+        try:
+            with open(self._METADATA_PATH, "w") as f:
+                json.dump(metadata, f, indent=2)
+        except Exception as e:
+            logger.error("Failed to save sandbox metadata: %s", e)
 
     @property
     def client(self):
@@ -60,7 +77,14 @@ class SandboxOrchestrator:
             except Exception as e:
                 logger.warning("Failed to deploy stream agent: %s", e)
             logger.info("Sandbox created: %s (project=%s, user=%s)", sandbox_id, project_id, user_id)
-            return {"sandbox_id": sandbox_id, "project_id": project_id, "user_id": user_id, "environment": environment, "status": container.status, "image": image, "created_at": datetime.now(UTC).isoformat()}
+            
+            # Save metadata if custom name/description provided
+            name = custom_config.get("name") if custom_config else None
+            description = custom_config.get("description") if custom_config else None
+            if name or description:
+                await self.update_sandbox_metadata(sandbox_id, name, description)
+                
+            return {"sandbox_id": sandbox_id, "project_id": project_id, "user_id": user_id, "environment": environment, "status": container.status, "image": image, "created_at": datetime.now(UTC).isoformat(), "name": name, "description": description}
         except Exception as e:
             logger.error("Failed to create sandbox: %s", e)
             raise RuntimeError(f"Failed to create sandbox: {e}") from e
@@ -92,12 +116,17 @@ class SandboxOrchestrator:
     async def list_sandboxes(self, project_id: str | None = None, user_id: str | None = None) -> list[dict[str, Any]]:
         try:
             containers = self.client.containers.list(all=True, filters={"label": f"{self.SANDBOX_LABEL}=true"})
+            
+            async with self._metadata_lock:
+                meta = await self._load_metadata()
+                
             result = []
             for c in containers:
                 labels = c.labels
                 if project_id and labels.get("project_id") != project_id: continue
                 if user_id and labels.get("user_id") != user_id: continue
-                result.append({"sandbox_id": c.name, "project_id": labels.get("project_id", ""), "user_id": labels.get("user_id", ""), "environment": labels.get("environment", ""), "status": c.status, "created_at": labels.get("created_at", "")})
+                smeta = meta.get(c.name, {})
+                result.append({"sandbox_id": c.name, "project_id": labels.get("project_id", ""), "user_id": labels.get("user_id", ""), "environment": labels.get("environment", ""), "status": c.status, "created_at": labels.get("created_at", ""), "name": smeta.get("name"), "description": smeta.get("description")})
             return result
         except Exception:
             return []
@@ -109,6 +138,18 @@ class SandboxOrchestrator:
     async def start_sandbox(self, sandbox_id: str) -> bool:
         try: self.client.containers.get(sandbox_id).start(); return True
         except Exception: return False
+        
+    async def update_sandbox_metadata(self, sandbox_id: str, name: str | None = None, description: str | None = None) -> bool:
+        try:
+            async with self._metadata_lock:
+                meta = await self._load_metadata()
+                if sandbox_id not in meta: meta[sandbox_id] = {}
+                if name is not None: meta[sandbox_id]["name"] = name
+                if description is not None: meta[sandbox_id]["description"] = description
+                await self._save_metadata(meta)
+            return True
+        except Exception:
+            return False
 
     def exec_command(self, sandbox_id: str, command: str, workdir: str = "/workspace", timeout: int = 60) -> tuple[int, str]:
         try:

@@ -64,6 +64,44 @@ class SandboxNotifier extends StateNotifier<SandboxState> {
 
   SandboxNotifier(this._client) : super(SandboxState.initial());
 
+  Future<void> loadExistingSandboxes({String? projectId}) async {
+    try {
+      final sandboxes = await _client.listSandboxes(projectId: projectId);
+      if (sandboxes.isNotEmpty) {
+        final updatedSessions = Map<String, SandboxSession>.from(state.sessions);
+        for (final sb in sandboxes) {
+          if (!updatedSessions.containsKey(sb.id)) {
+            updatedSessions[sb.id] = SandboxSession(
+              sandbox: sb,
+              terminalOutputs: [
+                TerminalOutput(
+                  type: 'system',
+                  command: '',
+                  output: '=== Restored Container Runtime Environment: ${sb.environment.toUpperCase()} (ID: ${sb.id}) ===\nReady for input commands.',
+                  exitCode: 0,
+                  durationMs: 0,
+                ),
+              ],
+            );
+            
+            // Auto-connect terminal if running
+            if (sb.status == 'running') {
+               final sessionId = sb.sessionId ?? sb.id;
+               connectTerminal(sb.id, sessionId, _client.serverUrl, _client.apiKey ?? '');
+            }
+          }
+        }
+        
+        state = state.copyWith(
+          sessions: updatedSessions,
+          activeSandboxId: state.activeSandboxId ?? sandboxes.first.id,
+        );
+      }
+    } catch (_) {
+      // Fail silently if we can't load existing sandboxes
+    }
+  }
+
   Future<void> createSandbox(String projectId, {String environment = 'python'}) async {
     state = state.copyWith(isLoading: true, error: null);
     try {
@@ -153,6 +191,32 @@ class SandboxNotifier extends StateNotifier<SandboxState> {
       sessions: updatedSessions,
       activeSandboxId: nextActiveId,
     );
+  }
+
+  Future<void> updateSandbox(String sandboxId, {String? name, String? description}) async {
+    try {
+      await _client.updateSandboxMetadata(sandboxId, name: name, description: description);
+      final session = state.sessions[sandboxId];
+      if (session != null) {
+        final updatedSandbox = Sandbox(
+          sandboxId: session.sandbox.sandboxId,
+          projectId: session.sandbox.projectId,
+          userId: session.sandbox.userId,
+          environment: session.sandbox.environment,
+          status: session.sandbox.status,
+          image: session.sandbox.image,
+          createdAt: session.sandbox.createdAt,
+          sessionId: session.sandbox.sessionId,
+          name: name ?? session.sandbox.name,
+          description: description ?? session.sandbox.description,
+        );
+        final updatedSessions = Map<String, SandboxSession>.from(state.sessions);
+        updatedSessions[sandboxId] = session.copyWith(sandbox: updatedSandbox);
+        state = state.copyWith(sessions: updatedSessions);
+      }
+    } catch (_) {
+      // Ignore update errors
+    }
   }
 
   Future<void> loadTemplates() async {
@@ -276,27 +340,18 @@ class SandboxNotifier extends StateNotifier<SandboxState> {
     final targetId = targetSandboxId ?? state.activeSandboxId;
     if (targetId == null) return;
 
-    _updateSession(
-      targetId,
-      (s) => s.copyWith(
-        isExecuting: true,
-        executingCommand: command,
-      ),
-    );
+    final session = state.sessions[targetId];
+    final isAlreadyExecuting = session?.isExecuting ?? false;
 
-    // Auto-safety timer: reset execution state after 15s to guarantee UI never gets stuck
-    Timer(const Duration(seconds: 15), () {
-      final s = state.sessions[targetId];
-      if (s != null && s.isExecuting) {
-        _updateSession(
-          targetId,
-          (sess) => sess.copyWith(
-            isExecuting: false,
-            clearExecutingCommand: true,
-          ),
-        );
-      }
-    });
+    if (!isAlreadyExecuting) {
+      _updateSession(
+        targetId,
+        (s) => s.copyWith(
+          isExecuting: true,
+          executingCommand: command,
+        ),
+      );
+    }
 
     final channel = _channels[targetId];
     if (channel != null) {

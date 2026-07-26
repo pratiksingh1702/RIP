@@ -5,6 +5,7 @@ import '../exceptions.dart';
 import '../../data/models/project.dart';
 import '../../data/models/search_result.dart';
 import '../../data/models/index_job.dart';
+import '../../data/models/sandbox.dart';
 import '../../utils/logger.dart';
 
 class RipClient {
@@ -1259,6 +1260,29 @@ class RipClient {
     return response.data as Map<String, dynamic>;
   }
 
+  Future<List<Sandbox>> listSandboxes({String? projectId}) async {
+    final response = await _dio.get(
+      '/gateway/api/sandbox/list',
+      queryParameters: {
+        if (projectId != null) 'project_id': projectId,
+      },
+    );
+    final data = response.data;
+    
+    List dynamicList = [];
+    if (data is List) {
+      dynamicList = data;
+    } else if (data is Map<String, dynamic>) {
+      if (data.containsKey('data') && data['data'] is List) {
+        dynamicList = data['data'] as List;
+      } else if (data.containsKey('sandboxes') && data['sandboxes'] is List) {
+        dynamicList = data['sandboxes'] as List;
+      }
+    }
+
+    return dynamicList.map((e) => Sandbox.fromJson(e as Map<String, dynamic>)).toList();
+  }
+
   Future<Map<String, dynamic>> getSandboxStatus(String sandboxId) async {
     final response = await _dio.get('/gateway/api/sandbox/status/$sandboxId');
     return response.data as Map<String, dynamic>;
@@ -1283,6 +1307,17 @@ class RipClient {
 
   Future<Map<String, dynamic>> destroySandbox(String sandboxId) async {
     final response = await _dio.delete('/gateway/api/sandbox/$sandboxId');
+    return response.data as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> updateSandboxMetadata(String sandboxId, {String? name, String? description}) async {
+    final response = await _dio.patch(
+      '/gateway/api/sandbox/$sandboxId',
+      data: {
+        if (name != null) 'name': name,
+        if (description != null) 'description': description,
+      },
+    );
     return response.data as Map<String, dynamic>;
   }
 

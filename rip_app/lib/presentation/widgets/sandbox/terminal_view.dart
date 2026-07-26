@@ -214,6 +214,14 @@ class _TerminalViewState extends ConsumerState<TerminalView> {
                           onReject: () => ref.read(sandboxProvider.notifier).rejectCommand(state.pendingApproval!.command),
                         );
                       }
+                      
+                      final lastOutputText = outputs.isNotEmpty ? outputs.last.output : '';
+                      if (isExecuting && _isInteractivePrompt(lastOutputText)) {
+                        return _InteractivePromptButtons(
+                          onResponse: (resp) => _sendCommand(resp),
+                        );
+                      }
+                      
                       return _TerminalWaitingLoader(command: executingCommand);
                     },
                   ),
@@ -351,13 +359,11 @@ class _TerminalViewState extends ConsumerState<TerminalView> {
                         enabledBorder: InputBorder.none,
                         focusedBorder: InputBorder.none,
                         filled: false,
-                        hintText: isExecuting
-                            ? 'Executing command... Type next command...'
-                            : state.isConnected 
-                                ? 'Type bash command or select template preset...' 
+                        hintText: state.isConnected 
+                                ? 'Type bash command or interactive input...' 
                                 : 'Terminal disconnected. Reconnect to send commands...',
                         hintStyle: TextStyle(
-                          color: isExecuting ? const Color(0xFF818CF8) : Colors.white38,
+                          color: Colors.white38,
                           fontFamily: 'monospace',
                           fontSize: 12,
                         ),
@@ -374,32 +380,19 @@ class _TerminalViewState extends ConsumerState<TerminalView> {
                       padding: const EdgeInsets.all(10),
                       decoration: BoxDecoration(
                         gradient: LinearGradient(
-                          colors: isExecuting
-                              ? const [Color(0xFF10B981), Color(0xFF059669)]
-                              : state.isConnected 
+                          colors: state.isConnected 
                                   ? const [Color(0xFF6366F1), Color(0xFF4F46E5)]
                                   : [const Color(0xFF6366F1).withValues(alpha: 0.3), const Color(0xFF4F46E5).withValues(alpha: 0.3)],
                         ),
                         borderRadius: BorderRadius.circular(12),
-                        boxShadow: (state.isConnected || isExecuting) ? [
+                        boxShadow: state.isConnected ? [
                           BoxShadow(
-                            color: isExecuting
-                                ? const Color(0xFF10B981).withValues(alpha: 0.4)
-                                : const Color(0xFF6366F1).withValues(alpha: 0.4),
+                            color: const Color(0xFF6366F1).withValues(alpha: 0.4),
                             blurRadius: 8,
                           ),
-                        ] : [],
+                        ] : null,
                       ),
-                      child: isExecuting
-                          ? const SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2.0,
-                                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                              ),
-                            )
-                          : Icon(
+                      child: Icon(
                               Icons.send_rounded,
                               color: state.isConnected ? Colors.white : Colors.white54,
                               size: 16,
@@ -429,6 +422,51 @@ class _TerminalViewState extends ConsumerState<TerminalView> {
       return ['flutter --version', 'flutter analyze', 'dart --version'];
     }
     return ['uname -a', 'ls -la', 'pwd', 'top -b -n 1', 'git status'];
+  }
+
+  bool _isInteractivePrompt(String output) {
+    return RegExp(r'\[y/N\]|\[Y/n\]|›|\? $|\(yes/no\)').hasMatch(output.trim());
+  }
+}
+
+class _InteractivePromptButtons extends StatelessWidget {
+  final Function(String) onResponse;
+  const _InteractivePromptButtons({required this.onResponse});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 8, bottom: 8),
+      child: Row(
+        children: [
+          _QuickResponseButton(label: "Yes", onTap: () => onResponse("y\n")),
+          const SizedBox(width: 8),
+          _QuickResponseButton(label: "No", onTap: () => onResponse("n\n")),
+          const SizedBox(width: 8),
+          _QuickResponseButton(label: "Continue", onTap: () => onResponse("\n")),
+        ],
+      ),
+    );
+  }
+}
+
+class _QuickResponseButton extends StatelessWidget {
+  final String label;
+  final VoidCallback onTap;
+  const _QuickResponseButton({required this.label, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return ActionChip(
+      label: Text(
+        label,
+        style: const TextStyle(color: Color(0xFFC7D2FE), fontSize: 11, fontWeight: FontWeight.bold),
+      ),
+      backgroundColor: const Color(0xFF1E1E3F),
+      side: BorderSide(color: const Color(0xFF6366F1).withValues(alpha: 0.5)),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      onPressed: onTap,
+    );
   }
 }
 
