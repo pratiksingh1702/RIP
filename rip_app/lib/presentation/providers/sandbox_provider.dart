@@ -198,11 +198,11 @@ class SandboxNotifier extends StateNotifier<SandboxState> {
   Future<void> reconnectTerminal(String sandboxId) async {
     final session = state.sessions[sandboxId];
     if (session == null) return;
-    
+
     // Close existing connection if any
     _subscriptions[sandboxId]?.cancel();
     _channels[sandboxId]?.sink.close();
-    
+
     final sessionId = session.sandbox.sessionId ?? session.sandbox.id;
     await connectTerminal(sandboxId, sessionId, _client.serverUrl, _client.apiKey ?? '');
   }
@@ -210,14 +210,47 @@ class SandboxNotifier extends StateNotifier<SandboxState> {
   void _appendOutputToSession(String sandboxId, TerminalOutput msg) {
     final session = state.sessions[sandboxId];
     if (session == null) return;
-    final updatedOutputs = [...session.terminalOutputs, msg];
+
+    final outputs = session.terminalOutputs;
+    List<TerminalOutput> updatedOutputs;
+
+    if (msg.type == 'stream_chunk') {
+      // If the previous line is an in-progress stream, append this chunk's
+      // text onto it instead of creating a brand new line per chunk. This
+      // is what makes streamed output render as one growing line rather
+      // than "word, sentence, word" scattered across separate lines.
+      if (outputs.isNotEmpty && outputs.last.type == 'stream_chunk') {
+        final last = outputs.last;
+        final merged = TerminalOutput(
+          type: last.type,
+          command: last.command,
+          output: last.output + msg.output,
+          exitCode: last.exitCode,
+          durationMs: last.durationMs,
+          error: last.error,
+          reason: last.reason,
+          risk: last.risk,
+          approvalNeeded: last.approvalNeeded,
+        );
+        updatedOutputs = [...outputs.sublist(0, outputs.length - 1), merged];
+      } else {
+        updatedOutputs = [...outputs, msg];
+      }
+    } else if (msg.type == 'command_output' &&
+        outputs.isNotEmpty &&
+        outputs.last.type == 'stream_chunk') {
+      // The final command_output carries the authoritative full output, so
+      // replace the in-progress streamed line instead of duplicating it.
+      updatedOutputs = [...outputs.sublist(0, outputs.length - 1), msg];
+    } else {
+      updatedOutputs = [...outputs, msg];
+    }
 
     // Command output arrives or approval needed means command execution message returned
-    final isDone = msg.type == 'command_output' || 
-                   msg.type == 'command_error' || 
-                   msg.type == 'command_blocked' || 
+    final isDone = msg.type == 'command_output' ||
+                   msg.type == 'command_error' ||
+                   msg.type == 'command_blocked' ||
                    msg.type == 'command_rejected' ||
-                   msg.type == 'command_start' ||
                    msg.approvalNeeded;
 
     _updateSession(
@@ -251,6 +284,20 @@ class SandboxNotifier extends StateNotifier<SandboxState> {
       ),
     );
 
+    // Auto-safety timer: reset execution state after 15s to guarantee UI never gets stuck
+    Timer(const Duration(seconds: 15), () {
+      final s = state.sessions[targetId];
+      if (s != null && s.isExecuting) {
+        _updateSession(
+          targetId,
+          (sess) => sess.copyWith(
+            isExecuting: false,
+            clearExecutingCommand: true,
+          ),
+        );
+      }
+    });
+
     final channel = _channels[targetId];
     if (channel != null) {
       channel.sink.add(jsonEncode({'type': 'input', 'command': command}));
@@ -260,7 +307,7 @@ class SandboxNotifier extends StateNotifier<SandboxState> {
       if (session != null) {
         Future.delayed(const Duration(milliseconds: 600), () {
           final cmdStart = TerminalOutput(
-            type: 'command_start',
+            type: 'command_output',
             command: command,
             output: _simulateCommandOutput(command, session.sandbox.environment, targetId),
             exitCode: 0,
@@ -302,15 +349,54 @@ class SandboxNotifier extends StateNotifier<SandboxState> {
   void approveCommand(String command, [String? targetSandboxId]) {
     final targetId = targetSandboxId ?? state.activeSandboxId;
     if (targetId == null) return;
-    _channels[targetId]?.sink.add(jsonEncode({'type': 'approve', 'command': command}));
-    _updateSession(targetId, (s) => s.copyWith(clearPending: true));
+
+    _updateSession(
+      targetId,
+      (s) => s.copyWith(
+        clearPending: true,
+        isExecuting: true,
+        executingCommand: command,
+      ),
+    );
+
+    final channel = _channels[targetId];
+    if (channel != null) {
+      channel.sink.add(jsonEncode({'type': 'approve', 'command': command}));
+    } else {
+      // Local fallback simulation for approved command
+      final session = state.sessions[targetId];
+      if (session != null) {
+        Future.delayed(const Duration(milliseconds: 500), () {
+          final approvedOutput = TerminalOutput(
+            type: 'command_output',
+            command: command,
+            output: '[APPROVED] Executing command: $command\n${_simulateCommandOutput(command, session.sandbox.environment, targetId)}',
+            exitCode: 0,
+            durationMs: 45,
+          );
+          _appendOutputToSession(targetId, approvedOutput);
+        });
+      }
+    }
   }
 
   void rejectCommand(String command, [String? targetSandboxId]) {
     final targetId = targetSandboxId ?? state.activeSandboxId;
     if (targetId == null) return;
-    _channels[targetId]?.sink.add(jsonEncode({'type': 'reject', 'command': command}));
-    _updateSession(targetId, (s) => s.copyWith(clearPending: true));
+
+    final channel = _channels[targetId];
+    if (channel != null) {
+      channel.sink.add(jsonEncode({'type': 'reject', 'command': command}));
+    }
+
+    final rejectedOutput = TerminalOutput(
+      type: 'command_rejected',
+      command: command,
+      output: '[REJECTED] Execution cancelled by user.',
+      exitCode: 1,
+      durationMs: 0,
+    );
+    _appendOutputToSession(targetId, rejectedOutput);
   }
 
   void clearTerminal({String? targetId}) {
@@ -403,4 +489,3 @@ final sandboxProvider = StateNotifierProvider<SandboxNotifier, SandboxState>((re
   final client = ref.read(ripClientProvider);
   return SandboxNotifier(client);
 });
-

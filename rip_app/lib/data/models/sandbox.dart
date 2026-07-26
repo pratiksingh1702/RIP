@@ -8,9 +8,7 @@ class Sandbox {
   final String image;
   final String createdAt;
   final String? sessionId;
-
   String get id => sandboxId;
-
   Sandbox({
     required this.sandboxId,
     required this.projectId,
@@ -21,7 +19,6 @@ class Sandbox {
     required this.createdAt,
     this.sessionId,
   });
-
   factory Sandbox.fromJson(Map<String, dynamic> json) => Sandbox(
     sandboxId: json['sandbox_id'] ?? '',
     projectId: json['project_id'] ?? '',
@@ -32,14 +29,12 @@ class Sandbox {
     createdAt: json['created_at'] ?? '',
     sessionId: json['session_id'],
   );
-
   Map<String, dynamic> toJson() => {
     'sandbox_id': sandboxId,
     'project_id': projectId,
     'environment': environment,
   };
 }
-
 class SandboxStatus {
   final String sandboxId;
   final String status;
@@ -47,7 +42,6 @@ class SandboxStatus {
   final int memoryUsedBytes;
   final int memoryLimitBytes;
   final double memoryPercent;
-
   SandboxStatus({
     required this.sandboxId,
     required this.status,
@@ -56,7 +50,6 @@ class SandboxStatus {
     this.memoryLimitBytes = 0,
     this.memoryPercent = 0,
   });
-
   factory SandboxStatus.fromJson(Map<String, dynamic> json) => SandboxStatus(
     sandboxId: json['sandbox_id'] ?? '',
     status: json['status'] ?? 'unknown',
@@ -66,14 +59,12 @@ class SandboxStatus {
     memoryPercent: (json['memory_percent'] ?? 0).toDouble(),
   );
 }
-
 class SandboxTemplate {
   final String id;
   final String name;
   final String description;
   final String icon;
   final String color;
-
   SandboxTemplate({
     required this.id,
     required this.name,
@@ -81,7 +72,6 @@ class SandboxTemplate {
     this.icon = 'terminal',
     this.color = '#64748B',
   });
-
   factory SandboxTemplate.fromJson(Map<String, dynamic> json) => SandboxTemplate(
     id: json['id'] ?? '',
     name: json['name'] ?? '',
@@ -90,7 +80,6 @@ class SandboxTemplate {
     color: json['color'] ?? '#64748B',
   );
 }
-
 class TerminalOutput {
   final String type;
   final String command;
@@ -101,7 +90,6 @@ class TerminalOutput {
   final String? reason;
   final String? risk;
   final bool approvalNeeded;
-
   TerminalOutput({
     required this.type,
     this.command = '',
@@ -113,7 +101,6 @@ class TerminalOutput {
     this.risk,
     this.approvalNeeded = false,
   });
-
   factory TerminalOutput.fromJson(Map<String, dynamic> json) => TerminalOutput(
     type: json['type'] ?? 'output',
     command: json['command'] ?? '',
@@ -125,4 +112,28 @@ class TerminalOutput {
     risk: json['risk'],
     approvalNeeded: json['type'] == 'approval_needed',
   );
+
+  TerminalOutput copyWith({
+    String? type,
+    String? command,
+    String? output,
+    int? exitCode,
+    int? durationMs,
+    String? error,
+    String? reason,
+    String? risk,
+    bool? approvalNeeded,
+  }) {
+    return TerminalOutput(
+      type: type ?? this.type,
+      command: command ?? this.command,
+      output: output ?? this.output,
+      exitCode: exitCode ?? this.exitCode,
+      durationMs: durationMs ?? this.durationMs,
+      error: error ?? this.error,
+      reason: reason ?? this.reason,
+      risk: risk ?? this.risk,
+      approvalNeeded: approvalNeeded ?? this.approvalNeeded,
+    );
+  }
 }

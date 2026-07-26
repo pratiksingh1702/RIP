@@ -124,6 +124,31 @@ async def remote_status(request: Request):
     conn = get_remote_connector().get_connection(user_id)
     return {"connected": conn is not None, "connection": conn}
 
+async def _await_approval(terminal, command: str, reason: str, risk_value: str, websocket: WebSocket, security) -> None:
+    """
+    Runs as a background task so the main receive loop stays free to read
+    the follow-up 'approve'/'reject' message. Previously this logic ran
+    inline in the main loop, which meant the loop was blocked on
+    event.wait() and could never call receive_text() again to actually
+    read the approve/reject message that would set that same event —
+    a self-deadlock that only ever resolved via the 300s timeout.
+    """
+    event = asyncio.Event()
+    _approval_events[terminal.terminal_id] = event
+    try:
+        await websocket.send_json({"type": "approval_needed", "command": security.sanitize_for_logging(command), "reason": reason, "risk": risk_value})
+        try:
+            await asyncio.wait_for(event.wait(), timeout=300.0)
+            approved = getattr(event, "_approved", False)
+            if approved:
+                await terminal.execute_approved_command(command)
+            else:
+                await websocket.send_json({"type": "command_rejected", "command": security.sanitize_for_logging(command)})
+        except asyncio.TimeoutError:
+            await websocket.send_json({"type": "approval_timeout", "command": security.sanitize_for_logging(command)})
+    finally:
+        _approval_events.pop(terminal.terminal_id, None)
+
 @router.websocket("/{sandbox_id}/terminal/{session_id}")
 async def terminal_websocket(websocket: WebSocket, sandbox_id: str, session_id: str):
     await websocket.accept()
@@ -133,6 +158,7 @@ async def terminal_websocket(websocket: WebSocket, sandbox_id: str, session_id: 
     terminal = term_mgr.create_terminal(sandbox_id, session_id, user_id, project_id)
     await terminal.start()
     queue = await terminal.subscribe()
+    pending_approval_tasks: list[asyncio.Task] = []
 
     try:
         consumer = asyncio.create_task(_consume_terminal_output(queue, websocket))
@@ -149,20 +175,13 @@ async def terminal_websocket(websocket: WebSocket, sandbox_id: str, session_id: 
                     await websocket.send_json({"type": "blocked", "reason": reason})
                     continue
                 if security.needs_approval(risk):
-                    event = asyncio.Event()
-                    _approval_events[terminal.terminal_id] = event
-                    await websocket.send_json({"type": "approval_needed", "command": security.sanitize_for_logging(command), "reason": reason, "risk": risk.value})
-                    try:
-                        await asyncio.wait_for(event.wait(), timeout=300.0)
-                        approved = getattr(event, '_approved', False)
-                        if approved:
-                            await terminal.execute_approved_command(command)
-                        else:
-                            await websocket.send_json({"type": "command_rejected", "command": security.sanitize_for_logging(command)})
-                    except asyncio.TimeoutError:
-                        await websocket.send_json({"type": "approval_timeout", "command": security.sanitize_for_logging(command)})
-                    finally:
-                        _approval_events.pop(terminal.terminal_id, None)
+                    # Run the wait in the background instead of blocking
+                    # this loop — otherwise we can never read the
+                    # 'approve' message that would satisfy it.
+                    task = asyncio.create_task(
+                        _await_approval(terminal, command, reason, risk.value, websocket, security)
+                    )
+                    pending_approval_tasks.append(task)
                 else:
                     await terminal.write(command)
             elif msg_type == "approve":
@@ -171,7 +190,6 @@ async def terminal_websocket(websocket: WebSocket, sandbox_id: str, session_id: 
                     evt = _approval_events[terminal.terminal_id]
                     evt._approved = True
                     evt.set()
-                    await terminal.execute_approved_command(cmd)
             elif msg_type == "reject":
                 if terminal.terminal_id in _approval_events:
                     evt = _approval_events[terminal.terminal_id]
@@ -180,6 +198,8 @@ async def terminal_websocket(websocket: WebSocket, sandbox_id: str, session_id: 
     except WebSocketDisconnect: logger.info("Terminal WS disconnected: %s", terminal.terminal_id)
     except Exception as e: logger.error("Terminal WS error: %s", e)
     finally:
+        for t in pending_approval_tasks:
+            t.cancel()
         consumer.cancel()
         terminal.unsubscribe(queue)
         await terminal.stop()

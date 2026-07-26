@@ -340,7 +340,7 @@ class _TerminalViewState extends ConsumerState<TerminalView> {
                     child: TextField(
                       controller: _controller,
                       focusNode: _focusNode,
-                      enabled: state.isConnected && !isExecuting,
+                      enabled: state.isConnected,
                       style: TextStyle(
                         color: state.isConnected ? Colors.white : Colors.white38,
                         fontFamily: 'monospace',
@@ -352,7 +352,7 @@ class _TerminalViewState extends ConsumerState<TerminalView> {
                         focusedBorder: InputBorder.none,
                         filled: false,
                         hintText: isExecuting
-                            ? 'Executing command... Waiting for output...'
+                            ? 'Executing command... Type next command...'
                             : state.isConnected 
                                 ? 'Type bash command or select template preset...' 
                                 : 'Terminal disconnected. Reconnect to send commands...',
@@ -368,7 +368,7 @@ class _TerminalViewState extends ConsumerState<TerminalView> {
                   ),
                   const SizedBox(width: 8),
                   InkWell(
-                    onTap: (state.isConnected && !isExecuting) ? () => _sendCommand() : null,
+                    onTap: state.isConnected ? () => _sendCommand() : null,
                     borderRadius: BorderRadius.circular(12),
                     child: Container(
                       padding: const EdgeInsets.all(10),
