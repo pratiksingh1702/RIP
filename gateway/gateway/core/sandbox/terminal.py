@@ -1,6 +1,6 @@
 ﻿"""Terminal Session — PTY + WebSocket streaming for real-time terminal I/O."""
 from __future__ import annotations
-import asyncio, json, logging, time
+import asyncio, codecs, json, logging, time
 from datetime import UTC, datetime
 from uuid import uuid4
 from gateway.core.sandbox.orchestrator import get_orchestrator
@@ -9,6 +9,7 @@ from gateway.core.events.pipeline import get_pipeline_event_bus
 from gateway.core.workspace.memory import get_workspace_memory
 
 logger = logging.getLogger(__name__)
+END_MARKER = b"\x00__CMD_DONE__\x00"
 
 class TerminalSession:
     def __init__(self, sandbox_id: str, session_id: str, user_id: str, project_id: str):
@@ -83,23 +84,92 @@ class TerminalSession:
 
     async def _run_command(self, command: str, sanitized: str) -> None:
         start_time = time.time()
+
+        try:
+            port = await asyncio.to_thread(self._orchestrator.get_stream_port, self.sandbox_id)
+        except Exception as e:
+            logger.warning("[stream] get_stream_port failed for %s: %r", self.sandbox_id, e)
+            await self._run_command_legacy(command, sanitized, start_time)
+            return
+
+        try:
+            reader, writer = await asyncio.open_connection("127.0.0.1", port)
+        except (ConnectionRefusedError, OSError) as e:
+            logger.warning("[stream] connect to 127.0.0.1:%s failed: %r", port, e)
+            await self._run_command_legacy(command, sanitized, start_time)
+            return
+
+        try:
+            request = json.dumps({"command": command, "workdir": "/workspace"}) + "\n"
+            writer.write(request.encode())
+            await writer.drain()
+
+            decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
+            buffer = b""
+            full_output_parts: list[str] = []
+            exit_code = -1
+
+            while True:
+                chunk = await reader.read(4096)
+                if not chunk:
+                    break
+                buffer += chunk
+
+                if END_MARKER in buffer:
+                    pre, _, footer = buffer.partition(END_MARKER)
+                    if pre:
+                        text = decoder.decode(pre)
+                        full_output_parts.append(text)
+                        await self._broadcast({"type": "stream_chunk", "output": text})
+                    try:
+                        footer_json = json.loads(footer.decode("utf-8", errors="replace").strip())
+                        exit_code = footer_json.get("exit_code", -1)
+                    except Exception:
+                        exit_code = -1
+                    break
+
+                text = decoder.decode(buffer, final=False)
+                if text:
+                    full_output_parts.append(text)
+                    await self._broadcast({"type": "stream_chunk", "output": text})
+                buffer = b""
+
+            writer.close()
+            await writer.wait_closed()
+
+            output = "".join(full_output_parts)
+            duration_ms = int((time.time() - start_time) * 1000)
+
+            await self._broadcast({"type": "command_output", "command": sanitized, "output": output, "exit_code": exit_code, "duration_ms": duration_ms})
+
+            await self._record_completion(sanitized, exit_code, output, duration_ms)
+
+        except Exception as e:
+            await self._broadcast({"type": "command_error", "command": sanitized, "error": str(e)})
+
+    async def _run_command_legacy(self, command: str, sanitized: str, start_time: float) -> None:
+        """Original synchronous exec path — used only if the stream agent is unreachable."""
         try:
             exit_code, output = await asyncio.to_thread(self._orchestrator.exec_command, self.sandbox_id, command)
             duration_ms = int((time.time() - start_time) * 1000)
 
             await self._broadcast({"type": "command_output", "command": sanitized, "output": output, "exit_code": exit_code, "duration_ms": duration_ms})
 
-            record = {"command": sanitized, "exit_code": exit_code, "output_preview": output[:200], "duration_ms": duration_ms, "timestamp": datetime.now(UTC).isoformat()}
-            self._command_history.append(record)
-
-            await self._event_bus.emit(self.session_id, stage="sandbox_command", status="done" if exit_code == 0 else "failed", detail=f"{sanitized[:80]} (exit {exit_code})", source="sandbox", meta={"command": sanitized, "exit_code": exit_code, "duration_ms": duration_ms})
-
-            try:
-                await self._workspace_memory.record(workspace_id=self.project_id, project_id=self.project_id, category="sandbox_command", query=sanitized, summary=f"Exit {exit_code} in {duration_ms}ms", status="completed" if exit_code == 0 else "failed", created_by=self.user_id)
-            except Exception: pass
+            await self._record_completion(sanitized, exit_code, output, duration_ms)
 
         except Exception as e:
             await self._broadcast({"type": "command_error", "command": sanitized, "error": str(e)})
+
+    async def _record_completion(self, sanitized: str, exit_code: int, output: str, duration_ms: int) -> None:
+        record = {"command": sanitized, "exit_code": exit_code, "output_preview": output[:200], "duration_ms": duration_ms, "timestamp": datetime.now(UTC).isoformat()}
+        self._command_history.append(record)
+
+        await self._event_bus.emit(self.session_id, stage="sandbox_command", status="done" if exit_code == 0 else "failed", detail=f"{sanitized[:80]} (exit {exit_code})", source="sandbox", meta={"command": sanitized, "exit_code": exit_code, "duration_ms": duration_ms})
+
+        try:
+            await self._workspace_memory.record(workspace_id=self.project_id, project_id=self.project_id, category="sandbox_command", query=sanitized, summary=f"Exit {exit_code} in {duration_ms}ms", status="completed" if exit_code == 0 else "failed", created_by=self.user_id)
+        except Exception:
+            pass
 
     async def _broadcast(self, message: dict) -> None:
         message["terminal_id"] = self.terminal_id

@@ -1,6 +1,6 @@
 ﻿"""Sandbox Orchestrator — Docker container lifecycle management."""
 from __future__ import annotations
-import asyncio, logging
+import asyncio, io, logging, os, tarfile
 from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
@@ -12,6 +12,9 @@ class SandboxOrchestrator:
     SANDBOX_NETWORK = "rip-sandbox-net"
     SANDBOX_LABEL = "rip-sandbox"
     IDLE_TIMEOUT_SECONDS = 7200
+    STREAM_AGENT_PORT = 7000
+    STREAM_AGENT_CONTAINER_PATH = "/opt/stream_agent.py"
+    _AGENT_SCRIPT_PATH = os.path.join(os.path.dirname(__file__), "stream_agent.py")
 
     def __init__(self):
         self._client = None
@@ -45,19 +48,17 @@ class SandboxOrchestrator:
             image = self._resolve_image(environment)
             container = self.client.containers.run(
                 image=image, name=sandbox_id, detach=True, network=self.SANDBOX_NETWORK,
+                ports={f"{self.STREAM_AGENT_PORT}/tcp": ("127.0.0.1", None)},
                 labels={self.SANDBOX_LABEL: "true", "project_id": project_id, "user_id": user_id, "environment": environment, "created_at": datetime.now(UTC).isoformat()},
                 mem_limit="2g", nano_cpus=2_000_000_000, memswap_limit="3g",
                 environment={"PROJECT_ID": project_id, "USER_ID": user_id, "RIP_SANDBOX": "true"},
                 working_dir="/workspace", tty=True, stdin_open=True,
             )
             container.reload()
-            # Install expect for streaming support (unbuffer)
             try:
-                container.exec_run(cmd=["/bin/bash", "-c", "apt-get update -qq && apt-get install -y -qq expect 2>/dev/null || true"], timeout=30)
-            except Exception:
-                pass
-            except Exception:
-                pass
+                self._deploy_stream_agent(container)
+            except Exception as e:
+                logger.warning("Failed to deploy stream agent: %s", e)
             logger.info("Sandbox created: %s (project=%s, user=%s)", sandbox_id, project_id, user_id)
             return {"sandbox_id": sandbox_id, "project_id": project_id, "user_id": user_id, "environment": environment, "status": container.status, "image": image, "created_at": datetime.now(UTC).isoformat()}
         except Exception as e:
@@ -78,13 +79,6 @@ class SandboxOrchestrator:
         try:
             container = self.client.containers.get(sandbox_id)
             container.reload()
-            # Install expect for streaming support (unbuffer)
-            try:
-                container.exec_run(cmd=["/bin/bash", "-c", "apt-get update -qq && apt-get install -y -qq expect 2>/dev/null || true"], timeout=30)
-            except Exception:
-                pass
-            except Exception:
-                pass
             stats = container.stats(stream=False)
             cpu_delta = stats["cpu_stats"]["cpu_usage"]["total_usage"] - stats["precpu_stats"]["cpu_usage"]["total_usage"]
             system_delta = stats["cpu_stats"]["system_cpu_usage"] - stats["precpu_stats"]["system_cpu_usage"]
@@ -123,6 +117,37 @@ class SandboxOrchestrator:
             return exit_code, output.decode("utf-8", errors="replace")
         except Exception as e:
             return -1, str(e)
+
+    def _deploy_stream_agent(self, container) -> None:
+        """Copy stream_agent.py into the container and launch it in the background."""
+        with open(self._AGENT_SCRIPT_PATH, "rb") as f:
+            agent_src = f.read()
+        tarstream = io.BytesIO()
+        with tarfile.open(fileobj=tarstream, mode="w") as tar:
+            info = tarfile.TarInfo(name="stream_agent.py")
+            info.size = len(agent_src)
+            tar.addfile(info, io.BytesIO(agent_src))
+        tarstream.seek(0)
+        container.put_archive("/opt", tarstream)
+        container.exec_run(
+            cmd=["/bin/bash", "-c", f"nohup python3 {self.STREAM_AGENT_CONTAINER_PATH} > /tmp/agent.log 2>&1 &"],
+            detach=True,
+            environment={"STREAM_AGENT_PORT": str(self.STREAM_AGENT_PORT)},
+        )
+        import time
+        time.sleep(1)  # Give the agent a moment to start
+        logger.info("Stream agent deployed to sandbox %s", container.name)
+
+    def get_stream_port(self, sandbox_id: str) -> int:
+        logger.info("Resolving stream port for sandbox %s", sandbox_id)
+        """Resolve the host-side port Docker mapped to the agent."""
+        container = self.client.containers.get(sandbox_id)
+        container.reload()
+        ports = container.attrs["NetworkSettings"]["Ports"]
+        mapping = ports.get(f"{self.STREAM_AGENT_PORT}/tcp")
+        if not mapping or not mapping[0].get("HostPort"):
+            raise RuntimeError(f"Stream agent port not published for sandbox {sandbox_id}")
+        return int(mapping[0]["HostPort"])
 
     def _ensure_network(self):
         try:
