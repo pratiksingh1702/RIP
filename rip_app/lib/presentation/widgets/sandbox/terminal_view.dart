@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -71,12 +72,15 @@ class _TerminalViewState extends ConsumerState<TerminalView> {
   }
 
   @override
+  @override
   Widget build(BuildContext context) {
     final state = ref.watch(sandboxProvider);
     final outputs = state.terminalOutputs;
     final env = state.sandbox?.environment ?? 'python';
+    final isExecuting = state.isExecuting;
+    final executingCommand = state.executingCommand ?? '';
 
-    if (outputs.isNotEmpty) _scrollToBottom();
+    if (outputs.isNotEmpty || isExecuting) _scrollToBottom();
 
     final presets = _getPresetsForEnv(env);
 
@@ -88,17 +92,40 @@ class _TerminalViewState extends ConsumerState<TerminalView> {
           color: const Color(0xFF0F0F23).withValues(alpha: 0.9),
           child: Row(
             children: [
-              const Icon(Icons.terminal_rounded, size: 16, color: Color(0xFF818CF8)),
+              Icon(
+                isExecuting ? Icons.sync_rounded : Icons.terminal_rounded,
+                size: 16,
+                color: isExecuting ? const Color(0xFF10B981) : const Color(0xFF818CF8),
+              ),
               const SizedBox(width: 8),
               Text(
-                'REAL-TIME TERMINAL OUTPUT (${outputs.length})',
-                style: const TextStyle(
-                  color: Colors.white54,
+                isExecuting
+                    ? 'EXECUTING COMMAND...'
+                    : 'REAL-TIME TERMINAL OUTPUT (${outputs.length})',
+                style: TextStyle(
+                  color: isExecuting ? const Color(0xFF10B981) : Colors.white54,
                   fontSize: 10,
                   fontWeight: FontWeight.bold,
                   letterSpacing: 0.8,
                 ),
               ),
+              if (isExecuting) ...[
+                const SizedBox(width: 6),
+                Container(
+                  width: 6,
+                  height: 6,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: const Color(0xFF10B981),
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFF10B981).withValues(alpha: 0.8),
+                        blurRadius: 4,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
               const Spacer(),
               IconButton(
                 icon: Icon(
@@ -163,7 +190,7 @@ class _TerminalViewState extends ConsumerState<TerminalView> {
         Expanded(
           child: Container(
             color: const Color(0xFF0A0A16),
-            child: outputs.isEmpty
+            child: (outputs.isEmpty && !isExecuting)
                 ? _EmptyTerminalState(
                     env: env,
                     onSelectPreset: (cmd) => _sendCommand(cmd),
@@ -171,9 +198,15 @@ class _TerminalViewState extends ConsumerState<TerminalView> {
                 : ListView.builder(
                     controller: _scrollController,
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                    itemCount: outputs.length + (state.pendingApproval != null ? 1 : 0),
+                    itemCount: outputs.length +
+                        (state.pendingApproval != null ? 1 : 0) +
+                        (isExecuting ? 1 : 0),
                     itemBuilder: (context, index) {
-                      if (state.pendingApproval != null && index == outputs.length) {
+                      if (index < outputs.length) {
+                        return _TerminalLine(output: outputs[index]);
+                      }
+                      final extraIndex = index - outputs.length;
+                      if (state.pendingApproval != null && extraIndex == 0) {
                         return _ApprovalBanner(
                           command: state.pendingApproval!.command,
                           reason: state.pendingApproval!.reason ?? '',
@@ -181,7 +214,7 @@ class _TerminalViewState extends ConsumerState<TerminalView> {
                           onReject: () => ref.read(sandboxProvider.notifier).rejectCommand(state.pendingApproval!.command),
                         );
                       }
-                      return _TerminalLine(output: outputs[index]);
+                      return _TerminalWaitingLoader(command: executingCommand);
                     },
                   ),
           ),
@@ -267,13 +300,17 @@ class _TerminalViewState extends ConsumerState<TerminalView> {
                 color: const Color(0xFF13132B).withValues(alpha: 0.9),
                 border: Border(
                   top: BorderSide(
-                    color: const Color(0xFF6366F1).withValues(alpha: 0.25),
+                    color: isExecuting
+                        ? const Color(0xFF10B981).withValues(alpha: 0.5)
+                        : const Color(0xFF6366F1).withValues(alpha: 0.25),
                     width: 1,
                   ),
                 ),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.42),
+                    color: isExecuting
+                        ? const Color(0xFF10B981).withValues(alpha: 0.15)
+                        : Colors.black.withValues(alpha: 0.42),
                     blurRadius: 16,
                     offset: const Offset(0, -4),
                   ),
@@ -300,58 +337,73 @@ class _TerminalViewState extends ConsumerState<TerminalView> {
                   ),
                   const SizedBox(width: 12),
                   Expanded(
-                      child: TextField(
-                        controller: _controller,
-                        focusNode: _focusNode,
-                        enabled: state.isConnected,
-                        style: TextStyle(
-                          color: state.isConnected ? Colors.white : Colors.white38,
-                          fontFamily: 'monospace',
-                          fontSize: 13,
-                        ),
-                        decoration: InputDecoration(
-                          border: InputBorder.none,
-                          enabledBorder: InputBorder.none,
-                          focusedBorder: InputBorder.none,
-                          filled: false,
-                          hintText: state.isConnected 
-                              ? 'Type bash command or select template preset...' 
-                              : 'Terminal disconnected. Reconnect to send commands...',
-                          hintStyle: const TextStyle(
-                            color: Colors.white38,
-                            fontFamily: 'monospace',
-                            fontSize: 12,
-                          ),
-                          contentPadding: EdgeInsets.zero,
-                        ),
-                        onSubmitted: (_) => _sendCommand(),
+                    child: TextField(
+                      controller: _controller,
+                      focusNode: _focusNode,
+                      enabled: state.isConnected && !isExecuting,
+                      style: TextStyle(
+                        color: state.isConnected ? Colors.white : Colors.white38,
+                        fontFamily: 'monospace',
+                        fontSize: 13,
                       ),
+                      decoration: InputDecoration(
+                        border: InputBorder.none,
+                        enabledBorder: InputBorder.none,
+                        focusedBorder: InputBorder.none,
+                        filled: false,
+                        hintText: isExecuting
+                            ? 'Executing command... Waiting for output...'
+                            : state.isConnected 
+                                ? 'Type bash command or select template preset...' 
+                                : 'Terminal disconnected. Reconnect to send commands...',
+                        hintStyle: TextStyle(
+                          color: isExecuting ? const Color(0xFF818CF8) : Colors.white38,
+                          fontFamily: 'monospace',
+                          fontSize: 12,
+                        ),
+                        contentPadding: EdgeInsets.zero,
+                      ),
+                      onSubmitted: (_) => _sendCommand(),
+                    ),
                   ),
                   const SizedBox(width: 8),
                   InkWell(
-                    onTap: state.isConnected ? () => _sendCommand() : null,
+                    onTap: (state.isConnected && !isExecuting) ? () => _sendCommand() : null,
                     borderRadius: BorderRadius.circular(12),
                     child: Container(
                       padding: const EdgeInsets.all(10),
                       decoration: BoxDecoration(
                         gradient: LinearGradient(
-                          colors: state.isConnected 
-                              ? const [Color(0xFF6366F1), Color(0xFF4F46E5)]
-                              : [const Color(0xFF6366F1).withValues(alpha: 0.3), const Color(0xFF4F46E5).withValues(alpha: 0.3)],
+                          colors: isExecuting
+                              ? const [Color(0xFF10B981), Color(0xFF059669)]
+                              : state.isConnected 
+                                  ? const [Color(0xFF6366F1), Color(0xFF4F46E5)]
+                                  : [const Color(0xFF6366F1).withValues(alpha: 0.3), const Color(0xFF4F46E5).withValues(alpha: 0.3)],
                         ),
                         borderRadius: BorderRadius.circular(12),
-                        boxShadow: state.isConnected ? [
+                        boxShadow: (state.isConnected || isExecuting) ? [
                           BoxShadow(
-                            color: const Color(0xFF6366F1).withValues(alpha: 0.4),
+                            color: isExecuting
+                                ? const Color(0xFF10B981).withValues(alpha: 0.4)
+                                : const Color(0xFF6366F1).withValues(alpha: 0.4),
                             blurRadius: 8,
                           ),
                         ] : [],
                       ),
-                      child: Icon(
-                        Icons.send_rounded,
-                        color: state.isConnected ? Colors.white : Colors.white54,
-                        size: 16,
-                      ),
+                      child: isExecuting
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2.0,
+                                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                              ),
+                            )
+                          : Icon(
+                              Icons.send_rounded,
+                              color: state.isConnected ? Colors.white : Colors.white54,
+                              size: 16,
+                            ),
                     ),
                   ),
                 ],
@@ -675,6 +727,248 @@ class _DevKey extends StatelessWidget {
                 ),
         ),
       ),
+    );
+  }
+}
+
+class _TerminalWaitingLoader extends StatefulWidget {
+  final String command;
+  const _TerminalWaitingLoader({required this.command});
+
+  @override
+  State<_TerminalWaitingLoader> createState() => _TerminalWaitingLoaderState();
+}
+
+class _TerminalWaitingLoaderState extends State<_TerminalWaitingLoader>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _animationController;
+  late Timer _timer;
+  int _elapsedMs = 0;
+  int _spinnerIndex = 0;
+  int _dotCount = 1;
+  bool _cursorVisible = true;
+
+  static const _spinnerFrames = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+
+  @override
+  void initState() {
+    super.initState();
+    _animationController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1200),
+    )..repeat(reverse: true);
+
+    _timer = Timer.periodic(const Duration(milliseconds: 100), (timer) {
+      if (mounted) {
+        setState(() {
+          _elapsedMs += 100;
+          _spinnerIndex = (_spinnerIndex + 1) % _spinnerFrames.length;
+
+          if (_elapsedMs % 300 == 0) {
+            _dotCount = (_dotCount % 4) + 1;
+          }
+          if (_elapsedMs % 400 == 0) {
+            _cursorVisible = !_cursorVisible;
+          }
+        });
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _animationController.dispose();
+    _timer.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final seconds = (_elapsedMs / 1000).toStringAsFixed(1);
+    final spinner = _spinnerFrames[_spinnerIndex];
+    final dotsText = '.' * _dotCount;
+
+    return AnimatedBuilder(
+      animation: _animationController,
+      builder: (context, child) {
+        final glowOpacity = 0.25 + (_animationController.value * 0.35);
+        final borderOpacity = 0.4 + (_animationController.value * 0.45);
+
+        return Container(
+          margin: const EdgeInsets.only(bottom: 12, top: 4),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          decoration: BoxDecoration(
+            color: const Color(0xFF13132C).withValues(alpha: 0.95),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: const Color(0xFF6366F1).withValues(alpha: borderOpacity),
+              width: 1.2,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFF6366F1).withValues(alpha: glowOpacity),
+                blurRadius: 14,
+                spreadRadius: 1,
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Top Row: Spinner, Command, Timer
+              Row(
+                children: [
+                  Text(
+                    spinner,
+                    style: const TextStyle(
+                      color: Color(0xFF818CF8),
+                      fontFamily: 'monospace',
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  const Text(
+                    '\$ ',
+                    style: TextStyle(
+                      color: Color(0xFF10B981),
+                      fontFamily: 'monospace',
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12,
+                    ),
+                  ),
+                  Expanded(
+                    child: Text(
+                      widget.command.isNotEmpty ? widget.command : 'executing command...',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontFamily: 'monospace',
+                        fontWeight: FontWeight.w600,
+                        fontSize: 12,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF10B981).withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: const Color(0xFF10B981).withValues(alpha: 0.4),
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 6,
+                          height: 6,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: const Color(0xFF10B981),
+                            boxShadow: [
+                              BoxShadow(
+                                color: const Color(0xFF10B981).withValues(alpha: 0.8),
+                                blurRadius: 4,
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 5),
+                        Text(
+                          '${seconds}s',
+                          style: const TextStyle(
+                            color: Color(0xFF10B981),
+                            fontFamily: 'monospace',
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              
+              // Bottom Row: Reactive Typing Dots & Pulsing Dot Wave
+              Row(
+                children: [
+                  // Staggered Reactive Dots Wave
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: List.generate(3, (index) {
+                      final phase = (_elapsedMs / 300 + index * 0.33) % 1.0;
+                      final scale = 0.6 + (0.4 * (1.0 - (phase - 0.5).abs() * 2));
+                      final opacity = 0.4 + (0.6 * (1.0 - (phase - 0.5).abs() * 2));
+
+                      return Container(
+                        margin: const EdgeInsets.only(right: 4),
+                        width: 7 * scale,
+                        height: 7 * scale,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: const Color(0xFF818CF8).withValues(alpha: opacity),
+                          boxShadow: [
+                            BoxShadow(
+                              color: const Color(0xFF818CF8).withValues(alpha: opacity * 0.7),
+                              blurRadius: 4,
+                            ),
+                          ],
+                        ),
+                      );
+                    }),
+                  ),
+                  const SizedBox(width: 10),
+
+                  // Typing reactive dots text with blinking terminal block cursor
+                  Expanded(
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Flexible(
+                          child: Text(
+                            'Executing in container$dotsText',
+                            style: const TextStyle(
+                              color: Color(0xFFC7D2FE),
+                              fontFamily: 'monospace',
+                              fontSize: 11,
+                              fontWeight: FontWeight.w500,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        AnimatedOpacity(
+                          duration: const Duration(milliseconds: 150),
+                          opacity: _cursorVisible ? 1.0 : 0.0,
+                          child: Container(
+                            margin: const EdgeInsets.only(left: 3),
+                            width: 6,
+                            height: 12,
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF10B981),
+                              borderRadius: BorderRadius.circular(1),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: const Color(0xFF10B981).withValues(alpha: 0.8),
+                                  blurRadius: 4,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }

@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:web_socket_channel/io.dart';
@@ -12,17 +12,26 @@ class SandboxSession {
   final List<TerminalOutput> terminalOutputs;
   final SandboxStatus? status;
   final TerminalOutput? pendingApproval;
-  final bool isConnected;
+  final bool? _isConnected;
+  final bool? _isExecuting;
+  final String? executingCommand;
   final DateTime createdAt;
+
+  bool get isConnected => _isConnected ?? false;
+  bool get isExecuting => _isExecuting ?? false;
 
   SandboxSession({
     required this.sandbox,
     this.terminalOutputs = const [],
     this.status,
     this.pendingApproval,
-    this.isConnected = false,
+    bool isConnected = false,
+    bool isExecuting = false,
+    this.executingCommand,
     DateTime? createdAt,
-  }) : createdAt = createdAt ?? DateTime.now();
+  })  : _isConnected = isConnected,
+        _isExecuting = isExecuting,
+        createdAt = createdAt ?? DateTime.now();
 
   SandboxSession copyWith({
     Sandbox? sandbox,
@@ -30,7 +39,10 @@ class SandboxSession {
     SandboxStatus? status,
     TerminalOutput? pendingApproval,
     bool? isConnected,
+    bool? isExecuting,
+    String? executingCommand,
     bool clearPending = false,
+    bool clearExecutingCommand = false,
   }) {
     return SandboxSession(
       sandbox: sandbox ?? this.sandbox,
@@ -38,6 +50,8 @@ class SandboxSession {
       status: status ?? this.status,
       pendingApproval: clearPending ? null : (pendingApproval ?? this.pendingApproval),
       isConnected: isConnected ?? this.isConnected,
+      isExecuting: isExecuting ?? this.isExecuting,
+      executingCommand: clearExecutingCommand ? null : (executingCommand ?? this.executingCommand),
       createdAt: createdAt,
     );
   }
@@ -197,11 +211,22 @@ class SandboxNotifier extends StateNotifier<SandboxState> {
     final session = state.sessions[sandboxId];
     if (session == null) return;
     final updatedOutputs = [...session.terminalOutputs, msg];
+
+    // Command output arrives or approval needed means command execution message returned
+    final isDone = msg.type == 'command_output' || 
+                   msg.type == 'command_error' || 
+                   msg.type == 'command_blocked' || 
+                   msg.type == 'command_rejected' ||
+                   msg.type == 'command_start' ||
+                   msg.approvalNeeded;
+
     _updateSession(
       sandboxId,
       (s) => s.copyWith(
         terminalOutputs: updatedOutputs,
         pendingApproval: msg.approvalNeeded ? msg : null,
+        isExecuting: isDone ? false : s.isExecuting,
+        clearExecutingCommand: isDone,
       ),
     );
   }
@@ -218,21 +243,31 @@ class SandboxNotifier extends StateNotifier<SandboxState> {
     final targetId = targetSandboxId ?? state.activeSandboxId;
     if (targetId == null) return;
 
+    _updateSession(
+      targetId,
+      (s) => s.copyWith(
+        isExecuting: true,
+        executingCommand: command,
+      ),
+    );
+
     final channel = _channels[targetId];
     if (channel != null) {
       channel.sink.add(jsonEncode({'type': 'input', 'command': command}));
     } else {
-      // Local execution feedback simulation for immediate user response
+      // Local execution feedback simulation with realistic delay for waiting UI feedback
       final session = state.sessions[targetId];
       if (session != null) {
-        final cmdStart = TerminalOutput(
-          type: 'command_start',
-          command: command,
-          output: _simulateCommandOutput(command, session.sandbox.environment, targetId),
-          exitCode: 0,
-          durationMs: 45,
-        );
-        _appendOutputToSession(targetId, cmdStart);
+        Future.delayed(const Duration(milliseconds: 600), () {
+          final cmdStart = TerminalOutput(
+            type: 'command_start',
+            command: command,
+            output: _simulateCommandOutput(command, session.sandbox.environment, targetId),
+            exitCode: 0,
+            durationMs: 45,
+          );
+          _appendOutputToSession(targetId, cmdStart);
+        });
       }
     }
   }
@@ -245,7 +280,7 @@ class SandboxNotifier extends StateNotifier<SandboxState> {
       return '[python] Execution finished (exit code 0)';
     } else if (lower.startsWith('node') || lower.startsWith('npm')) {
       if (lower.contains('-v') || lower.contains('--version')) return 'v20.11.1';
-      if (lower.contains('list')) return 'â”œâ”€â”€ express@4.18.2\nâ”œâ”€â”€ typescript@5.3.3\nâ””â”€â”€ vite@5.1.0';
+      if (lower.contains('list')) return '├── express@4.18.2\n├── typescript@5.3.3\n└── vite@5.1.0';
       return '[node] Script completed successfully.';
     } else if (lower.startsWith('go')) {
       return 'go version go1.22.1 linux/amd64';
@@ -281,7 +316,15 @@ class SandboxNotifier extends StateNotifier<SandboxState> {
   void clearTerminal({String? targetId}) {
     final id = targetId ?? state.activeSandboxId;
     if (id == null) return;
-    _updateSession(id, (s) => s.copyWith(terminalOutputs: [], clearPending: true));
+    _updateSession(
+      id,
+      (s) => s.copyWith(
+        terminalOutputs: [],
+        clearPending: true,
+        isExecuting: false,
+        clearExecutingCommand: true,
+      ),
+    );
   }
 
   Future<void> getStatus(String sandboxId) async {
@@ -335,7 +378,9 @@ class SandboxState {
   SandboxStatus? get status => activeSession?.status;
   List<TerminalOutput> get terminalOutputs => activeSession?.terminalOutputs ?? const [];
   TerminalOutput? get pendingApproval => activeSession?.pendingApproval;
-  bool get isConnected => activeSession?.isConnected ?? false;
+  bool get isConnected => (activeSession?.isConnected) == true;
+  bool get isExecuting => (activeSession?.isExecuting) == true;
+  String? get executingCommand => activeSession?.executingCommand;
   List<SandboxSession> get activeSandboxes => sessions.values.toList();
 
   SandboxState copyWith({

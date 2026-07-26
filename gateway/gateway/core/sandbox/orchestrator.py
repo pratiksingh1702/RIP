@@ -51,6 +51,13 @@ class SandboxOrchestrator:
                 working_dir="/workspace", tty=True, stdin_open=True,
             )
             container.reload()
+            # Install expect for streaming support (unbuffer)
+            try:
+                container.exec_run(cmd=["/bin/bash", "-c", "apt-get update -qq && apt-get install -y -qq expect 2>/dev/null || true"], timeout=30)
+            except Exception:
+                pass
+            except Exception:
+                pass
             logger.info("Sandbox created: %s (project=%s, user=%s)", sandbox_id, project_id, user_id)
             return {"sandbox_id": sandbox_id, "project_id": project_id, "user_id": user_id, "environment": environment, "status": container.status, "image": image, "created_at": datetime.now(UTC).isoformat()}
         except Exception as e:
@@ -71,6 +78,13 @@ class SandboxOrchestrator:
         try:
             container = self.client.containers.get(sandbox_id)
             container.reload()
+            # Install expect for streaming support (unbuffer)
+            try:
+                container.exec_run(cmd=["/bin/bash", "-c", "apt-get update -qq && apt-get install -y -qq expect 2>/dev/null || true"], timeout=30)
+            except Exception:
+                pass
+            except Exception:
+                pass
             stats = container.stats(stream=False)
             cpu_delta = stats["cpu_stats"]["cpu_usage"]["total_usage"] - stats["precpu_stats"]["cpu_usage"]["total_usage"]
             system_delta = stats["cpu_stats"]["system_cpu_usage"] - stats["precpu_stats"]["system_cpu_usage"]
