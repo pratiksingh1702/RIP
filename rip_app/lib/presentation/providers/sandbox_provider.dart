@@ -61,6 +61,7 @@ class SandboxNotifier extends StateNotifier<SandboxState> {
   final RipClient _client;
   final Map<String, WebSocketChannel> _channels = {};
   final Map<String, StreamSubscription> _subscriptions = {};
+  final Map<String, Timer> _inactivityTimers = {};
 
   SandboxNotifier(this._client) : super(SandboxState.initial());
 
@@ -170,6 +171,61 @@ class SandboxNotifier extends StateNotifier<SandboxState> {
   void switchActiveSandbox(String sandboxId) {
     if (state.sessions.containsKey(sandboxId)) {
       state = state.copyWith(activeSandboxId: sandboxId);
+    }
+  }
+
+  Future<bool> restartSandbox([String? sandboxId]) async {
+    final targetId = sandboxId ?? state.activeSandboxId;
+    if (targetId == null) return false;
+
+    _appendOutputToSession(
+      targetId,
+      TerminalOutput(
+        type: 'system',
+        command: '',
+        output: '=== Restarting Container ($targetId)... ===',
+        exitCode: 0,
+        durationMs: 0,
+      ),
+    );
+
+    try {
+      await _client.restartSandbox(targetId);
+      final session = state.sessions[targetId];
+      if (session != null) {
+        final sessionId = session.sandbox.sessionId ?? targetId;
+        connectTerminal(targetId, sessionId, _client.serverUrl, _client.apiKey ?? '');
+      }
+      _appendOutputToSession(
+        targetId,
+        TerminalOutput(
+          type: 'system',
+          command: '',
+          output: '=== Docker Container Restarted Successfully. Terminal Ready. ===',
+          exitCode: 0,
+          durationMs: 0,
+        ),
+      );
+      _updateSession(
+        targetId,
+        (s) => s.copyWith(
+          isExecuting: false,
+          clearExecutingCommand: true,
+        ),
+      );
+      return true;
+    } catch (e) {
+      _appendOutputToSession(
+        targetId,
+        TerminalOutput(
+          type: 'system',
+          command: '',
+          output: '=== Container Restart Failed: $e ===',
+          exitCode: 1,
+          durationMs: 0,
+        ),
+      );
+      return false;
     }
   }
 
@@ -310,12 +366,36 @@ class SandboxNotifier extends StateNotifier<SandboxState> {
       updatedOutputs = [...outputs, msg];
     }
 
-    // Command output arrives or approval needed means command execution message returned
+    // Check if the stream chunk ends with a shell prompt (e.g. root@container:/workspace# or $)
+    final trimmedOutput = msg.output.trimRight();
+    final isPromptDetected = msg.type == 'stream_chunk' &&
+        (RegExp(r'([\$\#\>]\s*$|[\$\#\>]$|\/workspace[\$\#]|\:\~\#|\:\~\$)').hasMatch(trimmedOutput) ||
+         trimmedOutput.endsWith('#') || trimmedOutput.endsWith('\$') || trimmedOutput.endsWith('>'));
+
+    // Command output arrives, approval needed, or shell prompt detected means command execution completed
     final isDone = msg.type == 'command_output' ||
                    msg.type == 'command_error' ||
                    msg.type == 'command_blocked' ||
                    msg.type == 'command_rejected' ||
-                   msg.approvalNeeded;
+                   msg.approvalNeeded ||
+                   isPromptDetected;
+
+    if (isDone) {
+      _inactivityTimers[sandboxId]?.cancel();
+      _inactivityTimers.remove(sandboxId);
+    } else {
+      // Inactivity fallback: reset execution state if no output stream chunks arrive for 1.2s
+      _inactivityTimers[sandboxId]?.cancel();
+      _inactivityTimers[sandboxId] = Timer(const Duration(milliseconds: 1200), () {
+        _updateSession(
+          sandboxId,
+          (s) => s.copyWith(
+            isExecuting: false,
+            clearExecutingCommand: true,
+          ),
+        );
+      });
+    }
 
     _updateSession(
       sandboxId,
@@ -351,6 +431,18 @@ class SandboxNotifier extends StateNotifier<SandboxState> {
           executingCommand: command,
         ),
       );
+
+      // Safety timeout: auto-clear execution state after 10 seconds if no response at all
+      _inactivityTimers[targetId]?.cancel();
+      _inactivityTimers[targetId] = Timer(const Duration(seconds: 10), () {
+        _updateSession(
+          targetId,
+          (s) => s.copyWith(
+            isExecuting: false,
+            clearExecutingCommand: true,
+          ),
+        );
+      });
     }
 
     final channel = _channels[targetId];

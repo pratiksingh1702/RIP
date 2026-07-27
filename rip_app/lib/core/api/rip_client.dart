@@ -1305,6 +1305,11 @@ class RipClient {
     return response.data as Map<String, dynamic>;
   }
 
+  Future<Map<String, dynamic>> restartSandbox(String sandboxId) async {
+    final response = await _dio.post('/gateway/api/sandbox/$sandboxId/restart');
+    return response.data as Map<String, dynamic>;
+  }
+
   Future<Map<String, dynamic>> destroySandbox(String sandboxId) async {
     final response = await _dio.delete('/gateway/api/sandbox/$sandboxId');
     return response.data as Map<String, dynamic>;

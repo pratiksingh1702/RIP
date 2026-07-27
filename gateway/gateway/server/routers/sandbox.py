@@ -59,6 +59,11 @@ async def start_sandbox(sandbox_id: str):
     ok = await get_orchestrator().start_sandbox(sandbox_id)
     return {"sandbox_id": sandbox_id, "started": ok}
 
+@router.post("/{sandbox_id}/restart")
+async def restart_sandbox(sandbox_id: str):
+    ok = await get_orchestrator().restart_sandbox(sandbox_id)
+    return {"sandbox_id": sandbox_id, "restarted": ok}
+
 @router.delete("/{sandbox_id}")
 async def destroy_sandbox(sandbox_id: str):
     ok = await get_orchestrator().destroy_sandbox(sandbox_id)

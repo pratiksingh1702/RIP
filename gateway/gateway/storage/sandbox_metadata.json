@@ -1,6 +1,14 @@
 {
-  "sandbox-default-c07290e6": {
-    "name": "Aider / Codex Sandbox",
-    "description": "Upgraded with persistent terminal support!"
-  }
+    "sandbox-default-0f78c5a2":  {
+                                     "name":  "Python (Aider)",
+                                     "description":  "Sandbox equipped with Aider"
+                                 },
+    "sandbox-default-c07290e6":  {
+                                     "name":  "Python (Aider)",
+                                     "description":  "Sandbox equipped with Aider"
+                                 },
+    "sandbox-default-ed48c925":  {
+                                     "name":  "Python (Codex)",
+                                     "description":  "Sandbox equipped with Codex"
+                                 }
 }

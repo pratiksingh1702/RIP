@@ -138,6 +138,20 @@ class SandboxOrchestrator:
     async def start_sandbox(self, sandbox_id: str) -> bool:
         try: self.client.containers.get(sandbox_id).start(); return True
         except Exception: return False
+
+    async def restart_sandbox(self, sandbox_id: str) -> bool:
+        try:
+            container = self.client.containers.get(sandbox_id)
+            container.restart(timeout=10)
+            try:
+                self._deploy_stream_agent(container)
+            except Exception as e:
+                logger.warning("Failed to deploy stream agent on restart: %s", e)
+            logger.info("Sandbox restarted: %s", sandbox_id)
+            return True
+        except Exception as e:
+            logger.error("Failed to restart sandbox %s: %s", sandbox_id, e)
+            return False
         
     async def update_sandbox_metadata(self, sandbox_id: str, name: str | None = None, description: str | None = None) -> bool:
         try:
@@ -175,6 +189,17 @@ class SandboxOrchestrator:
             detach=True,
             environment={"STREAM_AGENT_PORT": str(self.STREAM_AGENT_PORT)},
         )
+        
+        # Auto-symlink CLI tools to /usr/local/bin so they work without full paths in non-login shells
+        container.exec_run(
+            cmd=["/bin/bash", "-c", """
+                find / -maxdepth 5 -name "codex" -o -name "aider" 2>/dev/null | while read tool; do
+                    ln -sf "$tool" /usr/local/bin/$(basename "$tool") 2>/dev/null
+                done
+            """],
+            detach=True
+        )
+
         import time
         time.sleep(1)  # Give the agent a moment to start
         logger.info("Stream agent deployed to sandbox %s", container.name)
@@ -184,6 +209,13 @@ class SandboxOrchestrator:
         """Resolve the host-side port Docker mapped to the agent."""
         container = self.client.containers.get(sandbox_id)
         container.reload()
+        
+        # Check if the stream agent is actually running; if not, deploy/start it
+        res = container.exec_run("pgrep -f stream_agent.py")
+        if res.exit_code != 0:
+            logger.info("Stream agent not running in %s, deploying now...", sandbox_id)
+            self._deploy_stream_agent(container)
+            
         ports = container.attrs["NetworkSettings"]["Ports"]
         mapping = ports.get(f"{self.STREAM_AGENT_PORT}/tcp")
         if not mapping or not mapping[0].get("HostPort"):

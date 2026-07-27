@@ -239,16 +239,72 @@ class _SandboxScreenState extends ConsumerState<SandboxScreen> {
     );
   }
 
+  void _confirmRestartContainer(BuildContext context, WidgetRef ref, SandboxSession? activeSession) {
+    if (activeSession == null) return;
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Row(
+          children: [
+            Icon(Icons.restart_alt_rounded, color: Color(0xFF6366F1)),
+            SizedBox(width: 8),
+            Text('Restart Container?'),
+          ],
+        ),
+        content: Text('Reboot container "${activeSession.sandbox.name ?? activeSession.sandbox.id}" and reconnect terminal streaming?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF6366F1),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            onPressed: () {
+              Navigator.pop(ctx);
+              ref.read(sandboxProvider.notifier).restartSandbox(activeSession.sandbox.id);
+            },
+            child: const Text('Restart', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _copyLogs(BuildContext context, List<TerminalOutput> outputs) {
+    final fullLog = outputs.map((o) => '${o.type}: ${o.command} ${o.output}').join('\n');
+    Clipboard.setData(ClipboardData(text: fullLog));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Row(
+          children: [
+            Icon(Icons.check_circle_outline, color: Color(0xFF10B981), size: 18),
+            SizedBox(width: 8),
+            Text('Terminal logs copied to clipboard'),
+          ],
+        ),
+        behavior: SnackBarBehavior.floating,
+        backgroundColor: const Color(0xFF1E1E3F),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(sandboxProvider);
     final activeSessions = state.activeSandboxes;
     final activeSession = state.activeSession;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bgColor = isDark ? Colors.black : Theme.of(context).scaffoldBackgroundColor;
 
     return Scaffold(
       drawer: const AppDrawer(),
       drawerEdgeDragWidth: MediaQuery.sizeOf(context).width * 0.4,
-      backgroundColor: const Color(0xFF0A0A16),
+      backgroundColor: bgColor,
       body: Builder(
         builder: (context) {
           return GestureDetector(
@@ -262,10 +318,7 @@ class _SandboxScreenState extends ConsumerState<SandboxScreen> {
               children: [
                 // Terminal Stream Area
                 Positioned.fill(
-                  child: Padding(
-                    padding: EdgeInsets.only(top: MediaQuery.paddingOf(context).top + 64),
-                    child: const TerminalView(),
-                  ),
+                  child: const TerminalView(),
                 ),
 
                 // Floating Glassmorphic Top Bar
@@ -284,6 +337,65 @@ class _SandboxScreenState extends ConsumerState<SandboxScreen> {
                     onEditSandboxTap: activeSession != null ? () => _openEditSandboxModal(activeSession) : null,
                     onFilesTap: _openFilesModal,
                     onInfoTap: () => _showCornerInfoDialog(context, activeSession, activeSessions.length),
+                  ),
+                ),
+                
+                // Floating Merged Action Icons (Copy & Clear)
+                Positioned(
+                  top: MediaQuery.paddingOf(context).top + 64, // just below the floating header
+                  right: 16,
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(16),
+                    child: BackdropFilter(
+                      filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+                      child: Container(
+                        height: 42,
+                        padding: const EdgeInsets.symmetric(horizontal: 4),
+                        decoration: BoxDecoration(
+                          color: isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.05),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                            color: isDark ? Colors.white.withValues(alpha: 0.12) : Colors.black.withValues(alpha: 0.1),
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              icon: Icon(Icons.copy_rounded, color: isDark ? Colors.white : Colors.black87, size: 18),
+                              tooltip: 'Copy Logs',
+                              onPressed: () => _copyLogs(context, state.terminalOutputs),
+                              constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
+                              padding: EdgeInsets.zero,
+                            ),
+                            Container(
+                              width: 1,
+                              height: 16,
+                              color: isDark ? Colors.white12 : Colors.black12,
+                            ),
+                            IconButton(
+                              icon: Icon(Icons.refresh_rounded, color: isDark ? Colors.white : Colors.black87, size: 18),
+                              tooltip: 'Restart Container',
+                              onPressed: () => _confirmRestartContainer(context, ref, activeSession),
+                              constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
+                              padding: EdgeInsets.zero,
+                            ),
+                            Container(
+                              width: 1,
+                              height: 16,
+                              color: isDark ? Colors.white12 : Colors.black12,
+                            ),
+                            IconButton(
+                              icon: Icon(Icons.delete_outline_rounded, color: isDark ? Colors.white : Colors.black87, size: 18),
+                              tooltip: 'Clear Terminal',
+                              onPressed: () => ref.read(sandboxProvider.notifier).clearTerminal(),
+                              constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
+                              padding: EdgeInsets.zero,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
                   ),
                 ),
               ],
@@ -321,11 +433,11 @@ class _GlassIconButton extends StatelessWidget {
               width: 42,
               height: 42,
               decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.08),
+                color: Theme.of(context).brightness == Brightness.dark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.05),
                 borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+                border: Border.all(color: Theme.of(context).brightness == Brightness.dark ? Colors.white.withValues(alpha: 0.12) : Colors.black.withValues(alpha: 0.1)),
               ),
-              child: Icon(icon, color: Colors.white, size: 20),
+              child: Icon(icon, color: Theme.of(context).brightness == Brightness.dark ? Colors.white : Colors.black87, size: 20),
             ),
           ),
         ),
@@ -359,18 +471,6 @@ class _FloatingSandboxHeader extends ConsumerWidget {
 
     return Container(
       padding: EdgeInsets.fromLTRB(14, top + 8, 14, 8),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [
-            const Color(0xFF0A0A16).withValues(alpha: 0.95),
-            const Color(0xFF0A0A16).withValues(alpha: 0.6),
-            Colors.transparent,
-          ],
-          stops: const [0.0, 0.7, 1.0],
-        ),
-      ),
       child: Row(
         children: [
           _GlassIconButton(
@@ -409,9 +509,9 @@ class _FloatingSandboxHeader extends ConsumerWidget {
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                     height: 42,
                     decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.08),
+                      color: Theme.of(context).brightness == Brightness.dark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.05),
                       borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+                      border: Border.all(color: Theme.of(context).brightness == Brightness.dark ? Colors.white.withValues(alpha: 0.12) : Colors.black.withValues(alpha: 0.1)),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
@@ -438,8 +538,8 @@ class _FloatingSandboxHeader extends ConsumerWidget {
                         const SizedBox(width: 6),
                         Text(
                           '${activeSessions.length} Active',
-                          style: const TextStyle(
-                            color: Colors.white70,
+                          style: TextStyle(
+                            color: Theme.of(context).brightness == Brightness.dark ? Colors.white70 : Colors.black87,
                             fontSize: 11,
                             fontWeight: FontWeight.bold,
                             fontFamily: 'monospace',
@@ -478,14 +578,18 @@ class _HeaderSandboxDropdownSelector extends ConsumerWidget {
         ? activeSession!.sandbox.name! 
         : activeSession?.sandbox.environment.toUpperCase() ?? 'NO SANDBOX';
 
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return PopupMenuButton<String>(
       tooltip: 'Switch Sandbox Environment',
       offset: const Offset(0, 48),
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(18),
-        side: BorderSide(color: Colors.white.withValues(alpha: 0.15)),
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(
+          color: isDark ? Colors.white.withValues(alpha: 0.15) : Colors.black.withValues(alpha: 0.1),
+        ),
       ),
-      color: const Color(0xFF13132B).withValues(alpha: 0.96),
+      color: isDark ? const Color(0xFF13132B).withValues(alpha: 0.96) : Colors.white.withValues(alpha: 0.96),
       elevation: 8,
       onSelected: (val) {
         HapticFeedback.selectionClick();
@@ -493,6 +597,10 @@ class _HeaderSandboxDropdownSelector extends ConsumerWidget {
           onNewSandboxTap();
         } else if (val == '__edit__') {
           onEditSandboxTap?.call();
+        } else if (val == '__restart__') {
+          if (activeSession != null) {
+            ref.read(sandboxProvider.notifier).restartSandbox(activeSession!.sandbox.id);
+          }
         } else {
           ref.read(sandboxProvider.notifier).switchActiveSandbox(val);
         }
@@ -501,19 +609,19 @@ class _HeaderSandboxDropdownSelector extends ConsumerWidget {
         final items = <PopupMenuEntry<String>>[];
 
         items.add(
-          const PopupMenuItem<String>(
+          PopupMenuItem<String>(
             enabled: false,
             child: Row(
               children: [
-                Icon(Icons.terminal_rounded, size: 16, color: Color(0xFF818CF8)),
-                SizedBox(width: 8),
+                const Icon(Icons.terminal_rounded, size: 16, color: Color(0xFF818CF8)),
+                const SizedBox(width: 8),
                 Text(
                   'ACTIVE SANDBOXES',
                   style: TextStyle(
                     fontSize: 10,
                     fontWeight: FontWeight.bold,
                     letterSpacing: 0.8,
-                    color: Colors.white54,
+                    color: isDark ? Colors.white54 : Colors.black54,
                   ),
                 ),
               ],
@@ -524,9 +632,15 @@ class _HeaderSandboxDropdownSelector extends ConsumerWidget {
 
         if (activeSessions.isEmpty) {
           items.add(
-            const PopupMenuItem<String>(
+            PopupMenuItem<String>(
               enabled: false,
-              child: Text('No active sandboxes', style: TextStyle(color: Colors.white38, fontSize: 12)),
+              child: Text(
+                'No active sandboxes',
+                style: TextStyle(
+                  color: isDark ? Colors.white38 : Colors.black38,
+                  fontSize: 12,
+                ),
+              ),
             ),
           );
         } else {
@@ -546,7 +660,9 @@ class _HeaderSandboxDropdownSelector extends ConsumerWidget {
                       height: 6,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        color: isCurrent ? const Color(0xFF10B981) : Colors.white38,
+                        color: isCurrent
+                            ? const Color(0xFF10B981)
+                            : (isDark ? Colors.white38 : Colors.black26),
                       ),
                     ),
                     const SizedBox(width: 10),
@@ -554,7 +670,9 @@ class _HeaderSandboxDropdownSelector extends ConsumerWidget {
                       child: Text(
                         envName,
                         style: TextStyle(
-                          color: isCurrent ? Colors.white : Colors.white70,
+                          color: isCurrent
+                              ? (isDark ? Colors.white : Colors.black87)
+                              : (isDark ? Colors.white70 : Colors.black54),
                           fontSize: 13,
                           fontWeight: isCurrent ? FontWeight.bold : FontWeight.normal,
                           fontFamily: 'monospace',
@@ -573,16 +691,35 @@ class _HeaderSandboxDropdownSelector extends ConsumerWidget {
         items.add(const PopupMenuDivider());
         if (activeSession != null) {
           items.add(
-            const PopupMenuItem<String>(
+            PopupMenuItem<String>(
               value: '__edit__',
               child: Row(
                 children: [
-                  Icon(Icons.edit_rounded, color: Colors.white54, size: 18),
-                  SizedBox(width: 8),
+                  Icon(Icons.edit_rounded, color: isDark ? Colors.white54 : Colors.black54, size: 18),
+                  const SizedBox(width: 8),
                   Text(
                     'Edit Current Sandbox...',
                     style: TextStyle(
-                      color: Colors.white70,
+                      color: isDark ? Colors.white70 : Colors.black87,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+          items.add(
+            PopupMenuItem<String>(
+              value: '__restart__',
+              child: Row(
+                children: [
+                  Icon(Icons.restart_alt_rounded, color: isDark ? Colors.white54 : Colors.black54, size: 18),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Restart Container...',
+                    style: TextStyle(
+                      color: isDark ? Colors.white70 : Colors.black87,
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
                     ),
@@ -593,16 +730,16 @@ class _HeaderSandboxDropdownSelector extends ConsumerWidget {
           );
         }
         items.add(
-          const PopupMenuItem<String>(
+          PopupMenuItem<String>(
             value: '__new__',
             child: Row(
               children: [
-                Icon(Icons.add_rounded, color: Color(0xFF818CF8), size: 18),
-                SizedBox(width: 8),
+                const Icon(Icons.add_rounded, color: Color(0xFF818CF8), size: 18),
+                const SizedBox(width: 8),
                 Text(
                   'Create New Sandbox...',
                   style: TextStyle(
-                    color: Color(0xFF818CF8),
+                    color: isDark ? const Color(0xFF818CF8) : const Color(0xFF4F46E5),
                     fontSize: 12,
                     fontWeight: FontWeight.bold,
                   ),
@@ -614,49 +751,54 @@ class _HeaderSandboxDropdownSelector extends ConsumerWidget {
 
         return items;
       },
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(20),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-          child: Container(
-            height: 42,
-            padding: const EdgeInsets.symmetric(horizontal: 14),
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.08),
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(
-                color: Colors.white.withValues(alpha: 0.15),
-                width: 1,
-              ),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Icon(Icons.terminal_rounded, size: 16, color: Color(0xFF10B981)),
-                const SizedBox(width: 8),
-                Flexible(
-                  child: Text(
-                    currentEnv,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 13,
-                      fontWeight: FontWeight.bold,
-                      fontFamily: 'monospace',
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+      child: Builder(
+        builder: (context) {
+          final isDark = Theme.of(context).brightness == Brightness.dark;
+          return ClipRRect(
+            borderRadius: BorderRadius.circular(16),
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+              child: Container(
+                height: 42,
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                decoration: BoxDecoration(
+                  color: isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.05),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: isDark ? Colors.white.withValues(alpha: 0.12) : Colors.black.withValues(alpha: 0.1),
+                    width: 1,
                   ),
                 ),
-                const SizedBox(width: 6),
-                const Icon(
-                  Icons.keyboard_arrow_down_rounded,
-                  color: Colors.white70,
-                  size: 18,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.terminal_rounded, size: 16, color: Color(0xFF10B981)),
+                    const SizedBox(width: 8),
+                    Flexible(
+                      child: Text(
+                        currentEnv,
+                        style: TextStyle(
+                          color: isDark ? Colors.white : Colors.black87,
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                          fontFamily: 'monospace',
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Icon(
+                      Icons.keyboard_arrow_down_rounded,
+                      color: isDark ? Colors.white70 : Colors.black54,
+                      size: 18,
+                    ),
+                  ],
                 ),
-              ],
+              ),
             ),
-          ),
-        ),
+          );
+        },
       ),
     );
   }

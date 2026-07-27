@@ -1,7 +1,5 @@
-import 'dart:async';
-import 'dart:ui';
+﻿import 'dart:ui';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../data/models/sandbox.dart';
 import '../../providers/sandbox_provider.dart';
@@ -14,16 +12,10 @@ class TerminalView extends ConsumerStatefulWidget {
 }
 
 class _TerminalViewState extends ConsumerState<TerminalView> {
-  final _controller = TextEditingController();
   final _scrollController = ScrollController();
-  final _focusNode = FocusNode();
-  bool _autoScroll = true;
-
   @override
   void dispose() {
-    _controller.dispose();
     _scrollController.dispose();
-    _focusNode.dispose();
     super.dispose();
   }
 
@@ -31,16 +23,12 @@ class _TerminalViewState extends ConsumerState<TerminalView> {
     final state = ref.read(sandboxProvider);
     if (!state.isConnected) return;
 
-    final text = (customCommand ?? _controller.text).trim();
+    final text = (customCommand ?? '').trim();
     if (text.isEmpty) return;
     ref.read(sandboxProvider.notifier).sendCommand(text);
-    if (customCommand == null) {
-      _controller.clear();
-    }
   }
 
   void _scrollToBottom() {
-    if (!_autoScroll) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_scrollController.hasClients) {
         _scrollController.animateTo(
@@ -52,24 +40,7 @@ class _TerminalViewState extends ConsumerState<TerminalView> {
     });
   }
 
-  void _copyLogs(List<TerminalOutput> outputs) {
-    final fullLog = outputs.map((o) => '${o.type}: ${o.command} ${o.output}').join('\n');
-    Clipboard.setData(ClipboardData(text: fullLog));
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: const Row(
-          children: [
-            Icon(Icons.check_circle_outline, color: Color(0xFF10B981), size: 18),
-            SizedBox(width: 8),
-            Text('Terminal logs copied to clipboard'),
-          ],
-        ),
-        behavior: SnackBarBehavior.floating,
-        backgroundColor: const Color(0xFF1E1E3F),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      ),
-    );
-  }
+
 
   @override
   @override
@@ -84,92 +55,95 @@ class _TerminalViewState extends ConsumerState<TerminalView> {
 
     final presets = _getPresetsForEnv(env);
 
-    return Column(
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bgColor = isDark ? Colors.black : Theme.of(context).scaffoldBackgroundColor;
+
+    return Stack(
       children: [
-        // Terminal Action Header (Log Actions)
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-          color: const Color(0xFF0F0F23).withValues(alpha: 0.9),
-          child: Row(
-            children: [
-              Icon(
-                isExecuting ? Icons.sync_rounded : Icons.terminal_rounded,
-                size: 16,
-                color: isExecuting ? const Color(0xFF10B981) : const Color(0xFF818CF8),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                isExecuting
-                    ? 'EXECUTING COMMAND...'
-                    : 'REAL-TIME TERMINAL OUTPUT (${outputs.length})',
-                style: TextStyle(
-                  color: isExecuting ? const Color(0xFF10B981) : Colors.white54,
-                  fontSize: 10,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 0.8,
+        // Terminal Output Stream View (placed first so it renders behind everything)
+        Positioned.fill(
+          child: Container(
+            color: bgColor,
+            child: ListView.builder(
+              controller: _scrollController,
+              padding: EdgeInsets.fromLTRB(16, MediaQuery.paddingOf(context).top + 76, 16, MediaQuery.paddingOf(context).bottom + 200),
+              itemCount: outputs.length + 1,
+              itemBuilder: (context, index) {
+                if (index < outputs.length) {
+                  return _TerminalLine(output: outputs[index]);
+                }
+                
+                if (state.pendingApproval != null) {
+                  return _ApprovalBanner(
+                    command: state.pendingApproval!.command,
+                    reason: state.pendingApproval!.reason ?? '',
+                    onApprove: () => ref.read(sandboxProvider.notifier).approveCommand(state.pendingApproval!.command),
+                    onReject: () => ref.read(sandboxProvider.notifier).rejectCommand(state.pendingApproval!.command),
+                  );
+                }
+                
+                if (isExecuting) {
+                  final lastOutputText = outputs.isNotEmpty ? outputs.last.output : '';
+                  if (_isInteractivePrompt(lastOutputText)) {
+                    return _InteractivePromptButtons(
+                      onResponse: (resp) => _sendCommand(resp),
+                    );
+                  }
+                  return _TerminalWaitingLoader(command: executingCommand);
+                }
+                
+                return _InlineTerminalPrompt(
+                  onSubmitted: (cmd) => _sendCommand(cmd),
+                );
+              },
+            ),
+          ),
+        ),
+
+        // Top Fade Overlay (for terminal text scrolling behind app bar)
+        Positioned(
+          top: 0,
+          left: 0,
+          right: 0,
+          height: 120,
+          child: IgnorePointer(
+            child: Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    bgColor.withValues(alpha: 0.95),
+                    bgColor.withValues(alpha: 0.6),
+                    bgColor.withValues(alpha: 0.0),
+                  ],
+                  stops: const [0.0, 0.4, 1.0],
                 ),
               ),
-              if (isExecuting) ...[
-                const SizedBox(width: 6),
-                Container(
-                  width: 6,
-                  height: 6,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: const Color(0xFF10B981),
-                    boxShadow: [
-                      BoxShadow(
-                        color: const Color(0xFF10B981).withValues(alpha: 0.8),
-                        blurRadius: 4,
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-              const Spacer(),
-              IconButton(
-                icon: Icon(
-                  _autoScroll ? Icons.arrow_downward_rounded : Icons.pause_rounded,
-                  color: _autoScroll ? const Color(0xFF10B981) : Colors.white38,
-                  size: 16,
-                ),
-                tooltip: _autoScroll ? 'Auto-scroll active' : 'Auto-scroll paused',
-                onPressed: () => setState(() => _autoScroll = !_autoScroll),
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(),
-              ),
-              const SizedBox(width: 12),
-              IconButton(
-                icon: const Icon(Icons.copy_rounded, color: Colors.white54, size: 16),
-                tooltip: 'Copy Logs',
-                onPressed: () => _copyLogs(outputs),
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(),
-              ),
-              const SizedBox(width: 12),
-              IconButton(
-                icon: const Icon(Icons.delete_outline_rounded, color: Colors.white54, size: 16),
-                tooltip: 'Clear Terminal',
-                onPressed: () => ref.read(sandboxProvider.notifier).clearTerminal(),
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(),
-              ),
-            ],
+            ),
           ),
         ),
 
         // Disconnected Banner
         if (!state.isConnected && state.sandbox != null)
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-            color: Colors.redAccent.withValues(alpha: 0.15),
-            child: Row(
+          Positioned(
+            bottom: 100,
+            left: 16,
+            right: 16,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.redAccent,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.redAccent.withValues(alpha: 0.3)),
+              ),
+              child: Row(
               children: [
-                const Icon(Icons.wifi_off_rounded, color: Colors.redAccent, size: 16),
+                const Icon(Icons.wifi_off_rounded, color: Colors.white, size: 16),
                 const SizedBox(width: 8),
                 const Text(
                   'Terminal connection lost.',
-                  style: TextStyle(color: Colors.redAccent, fontSize: 12, fontWeight: FontWeight.w600),
+                  style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
                 ),
                 const Spacer(),
                 TextButton.icon(
@@ -177,7 +151,7 @@ class _TerminalViewState extends ConsumerState<TerminalView> {
                   icon: const Icon(Icons.refresh_rounded, size: 14),
                   label: const Text('Reconnect'),
                   style: TextButton.styleFrom(
-                    foregroundColor: Colors.redAccent,
+                    foregroundColor: Colors.white,
                     visualDensity: VisualDensity.compact,
                     padding: const EdgeInsets.symmetric(horizontal: 12),
                   ),
@@ -185,225 +159,137 @@ class _TerminalViewState extends ConsumerState<TerminalView> {
               ],
             ),
           ),
-
-        // Terminal Output Stream View
-        Expanded(
-          child: Container(
-            color: const Color(0xFF0A0A16),
-            child: (outputs.isEmpty && !isExecuting)
-                ? _EmptyTerminalState(
-                    env: env,
-                    onSelectPreset: (cmd) => _sendCommand(cmd),
-                  )
-                : ListView.builder(
-                    controller: _scrollController,
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                    itemCount: outputs.length +
-                        (state.pendingApproval != null ? 1 : 0) +
-                        (isExecuting ? 1 : 0),
-                    itemBuilder: (context, index) {
-                      if (index < outputs.length) {
-                        return _TerminalLine(output: outputs[index]);
-                      }
-                      final extraIndex = index - outputs.length;
-                      if (state.pendingApproval != null && extraIndex == 0) {
-                        return _ApprovalBanner(
-                          command: state.pendingApproval!.command,
-                          reason: state.pendingApproval!.reason ?? '',
-                          onApprove: () => ref.read(sandboxProvider.notifier).approveCommand(state.pendingApproval!.command),
-                          onReject: () => ref.read(sandboxProvider.notifier).rejectCommand(state.pendingApproval!.command),
-                        );
-                      }
-                      
-                      final lastOutputText = outputs.isNotEmpty ? outputs.last.output : '';
-                      if (isExecuting && _isInteractivePrompt(lastOutputText)) {
-                        return _InteractivePromptButtons(
-                          onResponse: (resp) => _sendCommand(resp),
-                        );
-                      }
-                      
-                      return _TerminalWaitingLoader(command: executingCommand);
-                    },
-                  ),
-          ),
         ),
 
-        // Command Preset Chips Bar
-        Container(
-          color: const Color(0xFF0F0F23),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-          child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            physics: const BouncingScrollPhysics(),
-            child: Row(
-              children: [
-                const Text(
-                  'PRESETS: ',
-                  style: TextStyle(color: Colors.white38, fontSize: 10, fontWeight: FontWeight.bold),
-                ),
-                ...presets.map((cmd) => Padding(
-                      padding: const EdgeInsets.only(right: 6),
-                      child: ActionChip(
-                        label: Text(
-                          cmd,
-                          style: const TextStyle(
-                            color: Color(0xFFC7D2FE),
-                            fontSize: 11,
-                            fontFamily: 'monospace',
-                          ),
-                        ),
-                        backgroundColor: const Color(0xFF1E1E3F),
-                        side: BorderSide(color: const Color(0xFF6366F1).withValues(alpha: 0.3)),
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                        visualDensity: VisualDensity.compact,
-                        onPressed: () => _sendCommand(cmd),
-                      ),
-                    )),
-              ],
-            ),
-          ),
-        ),
-
-        // Mobile-Dev Keyboard Toolbar
-        Container(
-          color: const Color(0xFF0F0F23).withValues(alpha: 0.95),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-          child: Row(
-            children: [
-              _DevKey(
-                label: 'Esc', 
-                onPressed: () => ref.read(sandboxProvider.notifier).sendCommand('\x1b')
-              ),
-              const SizedBox(width: 6),
-              _DevKey(
-                label: 'Ctrl+C', 
-                onPressed: () => ref.read(sandboxProvider.notifier).sendCommand('\x03')
-              ),
-              const SizedBox(width: 6),
-              _DevKey(
-                label: 'Tab', 
-                onPressed: () => ref.read(sandboxProvider.notifier).sendCommand('\t')
-              ),
-              const Spacer(),
-              _DevKey(
-                icon: Icons.arrow_upward_rounded, 
-                onPressed: () => ref.read(sandboxProvider.notifier).sendCommand('\x1b[A')
-              ),
-              const SizedBox(width: 6),
-              _DevKey(
-                icon: Icons.arrow_downward_rounded, 
-                onPressed: () => ref.read(sandboxProvider.notifier).sendCommand('\x1b[B')
-              ),
-            ],
-          ),
-        ),
-
-        // Glassmorphic Floating Command Input Bar
-        ClipRRect(
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+        // Bottom Fade Overlay
+        Positioned(
+          left: 0,
+          right: 0,
+          bottom: 0,
+          height: 180,
+          child: IgnorePointer(
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
               decoration: BoxDecoration(
-                color: const Color(0xFF13132B).withValues(alpha: 0.9),
-                border: Border(
-                  top: BorderSide(
-                    color: isExecuting
-                        ? const Color(0xFF10B981).withValues(alpha: 0.5)
-                        : const Color(0xFF6366F1).withValues(alpha: 0.25),
-                    width: 1,
-                  ),
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    bgColor.withValues(alpha: 0.0),
+                    bgColor.withValues(alpha: 0.6),
+                    bgColor.withValues(alpha: 0.95),
+                  ],
+                  stops: const [0.0, 0.4, 1.0],
                 ),
-                boxShadow: [
-                  BoxShadow(
-                    color: isExecuting
-                        ? const Color(0xFF10B981).withValues(alpha: 0.15)
-                        : Colors.black.withValues(alpha: 0.42),
-                    blurRadius: 16,
-                    offset: const Offset(0, -4),
-                  ),
-                ],
-              ),
-              child: Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF10B981).withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.3)),
-                    ),
-                    child: const Text(
-                      '\$',
-                      style: TextStyle(
-                        color: Color(0xFF10B981),
-                        fontFamily: 'monospace',
-                        fontWeight: FontWeight.bold,
-                        fontSize: 14,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: TextField(
-                      controller: _controller,
-                      focusNode: _focusNode,
-                      enabled: state.isConnected,
-                      style: TextStyle(
-                        color: state.isConnected ? Colors.white : Colors.white38,
-                        fontFamily: 'monospace',
-                        fontSize: 13,
-                      ),
-                      decoration: InputDecoration(
-                        border: InputBorder.none,
-                        enabledBorder: InputBorder.none,
-                        focusedBorder: InputBorder.none,
-                        filled: false,
-                        hintText: state.isConnected 
-                                ? 'Type bash command or interactive input...' 
-                                : 'Terminal disconnected. Reconnect to send commands...',
-                        hintStyle: TextStyle(
-                          color: Colors.white38,
-                          fontFamily: 'monospace',
-                          fontSize: 12,
-                        ),
-                        contentPadding: EdgeInsets.zero,
-                      ),
-                      onSubmitted: (_) => _sendCommand(),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  InkWell(
-                    onTap: state.isConnected ? () => _sendCommand() : null,
-                    borderRadius: BorderRadius.circular(12),
-                    child: Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: state.isConnected 
-                                  ? const [Color(0xFF6366F1), Color(0xFF4F46E5)]
-                                  : [const Color(0xFF6366F1).withValues(alpha: 0.3), const Color(0xFF4F46E5).withValues(alpha: 0.3)],
-                        ),
-                        borderRadius: BorderRadius.circular(12),
-                        boxShadow: state.isConnected ? [
-                          BoxShadow(
-                            color: const Color(0xFF6366F1).withValues(alpha: 0.4),
-                            blurRadius: 8,
-                          ),
-                        ] : null,
-                      ),
-                      child: Icon(
-                              Icons.send_rounded,
-                              color: state.isConnected ? Colors.white : Colors.white54,
-                              size: 16,
-                            ),
-                    ),
-                  ),
-                ],
               ),
             ),
           ),
         ),
+
+        // Separate Floating Glassmorphic Preset Chips
+        Align(
+          alignment: Alignment.bottomCenter,
+          child: Padding(
+            padding: EdgeInsets.only(
+              bottom: MediaQuery.paddingOf(context).bottom + 20,
+              left: 16,
+              right: isExecuting ? 116 : 16,
+            ),
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              physics: const BouncingScrollPhysics(),
+              child: Row(
+                children: presets.map((cmd) {
+                  return Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(16),
+                      child: BackdropFilter(
+                        filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+                        child: Material(
+                          color: Colors.transparent,
+                          child: InkWell(
+                            onTap: () => _sendCommand(cmd),
+                            borderRadius: BorderRadius.circular(16),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                              decoration: BoxDecoration(
+                                color: isDark
+                                    ? Colors.white.withValues(alpha: 0.08)
+                                    : Colors.black.withValues(alpha: 0.05),
+                                borderRadius: BorderRadius.circular(16),
+                                border: Border.all(
+                                  color: isDark
+                                      ? Colors.white.withValues(alpha: 0.12)
+                                      : Colors.black.withValues(alpha: 0.1),
+                                ),
+                              ),
+                              child: Text(
+                                cmd,
+                                style: TextStyle(
+                                  color: isDark ? const Color(0xFFC7D2FE) : Colors.black87,
+                                  fontSize: 12,
+                                  fontFamily: 'monospace',
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
+          ),
+        ),
+
+        // Floating Ctrl+C Component at Bottom Right Corner when running command
+        if (isExecuting)
+          Positioned(
+            bottom: MediaQuery.paddingOf(context).bottom + 20,
+            right: 16,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(16),
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: () => ref.read(sandboxProvider.notifier).sendCommand('\x03'),
+                    borderRadius: BorderRadius.circular(16),
+                    child: Container(
+                      height: 36,
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      decoration: BoxDecoration(
+                        color: Colors.redAccent.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: Colors.redAccent.withValues(alpha: 0.4),
+                        ),
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.stop_circle_outlined, color: Colors.redAccent, size: 16),
+                          SizedBox(width: 6),
+                          Text(
+                            'Ctrl+C',
+                            style: TextStyle(
+                              color: Colors.redAccent,
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              fontFamily: 'monospace',
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
       ],
     );
   }
@@ -462,57 +348,10 @@ class _QuickResponseButton extends StatelessWidget {
         label,
         style: const TextStyle(color: Color(0xFFC7D2FE), fontSize: 11, fontWeight: FontWeight.bold),
       ),
-      backgroundColor: const Color(0xFF1E1E3F),
+      backgroundColor: Theme.of(context).brightness == Brightness.dark ? const Color(0xFF1E1E3F) : Colors.grey.shade100,
       side: BorderSide(color: const Color(0xFF6366F1).withValues(alpha: 0.5)),
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       onPressed: onTap,
-    );
-  }
-}
-
-class _EmptyTerminalState extends StatelessWidget {
-  final String env;
-  final Function(String) onSelectPreset;
-
-  const _EmptyTerminalState({required this.env, required this.onSelectPreset});
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: SingleChildScrollView(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: const Color(0xFF6366F1).withValues(alpha: 0.1),
-                shape: BoxShape.circle,
-                border: Border.all(color: const Color(0xFF6366F1).withValues(alpha: 0.3)),
-              ),
-              child: const Icon(Icons.terminal_rounded, color: Color(0xFF818CF8), size: 36),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'Terminal Session Ready (${env.toUpperCase()})',
-              style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
-                fontSize: 15,
-              ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              'Execute commands or select a preset below to start streaming output logs.',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.5),
-                fontSize: 12,
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 }
@@ -548,7 +387,7 @@ class _TerminalLine extends StatelessWidget {
         icon = Icons.cancel_outlined;
         break;
       default:
-        color = const Color(0xFFCBD5E1);
+        color = Theme.of(context).brightness == Brightness.dark ? const Color(0xFFCBD5E1) : Colors.black87;
         icon = null;
     }
 
@@ -589,8 +428,8 @@ class _TerminalLine extends StatelessWidget {
               padding: const EdgeInsets.only(top: 2),
               child: SelectableText(
                 output.output,
-                style: const TextStyle(
-                  color: Color(0xFFE2E8F0),
+                style: TextStyle(
+                  color: Theme.of(context).brightness == Brightness.dark ? const Color(0xFFE2E8F0) : Colors.black87,
                   fontFamily: 'monospace',
                   fontSize: 12,
                   height: 1.3,
@@ -682,9 +521,9 @@ class _ApprovalBanner extends StatelessWidget {
             ),
             child: Text(
               command,
-              style: const TextStyle(
-                color: Colors.white,
-                fontFamily: 'monospace',
+              style: TextStyle(
+                        color: Theme.of(context).brightness == Brightness.dark ? Colors.white : Colors.black87,
+                        fontFamily: 'monospace',
                 fontSize: 12,
               ),
             ),
@@ -731,43 +570,6 @@ class _ApprovalBanner extends StatelessWidget {
   }
 }
 
-class _DevKey extends StatelessWidget {
-  final String? label;
-  final IconData? icon;
-  final VoidCallback onPressed;
-
-  const _DevKey({this.label, this.icon, required this.onPressed});
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onPressed,
-        borderRadius: BorderRadius.circular(6),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-          decoration: BoxDecoration(
-            color: const Color(0xFF1E1E3F),
-            borderRadius: BorderRadius.circular(6),
-            border: Border.all(color: const Color(0xFF6366F1).withValues(alpha: 0.3)),
-          ),
-          child: icon != null
-              ? Icon(icon, color: const Color(0xFFC7D2FE), size: 14)
-              : Text(
-                  label!,
-                  style: const TextStyle(
-                    color: Color(0xFFC7D2FE),
-                    fontSize: 11,
-                    fontFamily: 'monospace',
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-        ),
-      ),
-    );
-  }
-}
 
 class _TerminalWaitingLoader extends StatefulWidget {
   final String command;
@@ -776,238 +578,131 @@ class _TerminalWaitingLoader extends StatefulWidget {
   @override
   State<_TerminalWaitingLoader> createState() => _TerminalWaitingLoaderState();
 }
-
 class _TerminalWaitingLoaderState extends State<_TerminalWaitingLoader>
     with SingleTickerProviderStateMixin {
   late AnimationController _animationController;
-  late Timer _timer;
-  int _elapsedMs = 0;
-  int _spinnerIndex = 0;
-  int _dotCount = 1;
-  bool _cursorVisible = true;
-
-  static const _spinnerFrames = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
 
   @override
   void initState() {
     super.initState();
     _animationController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 1200),
+      duration: const Duration(milliseconds: 600),
     )..repeat(reverse: true);
-
-    _timer = Timer.periodic(const Duration(milliseconds: 100), (timer) {
-      if (mounted) {
-        setState(() {
-          _elapsedMs += 100;
-          _spinnerIndex = (_spinnerIndex + 1) % _spinnerFrames.length;
-
-          if (_elapsedMs % 300 == 0) {
-            _dotCount = (_dotCount % 4) + 1;
-          }
-          if (_elapsedMs % 400 == 0) {
-            _cursorVisible = !_cursorVisible;
-          }
-        });
-      }
-    });
   }
 
   @override
   void dispose() {
     _animationController.dispose();
-    _timer.cancel();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final seconds = (_elapsedMs / 1000).toStringAsFixed(1);
-    final spinner = _spinnerFrames[_spinnerIndex];
-    final dotsText = '.' * _dotCount;
-
     return AnimatedBuilder(
       animation: _animationController,
       builder: (context, child) {
-        final glowOpacity = 0.25 + (_animationController.value * 0.35);
-        final borderOpacity = 0.4 + (_animationController.value * 0.45);
+        // Subtle vertical bounce
+        final dy = -6.0 * _animationController.value;
 
         return Container(
-          margin: const EdgeInsets.only(bottom: 12, top: 4),
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-          decoration: BoxDecoration(
-            color: const Color(0xFF13132C).withValues(alpha: 0.95),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: const Color(0xFF6366F1).withValues(alpha: borderOpacity),
-              width: 1.2,
+          margin: const EdgeInsets.only(top: 12, bottom: 24, left: 4),
+          alignment: Alignment.centerLeft,
+          child: Transform.translate(
+            offset: Offset(0, dy),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Image.asset(
+                  'assets/mascot/typing.png',
+                  width: 28,
+                  height: 28,
+                  filterQuality: FilterQuality.high,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'executing...',
+                  style: TextStyle(
+                    color: Theme.of(context).brightness == Brightness.dark ? Colors.white38 : Colors.black38,
+                    fontSize: 11,
+                    fontFamily: 'monospace',
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
+              ],
             ),
-            boxShadow: [
-              BoxShadow(
-                color: const Color(0xFF6366F1).withValues(alpha: glowOpacity),
-                blurRadius: 14,
-                spreadRadius: 1,
-              ),
-            ],
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Top Row: Spinner, Command, Timer
-              Row(
-                children: [
-                  Text(
-                    spinner,
-                    style: const TextStyle(
-                      color: Color(0xFF818CF8),
-                      fontFamily: 'monospace',
-                      fontWeight: FontWeight.bold,
-                      fontSize: 14,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  const Text(
-                    '\$ ',
-                    style: TextStyle(
-                      color: Color(0xFF10B981),
-                      fontFamily: 'monospace',
-                      fontWeight: FontWeight.bold,
-                      fontSize: 12,
-                    ),
-                  ),
-                  Expanded(
-                    child: Text(
-                      widget.command.isNotEmpty ? widget.command : 'executing command...',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontFamily: 'monospace',
-                        fontWeight: FontWeight.w600,
-                        fontSize: 12,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF10B981).withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(
-                        color: const Color(0xFF10B981).withValues(alpha: 0.4),
-                      ),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Container(
-                          width: 6,
-                          height: 6,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: const Color(0xFF10B981),
-                            boxShadow: [
-                              BoxShadow(
-                                color: const Color(0xFF10B981).withValues(alpha: 0.8),
-                                blurRadius: 4,
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(width: 5),
-                        Text(
-                          '${seconds}s',
-                          style: const TextStyle(
-                            color: Color(0xFF10B981),
-                            fontFamily: 'monospace',
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 10),
-              
-              // Bottom Row: Reactive Typing Dots & Pulsing Dot Wave
-              Row(
-                children: [
-                  // Staggered Reactive Dots Wave
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: List.generate(3, (index) {
-                      final phase = (_elapsedMs / 300 + index * 0.33) % 1.0;
-                      final scale = 0.6 + (0.4 * (1.0 - (phase - 0.5).abs() * 2));
-                      final opacity = 0.4 + (0.6 * (1.0 - (phase - 0.5).abs() * 2));
-
-                      return Container(
-                        margin: const EdgeInsets.only(right: 4),
-                        width: 7 * scale,
-                        height: 7 * scale,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: const Color(0xFF818CF8).withValues(alpha: opacity),
-                          boxShadow: [
-                            BoxShadow(
-                              color: const Color(0xFF818CF8).withValues(alpha: opacity * 0.7),
-                              blurRadius: 4,
-                            ),
-                          ],
-                        ),
-                      );
-                    }),
-                  ),
-                  const SizedBox(width: 10),
-
-                  // Typing reactive dots text with blinking terminal block cursor
-                  Expanded(
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Flexible(
-                          child: Text(
-                            'Executing in container$dotsText',
-                            style: const TextStyle(
-                              color: Color(0xFFC7D2FE),
-                              fontFamily: 'monospace',
-                              fontSize: 11,
-                              fontWeight: FontWeight.w500,
-                            ),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        AnimatedOpacity(
-                          duration: const Duration(milliseconds: 150),
-                          opacity: _cursorVisible ? 1.0 : 0.0,
-                          child: Container(
-                            margin: const EdgeInsets.only(left: 3),
-                            width: 6,
-                            height: 12,
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF10B981),
-                              borderRadius: BorderRadius.circular(1),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: const Color(0xFF10B981).withValues(alpha: 0.8),
-                                  blurRadius: 4,
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ],
           ),
         );
       },
     );
   }
+
 }
 
+
+class _InlineTerminalPrompt extends StatefulWidget {
+  final Function(String) onSubmitted;
+  const _InlineTerminalPrompt({required this.onSubmitted});
+
+  @override
+  State<_InlineTerminalPrompt> createState() => _InlineTerminalPromptState();
+}
+
+class _InlineTerminalPromptState extends State<_InlineTerminalPrompt> {
+  final _controller = TextEditingController();
+  final _focusNode = FocusNode();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    _focusNode.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    final text = _controller.text.trim();
+    if (text.isNotEmpty) {
+      widget.onSubmitted(text);
+      _controller.clear();
+    }
+    _focusNode.requestFocus();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Container(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: TextField(
+        controller: _controller,
+        focusNode: _focusNode,
+        autofocus: true,
+        style: TextStyle(
+          color: isDark ? Colors.white : Colors.black87,
+          fontFamily: 'monospace',
+          fontSize: 13,
+        ),
+        cursorColor: isDark ? Colors.white70 : Colors.black87,
+        cursorWidth: 2,
+   decoration: InputDecoration(
+  hintText: 'Write your cmnd...',
+  hintStyle: TextStyle(
+    color: isDark ? Colors.white38 : Colors.black38,
+    fontFamily: 'monospace',
+    fontSize: 13,
+  ),
+  isCollapsed: true, // removes default padding/min-height, not just isDense
+  filled: false,
+  fillColor: Colors.transparent,
+  border: InputBorder.none,
+  enabledBorder: InputBorder.none,
+  focusedBorder: InputBorder.none,
+  disabledBorder: InputBorder.none,
+  errorBorder: InputBorder.none,
+  focusedErrorBorder: InputBorder.none,
+),
+        onSubmitted: (_) => _submit(),
+      ),
+    );
+  }
+}
