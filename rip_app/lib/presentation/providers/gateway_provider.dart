@@ -1,4 +1,4 @@
-﻿import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'connection_provider.dart';
 import 'project_provider.dart';
 
@@ -34,6 +34,9 @@ final gatewayLlmConfigsProvider = FutureProvider<List<Map<String, dynamic>>>((re
 // ── Gateway role ──
 
 final gatewayRoleProvider = StateProvider<String>((ref) => 'developer');
+
+// ── Gateway effort ──
+final gatewayEffortProvider = StateProvider<String>((ref) => 'auto');
 
 // ── Sources (for gateway_sources_screen) ──
 

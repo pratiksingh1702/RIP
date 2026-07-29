@@ -72,6 +72,38 @@ class PermissionEngine:
         )
         return filtered
 
+    async def filter_tools(
+        self,
+        tool_ids: list[str],
+        role: UserRole,
+        session_id: str = "unknown",
+        user_id: str | None = None
+    ) -> list[str]:
+        """Filter tools (sources) based on role permissions for early effort gating."""
+        policy = self.get_policy(role)
+        filtered: list[str] = []
+
+        for tool_id in tool_ids:
+            # Check if source (tool_id) is allowed
+            source_allowed = "*" in policy.allowed_sources or tool_id in policy.allowed_sources
+            
+            # Log audit entry
+            if not source_allowed:
+                reason = f"Tool {tool_id} not allowed for role {role}"
+                await self._log_audit(
+                    session_id=session_id,
+                    user_id=user_id,
+                    role=role,
+                    action="filter_tool",
+                    source=tool_id,
+                    allowed=False,
+                    reason=reason
+                )
+            else:
+                filtered.append(tool_id)
+
+        return filtered
+
     async def _log_audit(
         self,
         session_id: str,

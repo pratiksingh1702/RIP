@@ -47,6 +47,7 @@ class _PipelineSummaryChipState extends ConsumerState<PipelineSummaryChip> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final conflict = widget.trace.events
         .where((event) => event.stage == 'conflict_found')
         .toList();
@@ -60,9 +61,13 @@ class _PipelineSummaryChipState extends ConsumerState<PipelineSummaryChip> {
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
             decoration: BoxDecoration(
-              color: AppColors.primary.withValues(alpha: 0.12),
+              color: AppColors.primary.withValues(alpha: isDark ? 0.2 : 0.12),
               borderRadius: BorderRadius.circular(18),
-              border: Border.all(color: AppColors.primary.withValues(alpha: 0.22)),
+              border: Border.all(
+                color: isDark
+                    ? Colors.white.withValues(alpha: 0.15)
+                    : AppColors.primary.withValues(alpha: 0.22),
+              ),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
@@ -74,8 +79,8 @@ class _PipelineSummaryChipState extends ConsumerState<PipelineSummaryChip> {
                     widget.trace.summaryLabel(),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: AppColors.textPrimary,
+                    style: TextStyle(
+                      color: isDark ? Colors.white : AppColors.textPrimary,
                       fontSize: 12,
                       fontWeight: FontWeight.w800,
                     ),
@@ -85,7 +90,7 @@ class _PipelineSummaryChipState extends ConsumerState<PipelineSummaryChip> {
                 Icon(
                   _expanded ? Icons.expand_less_rounded : Icons.expand_more_rounded,
                   size: 16,
-                  color: AppColors.textSecondary,
+                  color: isDark ? Colors.white70 : AppColors.textSecondary,
                 ),
               ],
             ),
@@ -128,6 +133,7 @@ class _PipelineRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final warning = event.status == 'failed' || event.status == 'skipped';
     final done = event.status == 'done';
     final color = warning
@@ -155,7 +161,9 @@ class _PipelineRow extends StatelessWidget {
               style: TextStyle(
                 color: warning
                     ? const Color(0xFFFDE68A)
-                    : AppColors.textPrimary.withValues(alpha: 0.92),
+                    : isDark
+                        ? Colors.white.withValues(alpha: 0.92)
+                        : AppColors.textPrimary.withValues(alpha: 0.92),
                 fontSize: 12,
                 height: 1.35,
                 fontWeight: FontWeight.w700,
@@ -167,7 +175,7 @@ class _PipelineRow extends StatelessWidget {
             Text(
               meta,
               style: TextStyle(
-                color: AppColors.textSecondary.withValues(alpha: 0.72),
+                color: isDark ? Colors.white54 : AppColors.textSecondary.withValues(alpha: 0.72),
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
               ),
@@ -304,9 +312,19 @@ class _FeedbackButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final textColor = isDark ? Colors.white70 : AppColors.textSecondary;
     return ActionChip(
-      avatar: Icon(icon, size: 14, color: AppColors.textSecondary),
-      label: Text(label),
+      avatar: Icon(icon, size: 14, color: textColor),
+      label: Text(label, style: TextStyle(color: textColor, fontSize: 11)),
+      backgroundColor: isDark
+          ? Colors.white.withValues(alpha: 0.08)
+          : Colors.black.withValues(alpha: 0.04),
+      side: BorderSide(
+        color: isDark
+            ? Colors.white.withValues(alpha: 0.12)
+            : Colors.black.withValues(alpha: 0.08),
+      ),
       visualDensity: VisualDensity.compact,
       onPressed: onTap,
     );
@@ -386,9 +404,9 @@ class _CopyRow extends StatelessWidget {
   void _copyToClipboard(BuildContext context, String text) {
     Clipboard.setData(ClipboardData(text: text));
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
+      const SnackBar(
         content: Text('Copied to clipboard'),
-        duration: const Duration(seconds: 2),
+        duration: Duration(seconds: 2),
         behavior: SnackBarBehavior.floating,
       ),
     );
@@ -408,9 +426,19 @@ class _CopyButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final textColor = isDark ? Colors.white70 : AppColors.textSecondary;
     return ActionChip(
-      avatar: Icon(icon, size: 14, color: AppColors.textSecondary),
-      label: Text(label),
+      avatar: Icon(icon, size: 14, color: textColor),
+      label: Text(label, style: TextStyle(color: textColor, fontSize: 11)),
+      backgroundColor: isDark
+          ? Colors.white.withValues(alpha: 0.08)
+          : Colors.black.withValues(alpha: 0.04),
+      side: BorderSide(
+        color: isDark
+            ? Colors.white.withValues(alpha: 0.12)
+            : Colors.black.withValues(alpha: 0.08),
+      ),
       visualDensity: VisualDensity.compact,
       onPressed: onTap,
     );

@@ -1,5 +1,6 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'dart:convert';
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -858,153 +859,221 @@ class _Header extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    return Material(
-        color: cs.surface.withValues(alpha: 0.94),
-        elevation: 12,
-        borderRadius: BorderRadius.circular(18),
-        shadowColor: Colors.black.withValues(alpha: 0.25),
-        child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-            child: Row(children: [
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(20),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+          decoration: BoxDecoration(
+            color: isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.05),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: isDark ? Colors.white.withValues(alpha: 0.12) : Colors.black.withValues(alpha: 0.1),
+              width: 1,
+            ),
+          ),
+          child: Row(
+            children: [
               IconButton(
-                  tooltip: 'Back',
-                  onPressed: onBack,
-                  icon: const Icon(Icons.arrow_back_rounded, size: 20)),
+                tooltip: 'Open Navigation',
+                onPressed: () {
+                  HapticFeedback.selectionClick();
+                  Scaffold.of(context).openDrawer();
+                },
+                icon: Icon(Icons.menu_rounded, color: isDark ? Colors.white : Colors.black87),
+                visualDensity: VisualDensity.compact,
+              ),
               Expanded(
-                  child: InkWell(
-                      borderRadius: BorderRadius.circular(12),
-                      onTap: onSwitch,
-                      child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 6, vertical: 4),
-                          child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text(title,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style:
-                                        Theme.of(context).textTheme.titleSmall),
-                                Row(children: [
-                                  Text(
-                                      '$status \u2022 $blockCount blocks \u2022 $wireCount wires',
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .labelSmall),
-                                  if (isRunning) ...[
-                                    const SizedBox(width: 6),
-                                    Container(
-                                        width: 7,
-                                        height: 7,
-                                        decoration: const BoxDecoration(
-                                            color: Colors.green,
-                                            shape: BoxShape.circle)),
-                                    const SizedBox(width: 3),
-                                    const Text('Live',
-                                        style: TextStyle(
-                                            color: Colors.green, fontSize: 10))
-                                  ],
-                                  if (selectedCount > 0) ...[
-                                    const SizedBox(width: 6),
-                                    Text('$selectedCount selected',
-                                        style: const TextStyle(
-                                            color: Colors.blue, fontSize: 10))
-                                  ],
-                                ]),
-                              ])))),
-              IconButton(
-                  tooltip: 'Undo',
-                  onPressed: onUndo,
-                  icon: const Icon(Icons.undo_rounded, size: 18),
-                  visualDensity: VisualDensity.compact),
-              IconButton(
-                  tooltip: 'Redo',
-                  onPressed: onRedo,
-                  icon: const Icon(Icons.redo_rounded, size: 18),
-                  visualDensity: VisualDensity.compact),
-              PopupMenuButton<String>(
-                  icon: const Icon(Icons.more_vert_rounded, size: 18),
-                  padding: EdgeInsets.zero,
-                  onSelected: (v) {
-                    switch (v) {
-                      case 'grid':
-                        onToggleGrid();
-                      case 'snap':
-                        onToggleSnap();
-                      case 'minimap':
-                        onToggleMinimap();
-                      case 'wire':
-                        onToggleWireMode();
-                      case 'layout':
-                        onAutoLayout();
-                    }
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(12),
+                  onTap: () {
+                    HapticFeedback.selectionClick();
+                    onSwitch();
                   },
-                  itemBuilder: (_) => [
-                        PopupMenuItem(
-                            value: 'grid',
-                            child: Row(children: [
-                              Icon(
-                                  showGrid
-                                      ? Icons.check_box_rounded
-                                      : Icons.check_box_outline_blank_rounded,
-                                  size: 18),
-                              const SizedBox(width: 8),
-                              const Text('Show Grid')
-                            ])),
-                        PopupMenuItem(
-                            value: 'snap',
-                            child: Row(children: [
-                              Icon(
-                                  snapToGrid
-                                      ? Icons.check_box_rounded
-                                      : Icons.check_box_outline_blank_rounded,
-                                  size: 18),
-                              const SizedBox(width: 8),
-                              const Text('Snap to Grid')
-                            ])),
-                        PopupMenuItem(
-                            value: 'minimap',
-                            child: Row(children: [
-                              Icon(
-                                  showMinimap
-                                      ? Icons.check_box_rounded
-                                      : Icons.check_box_outline_blank_rounded,
-                                  size: 18),
-                              const SizedBox(width: 8),
-                              const Text('Minimap')
-                            ])),
-                        PopupMenuItem(
-                            value: 'wire',
-                            child: Row(children: [
-                              Icon(
-                                  wireMode
-                                      ? Icons.check_box_rounded
-                                      : Icons.check_box_outline_blank_rounded,
-                                  size: 18),
-                              const SizedBox(width: 8),
-                              const Text('Wire Mode')
-                            ])),
-                        const PopupMenuDivider(),
-                        PopupMenuItem(
-                            value: 'layout',
-                            child: Row(children: [
-                              const Icon(Icons.auto_fix_high_rounded, size: 18),
-                              const SizedBox(width: 8),
-                              const Text('Auto Layout')
-                            ])),
-                      ]),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Row(
+                          children: [
+                            Flexible(
+                              child: Text(
+                                title,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  color: isDark ? Colors.white : Colors.black87,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            Icon(Icons.unfold_more_rounded, size: 14, color: isDark ? Colors.white54 : Colors.black45),
+                          ],
+                        ),
+                        const SizedBox(height: 2),
+                        Row(
+                          children: [
+                            Text(
+                              '$status • $blockCount blocks • $wireCount wires',
+                              style: TextStyle(
+                                color: isDark ? Colors.white54 : Colors.black54,
+                                fontSize: 11,
+                              ),
+                            ),
+                            if (isRunning) ...[
+                              const SizedBox(width: 6),
+                              Container(
+                                width: 6,
+                                height: 6,
+                                decoration: const BoxDecoration(
+                                  color: Color(0xFF10B981),
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                              const SizedBox(width: 3),
+                              const Text(
+                                'Live',
+                                style: TextStyle(color: Color(0xFF10B981), fontSize: 10, fontWeight: FontWeight.bold),
+                              ),
+                            ],
+                            if (selectedCount > 0) ...[
+                              const SizedBox(width: 6),
+                              Text(
+                                '$selectedCount selected',
+                                style: const TextStyle(color: Color(0xFF6366F1), fontSize: 10, fontWeight: FontWeight.bold),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
               IconButton(
-                  tooltip: 'Switch',
-                  onPressed: onSwitch,
-                  icon:
-                      const Icon(Icons.keyboard_arrow_down_rounded, size: 20)),
+                tooltip: 'Undo',
+                onPressed: onUndo != null
+                    ? () {
+                        HapticFeedback.selectionClick();
+                        onUndo!();
+                      }
+                    : null,
+                icon: Icon(Icons.undo_rounded, size: 18, color: onUndo != null ? (isDark ? Colors.white70 : Colors.black87) : (isDark ? Colors.white24 : Colors.black26)),
+                visualDensity: VisualDensity.compact,
+              ),
               IconButton(
-                  tooltip: 'New',
-                  onPressed: onCreate,
-                  icon: const Icon(Icons.add_rounded, size: 20)),
-            ])));
+                tooltip: 'Redo',
+                onPressed: onRedo != null
+                    ? () {
+                        HapticFeedback.selectionClick();
+                        onRedo!();
+                      }
+                    : null,
+                icon: Icon(Icons.redo_rounded, size: 18, color: onRedo != null ? (isDark ? Colors.white70 : Colors.black87) : (isDark ? Colors.white24 : Colors.black26)),
+                visualDensity: VisualDensity.compact,
+              ),
+              PopupMenuButton<String>(
+                tooltip: 'Canvas Settings',
+                icon: Icon(Icons.more_vert_rounded, size: 18, color: isDark ? Colors.white70 : Colors.black87),
+                padding: EdgeInsets.zero,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  side: BorderSide(
+                    color: isDark ? Colors.white.withValues(alpha: 0.15) : Colors.black.withValues(alpha: 0.1),
+                  ),
+                ),
+                color: isDark ? const Color(0xFF13132B).withValues(alpha: 0.96) : Colors.white.withValues(alpha: 0.96),
+                elevation: 8,
+                onSelected: (v) {
+                  HapticFeedback.selectionClick();
+                  switch (v) {
+                    case 'grid':
+                      onToggleGrid();
+                    case 'snap':
+                      onToggleSnap();
+                    case 'minimap':
+                      onToggleMinimap();
+                    case 'wire':
+                      onToggleWireMode();
+                    case 'layout':
+                      onAutoLayout();
+                  }
+                },
+                itemBuilder: (_) => [
+                  PopupMenuItem(
+                    value: 'grid',
+                    child: Row(
+                      children: [
+                        Icon(showGrid ? Icons.check_box_rounded : Icons.check_box_outline_blank_rounded, size: 18, color: showGrid ? const Color(0xFF6366F1) : null),
+                        const SizedBox(width: 8),
+                        const Text('Show Grid'),
+                      ],
+                    ),
+                  ),
+                  PopupMenuItem(
+                    value: 'snap',
+                    child: Row(
+                      children: [
+                        Icon(snapToGrid ? Icons.check_box_rounded : Icons.check_box_outline_blank_rounded, size: 18, color: snapToGrid ? const Color(0xFF6366F1) : null),
+                        const SizedBox(width: 8),
+                        const Text('Snap to Grid'),
+                      ],
+                    ),
+                  ),
+                  PopupMenuItem(
+                    value: 'minimap',
+                    child: Row(
+                      children: [
+                        Icon(showMinimap ? Icons.check_box_rounded : Icons.check_box_outline_blank_rounded, size: 18, color: showMinimap ? const Color(0xFF6366F1) : null),
+                        const SizedBox(width: 8),
+                        const Text('Minimap'),
+                      ],
+                    ),
+                  ),
+                  PopupMenuItem(
+                    value: 'wire',
+                    child: Row(
+                      children: [
+                        Icon(wireMode ? Icons.check_box_rounded : Icons.check_box_outline_blank_rounded, size: 18, color: wireMode ? const Color(0xFF6366F1) : null),
+                        const SizedBox(width: 8),
+                        const Text('Wire Mode'),
+                      ],
+                    ),
+                  ),
+                  const PopupMenuDivider(),
+                  const PopupMenuItem(
+                    value: 'layout',
+                    child: Row(
+                      children: [
+                        Icon(Icons.auto_fix_high_rounded, size: 18),
+                        SizedBox(width: 8),
+                        Text('Auto Layout'),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              IconButton(
+                tooltip: 'New Workflow',
+                onPressed: () {
+                  HapticFeedback.selectionClick();
+                  onCreate();
+                },
+                icon: const Icon(Icons.add_rounded, size: 20, color: Color(0xFF6366F1)),
+                visualDensity: VisualDensity.compact,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
 
@@ -1030,56 +1099,104 @@ class _SelectionToolbar extends StatelessWidget {
       onMoveUp,
       onMoveDown;
   @override
-  Widget build(BuildContext context) => Material(
-      color: Theme.of(context)
-          .colorScheme
-          .primaryContainer
-          .withValues(alpha: 0.95),
-      elevation: 8,
-      borderRadius: BorderRadius.circular(12),
-      child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          child: Row(children: [
-            Text('$count selected',
-                style: Theme.of(context).textTheme.labelMedium),
-            const Spacer(),
-            IconButton(
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(16),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+          decoration: BoxDecoration(
+            color: isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.05),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: isDark ? Colors.white.withValues(alpha: 0.12) : Colors.black.withValues(alpha: 0.1),
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                '$count selected',
+                style: TextStyle(
+                  color: isDark ? Colors.white70 : Colors.black87,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(width: 8),
+              IconButton(
                 tooltip: 'Move left',
-                onPressed: onMoveLeft,
+                onPressed: () {
+                  HapticFeedback.selectionClick();
+                  onMoveLeft();
+                },
                 icon: const Icon(Icons.arrow_left_rounded, size: 20),
-                visualDensity: VisualDensity.compact),
-            IconButton(
+                visualDensity: VisualDensity.compact,
+              ),
+              IconButton(
                 tooltip: 'Move right',
-                onPressed: onMoveRight,
+                onPressed: () {
+                  HapticFeedback.selectionClick();
+                  onMoveRight();
+                },
                 icon: const Icon(Icons.arrow_right_rounded, size: 20),
-                visualDensity: VisualDensity.compact),
-            IconButton(
+                visualDensity: VisualDensity.compact,
+              ),
+              IconButton(
                 tooltip: 'Move up',
-                onPressed: onMoveUp,
+                onPressed: () {
+                  HapticFeedback.selectionClick();
+                  onMoveUp();
+                },
                 icon: const Icon(Icons.arrow_upward_rounded, size: 20),
-                visualDensity: VisualDensity.compact),
-            IconButton(
+                visualDensity: VisualDensity.compact,
+              ),
+              IconButton(
                 tooltip: 'Move down',
-                onPressed: onMoveDown,
+                onPressed: () {
+                  HapticFeedback.selectionClick();
+                  onMoveDown();
+                },
                 icon: const Icon(Icons.arrow_downward_rounded, size: 20),
-                visualDensity: VisualDensity.compact),
-            const SizedBox(width: 8),
-            IconButton(
+                visualDensity: VisualDensity.compact,
+              ),
+              const SizedBox(width: 4),
+              IconButton(
                 tooltip: 'Copy',
-                onPressed: onCopy,
-                icon: const Icon(Icons.copy_rounded, size: 20),
-                visualDensity: VisualDensity.compact),
-            IconButton(
+                onPressed: () {
+                  HapticFeedback.selectionClick();
+                  onCopy();
+                },
+                icon: const Icon(Icons.copy_rounded, size: 18),
+                visualDensity: VisualDensity.compact,
+              ),
+              IconButton(
                 tooltip: 'Delete',
-                onPressed: onDelete,
-                icon: const Icon(Icons.delete_outline_rounded, size: 20),
-                visualDensity: VisualDensity.compact),
-            IconButton(
+                onPressed: () {
+                  HapticFeedback.mediumImpact();
+                  onDelete();
+                },
+                icon: const Icon(Icons.delete_outline_rounded, size: 18, color: Colors.redAccent),
+                visualDensity: VisualDensity.compact,
+              ),
+              IconButton(
                 tooltip: 'Clear',
-                onPressed: onClear,
-                icon: const Icon(Icons.close_rounded, size: 20),
-                visualDensity: VisualDensity.compact),
-          ])));
+                onPressed: () {
+                  HapticFeedback.selectionClick();
+                  onClear();
+                },
+                icon: const Icon(Icons.close_rounded, size: 18),
+                visualDensity: VisualDensity.compact,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 // ============================================================
@@ -1104,68 +1221,141 @@ class _Dock extends StatelessWidget {
       onExport,
       onImport;
   @override
-  Widget build(BuildContext context) =>
-      Column(mainAxisSize: MainAxisSize.min, children: [
-        FloatingActionButton.small(
-            heroTag: 'run',
-            tooltip: 'Run',
-            onPressed: hasBlocks ? onRun : null,
-            child: const Icon(Icons.play_arrow_rounded)),
-        const SizedBox(height: 8),
-        FloatingActionButton.small(
-            heroTag: 'publish',
-            tooltip: 'Publish',
-            onPressed: hasBlocks ? onPublish : null,
-            child: const Icon(Icons.publish_rounded)),
-        const SizedBox(height: 8),
-        FloatingActionButton(
-            heroTag: 'add_block',
-            tooltip: 'Add block',
-            onPressed: onAddBlock,
-            child: const Icon(Icons.add_rounded)),
-        const SizedBox(height: 8),
-        PopupMenuButton<String>(
-            icon: const Icon(Icons.more_horiz_rounded),
-            tooltip: 'More',
-            onSelected: (v) {
-              switch (v) {
-                case 'paste':
-                  onPaste();
-                case 'duplicate':
-                  onDuplicate();
-                case 'export':
-                  onExport();
-                case 'import':
-                  onImport();
-              }
-            },
-            itemBuilder: (_) => const [
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(30),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 6),
+          decoration: BoxDecoration(
+            color: isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.05),
+            borderRadius: BorderRadius.circular(30),
+            border: Border.all(
+              color: isDark ? Colors.white.withValues(alpha: 0.12) : Colors.black.withValues(alpha: 0.1),
+            ),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              IconButton(
+                tooltip: 'Run Workflow',
+                onPressed: hasBlocks
+                    ? () {
+                        HapticFeedback.mediumImpact();
+                        onRun();
+                      }
+                    : null,
+                icon: Icon(
+                  Icons.play_arrow_rounded,
+                  color: hasBlocks ? const Color(0xFF10B981) : (isDark ? Colors.white24 : Colors.black26),
+                ),
+              ),
+              const SizedBox(height: 4),
+              IconButton(
+                tooltip: 'Publish Workflow',
+                onPressed: hasBlocks
+                    ? () {
+                        HapticFeedback.selectionClick();
+                        onPublish();
+                      }
+                    : null,
+                icon: Icon(
+                  Icons.publish_rounded,
+                  color: hasBlocks ? (isDark ? Colors.white70 : Colors.black87) : (isDark ? Colors.white24 : Colors.black26),
+                ),
+              ),
+              const SizedBox(height: 4),
+              Container(
+                decoration: const BoxDecoration(
+                  color: Color(0xFF6366F1),
+                  shape: BoxShape.circle,
+                ),
+                child: IconButton(
+                  tooltip: 'Add Block',
+                  onPressed: () {
+                    HapticFeedback.selectionClick();
+                    onAddBlock();
+                  },
+                  icon: const Icon(Icons.add_rounded, color: Colors.white),
+                ),
+              ),
+              const SizedBox(height: 4),
+              PopupMenuButton<String>(
+                tooltip: 'More Actions',
+                icon: Icon(Icons.more_horiz_rounded, color: isDark ? Colors.white70 : Colors.black87),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  side: BorderSide(
+                    color: isDark ? Colors.white.withValues(alpha: 0.15) : Colors.black.withValues(alpha: 0.1),
+                  ),
+                ),
+                color: isDark ? const Color(0xFF13132B).withValues(alpha: 0.96) : Colors.white.withValues(alpha: 0.96),
+                elevation: 8,
+                onSelected: (v) {
+                  HapticFeedback.selectionClick();
+                  switch (v) {
+                    case 'paste':
+                      onPaste();
+                    case 'duplicate':
+                      onDuplicate();
+                    case 'export':
+                      onExport();
+                    case 'import':
+                      onImport();
+                  }
+                },
+                itemBuilder: (_) => [
                   PopupMenuItem(
-                      value: 'paste',
-                      child: ListTile(
-                          leading: Icon(Icons.paste_rounded),
-                          title: Text('Paste'),
-                          dense: true)),
+                    value: 'paste',
+                    child: Row(
+                      children: [
+                        Icon(Icons.paste_rounded, size: 18, color: isDark ? Colors.white70 : Colors.black87),
+                        const SizedBox(width: 8),
+                        const Text('Paste Block'),
+                      ],
+                    ),
+                  ),
                   PopupMenuItem(
-                      value: 'duplicate',
-                      child: ListTile(
-                          leading: Icon(Icons.copy_rounded),
-                          title: Text('Duplicate'),
-                          dense: true)),
+                    value: 'duplicate',
+                    child: Row(
+                      children: [
+                        Icon(Icons.copy_rounded, size: 18, color: isDark ? Colors.white70 : Colors.black87),
+                        const SizedBox(width: 8),
+                        const Text('Duplicate Workflow'),
+                      ],
+                    ),
+                  ),
                   PopupMenuItem(
-                      value: 'export',
-                      child: ListTile(
-                          leading: Icon(Icons.upload_rounded),
-                          title: Text('Export JSON'),
-                          dense: true)),
+                    value: 'export',
+                    child: Row(
+                      children: [
+                        Icon(Icons.upload_rounded, size: 18, color: isDark ? Colors.white70 : Colors.black87),
+                        const SizedBox(width: 8),
+                        const Text('Export JSON'),
+                      ],
+                    ),
+                  ),
                   PopupMenuItem(
-                      value: 'import',
-                      child: ListTile(
-                          leading: Icon(Icons.download_rounded),
-                          title: Text('Import JSON'),
-                          dense: true)),
-                ]),
-      ]);
+                    value: 'import',
+                    child: Row(
+                      children: [
+                        Icon(Icons.download_rounded, size: 18, color: isDark ? Colors.white70 : Colors.black87),
+                        const SizedBox(width: 8),
+                        const Text('Import JSON'),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 // ============================================================
@@ -1175,20 +1365,36 @@ class _Minimap extends StatelessWidget {
   const _Minimap({required this.blocks, required this.wires});
   final List<Map<String, dynamic>> blocks, wires;
   @override
-  Widget build(BuildContext context) => Material(
-      color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.9),
-      elevation: 6,
-      borderRadius: BorderRadius.circular(10),
-      child: Container(
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(16),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+        child: Container(
           width: 140,
           height: 100,
           padding: const EdgeInsets.all(6),
+          decoration: BoxDecoration(
+            color: isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.05),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: isDark ? Colors.white.withValues(alpha: 0.12) : Colors.black.withValues(alpha: 0.1),
+            ),
+          ),
           child: CustomPaint(
-              size: const Size(128, 88),
-              painter: _MinimapPainter(
-                  blocks: blocks,
-                  wires: wires,
-                  cs: Theme.of(context).colorScheme))));
+            size: const Size(128, 88),
+            painter: _MinimapPainter(
+              blocks: blocks,
+              wires: wires,
+              cs: Theme.of(context).colorScheme,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class _MinimapPainter extends CustomPainter {

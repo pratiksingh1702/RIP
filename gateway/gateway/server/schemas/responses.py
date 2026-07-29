@@ -26,6 +26,9 @@ class GetContextResponse(BaseModel):
     score_summary: list[dict[str, Any]] = []
     conflicts: list[dict]
     warnings: list[str]
+    llm_synthesized: bool = True
+    escalated: bool = False
+    route_source: str | None = None
 
 
 class ValidateChangeResponse(BaseModel):

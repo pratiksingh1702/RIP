@@ -17,12 +17,16 @@ class RouteDecision:
     confidence: float
     reasoning: str = ""
     suggested_sources: list[str] = field(default_factory=list)
+    selected_tools: list[str] = field(default_factory=list)
     needs_llm: bool = False
     urgency: str = "normal"
     needs_clarification: bool = False
     suggested_interpretations: list[str] = field(default_factory=list)
     escalated: bool = False
     escalated_from: str | None = None
+    effort: str = "auto"
+    route_source: str = "llm"  # deterministic, cache, or llm
+    synthesis_used: bool = False
 
 @dataclass
 class RouteCacheKey:

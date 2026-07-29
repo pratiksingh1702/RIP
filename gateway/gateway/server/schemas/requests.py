@@ -10,6 +10,7 @@ class GetContextRequest(BaseModel):
     task: str
     max_tokens: int = 12000
     role: str = "developer"
+    effort: str = "auto"
     session_id: str | None = None
     project_id: str | None = None
 

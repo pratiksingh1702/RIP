@@ -28,6 +28,15 @@ class SuggestionChips extends StatelessWidget {
   Widget build(BuildContext context) {
     if (suggestions.isEmpty) return const SizedBox.shrink();
 
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final textColor = isDark ? Colors.white : AppColors.textPrimary;
+    final chipBg = isDark
+        ? Colors.white.withValues(alpha: 0.08)
+        : Colors.black.withValues(alpha: 0.04);
+    final borderBg = isDark
+        ? Colors.white.withValues(alpha: 0.12)
+        : Colors.black.withValues(alpha: 0.08);
+
     return Wrap(
       spacing: 8,
       runSpacing: 8,
@@ -35,18 +44,18 @@ class SuggestionChips extends StatelessWidget {
         return ActionChip(
           label: Text(suggestion.text),
           onPressed: () => onSelected(suggestion),
-          avatar: const Icon(
+          avatar: Icon(
             Icons.auto_awesome_rounded,
             size: 16,
-            color: AppColors.textPrimary,
+            color: textColor,
           ),
-          backgroundColor: Colors.white.withValues(alpha: 0.075),
-          side: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
+          backgroundColor: chipBg,
+          side: BorderSide(color: borderBg),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(18),
           ),
-          labelStyle: const TextStyle(
-            color: AppColors.textPrimary,
+          labelStyle: TextStyle(
+            color: textColor,
             fontSize: 12,
             fontWeight: FontWeight.w700,
           ),

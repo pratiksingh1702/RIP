@@ -81,6 +81,8 @@ class ExecutorEngine:
     ) -> SourceResponse:
         """Execute a single source query."""
         source = self.source_registry.get_source(query.source)
+        if not source and query.source in ("code_ast", "docker_terminal", "agent_runs", "tools_registry"):
+            source = self.source_registry.get_source("rip")
         logger.info("Starting source query", source=query.source, query_type=query.query_type, query_params=query.query_params)
         if not source:
             logger.error("Source not found", source=query.source)

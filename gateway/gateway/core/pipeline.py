@@ -50,6 +50,7 @@ class GatewayPipeline:
         trace_session_id: str | None = None,
         project_id: str | None = None,
         user_id: str | None = None,
+        effort: str = "auto",
         event_sink=None,
     ) -> ContextPackage:
         """Route to fast/medium/deep path based on Router LLM decision."""
@@ -61,7 +62,7 @@ class GatewayPipeline:
         await self.source_registry.refresh(project_id=project_id, user_id=user_id)
 
         router = get_router()
-        decision = await router.route(task, project_id, user_id, role)
+        decision = await router.route(task, project_id, user_id, role, effort=effort)
         get_route_feedback().log_route(task, decision, project_id, user_id)
 
         logger.info(
@@ -87,14 +88,10 @@ class GatewayPipeline:
                 suggested_interpretations=decision.suggested_interpretations,
             )
 
-        if decision.path == PathType.FAST:
-            return await self._execute_fast_path(task, project_id, user_id, decision)
-        elif decision.path == PathType.MEDIUM:
-            return await self._execute_medium_path(
-                task, project_id, user_id, role, max_tokens, decision, event_sink
-            )
+        if decision.route_source == "deterministic" and decision.path == PathType.FAST:
+            package = await self._execute_fast_path(task, project_id, user_id, decision)
         else:
-            return await self._execute_deep_path(
+            package = await self._execute_v7_path(
                 task,
                 project_id,
                 user_id,
@@ -105,36 +102,188 @@ class GatewayPipeline:
                 event_sink,
             )
 
+        # Record session activity into workspace_memory (skip if recall query)
+        if not any(p in task.lower() for p in ["last chat", "memory", "chat history", "previous chat", "who are you"]):
+            try:
+                from gateway.core.workspace.memory import get_workspace_memory
+                ws = project_id or "default"
+                await get_workspace_memory().record(
+                    workspace_id=ws,
+                    project_id=project_id,
+                    category="chat",
+                    intent=getattr(decision, "intent", "chat_query"),
+                    query=task,
+                    summary=f"Chat task: {task[:100]}",
+                    sources_used=[item.source for item in package.context] if package.context else [],
+                    tokens_used=package.tokens_used,
+                    created_by=user_id or "user"
+                )
+            except Exception as exc:
+                logger.warning("Pipeline: Failed to auto-record chat memory: %s", exc)
+
+        return package
+
     async def _execute_fast_path(
         self, task: str, project_id: str | None, user_id: str | None, decision
     ) -> ContextPackage:
-        """Fast path: Memory + Knowledge + Goals only. ~100ms."""
+        """Fast path: Memory + Knowledge + Goals + Tool Registry. ~100ms."""
         ws = project_id or "default"
         context_items = []
-        try:
-            recent = await get_workspace_memory().get_recent(ws, limit=5)
-            if recent:
-                content = "Recent activity:\n" + "\n".join(
-                    f"- {r.get('summary', '')}" for r in recent if r.get("summary")
+
+        # Tool discovery check
+        selected_tools = getattr(decision, "selected_tools", [])
+        if "tools_registry" in selected_tools or any(p in task.lower() for p in ["registered tools", "what tools", "list tools", "available tools", "your tools"]):
+            try:
+                sources = self.source_registry.list_sources().values()
+                source_lines = [f"- **{getattr(s, 'name', 'source')}**: {getattr(s, 'description', 'Registered source')}" for s in sources if getattr(s, 'enabled', True)]
+                content = (
+                    "### Registered Gateway Tools & Capability Manifest\n\n"
+                    "**1. Core Capability Engines:**\n"
+                    "- **git_history**: Commits, branches, diffs, author activity\n"
+                    "- **agent_runs**: Background agent executions & task logs\n"
+                    "- **workspace_memory**: Past chat sessions, active goals, ADRs\n"
+                    "- **code_ast**: Tree-sitter AST, call graphs, symbol resolution\n"
+                    "- **docker_terminal**: Container sandbox executions & command logs\n\n"
+                    "**2. Registered Integration Sources:**\n" +
+                    ("\n".join(source_lines) if source_lines else "- No external integrations currently linked.")
                 )
                 context_items.append(
                     ContextItem(
-                        source="workspace_memory",
-                        query_type="recent",
+                        source="source_registry",
+                        query_type="list_tools",
                         content=content,
-                        metadata={},
+                        metadata={"count": len(sources)},
                         score=1.0,
                     )
                 )
-        except Exception:
-            pass
+            except Exception as exc:
+                logger.warning("Failed to fetch registry tools: %s", exc)
+
+        # Self-identity / Agent introduction check
+        if "self_identity" in selected_tools or any(p in task.lower() for p in ["who are you", "what is your name", "who made you", "who created you", "tell me about yourself", "what are you"]):
+            identity_info = (
+                "### Gateway Agent Self-Identity & System Capabilities\n\n"
+                "- **System Name**: RIP Context Gateway & AI Assistant\n"
+                "- **Primary LLM Engine**: Local Ollama Qwen2.5 (qwen2.5:3b)\n"
+                "- **Architecture**: 3-Tier Context Gateway (Fast / Medium / Deep effort routing)\n"
+                "- **Core Capabilities**: Multi-Source Context Gathering, AST Code Search, Git Analysis, Goal Tracking, Docker Sandbox Execution"
+            )
+            context_items.append(
+                ContextItem(
+                    source="self_identity",
+                    query_type="introduction",
+                    content=identity_info,
+                    metadata={"agent": "RIP Gateway Assistant", "llm": "ollama/qwen2.5:3b"},
+                    score=1.0,
+                )
+            )
+
+        # Conversational greetings & social phrases check
+        if "conversational" in selected_tools or re.search(r"\b(hello|hi|hey|how are you|good morning|good evening|good afternoon|thank you|thanks|bye|goodbye|see you)\b", task.lower()):
+            t_low = task.lower().strip()
+            if any(p in t_low for p in ["thank", "thanks"]):
+                reply = "You're welcome! Let me know if you need anything else with your repository or workspace."
+            elif any(p in t_low for p in ["bye", "goodbye", "see you"]):
+                reply = "Goodbye! Have a great time coding."
+            elif "how are you" in t_low:
+                reply = "I'm operating at 100% capacity! Ready to help you navigate codebases, search git history, or manage workspace goals."
+            else:
+                reply = "Hello! I am your RIP Context Gateway Assistant. How can I help you with your codebase today?"
+
+            context_items.append(
+                ContextItem(
+                    source="conversational",
+                    query_type="social_reply",
+                    content=f"### Conversational Response\n\n{reply}",
+                    metadata={"type": "social_greeting"},
+                    score=1.0,
+                )
+            )
+
+        # Team discovery check
+        if any(t in selected_tools for t in ["github", "git_history"]) or any(p in task.lower() for p in ["team", "teammate", "team mate", "who works", "collaborator", "contributor"]):
+            try:
+                import subprocess
+                git_log = subprocess.check_output(
+                    ["git", "log", "-n", "30", "--pretty=format:%an <%ae>"],
+                    text=True, stderr=subprocess.DEVNULL
+                )
+                authors = sorted(list(set(line.strip() for line in git_log.splitlines() if line.strip())))
+                if authors:
+                    authors_formatted = "\n".join(f"- **{a}**" for a in authors)
+                    content = f"### Active Repository Team Members & Collaborators\n\n{authors_formatted}"
+                    context_items.append(
+                        ContextItem(
+                            source="git_history",
+                            query_type="team_members",
+                            content=content,
+                            metadata={"count": len(authors)},
+                            score=1.0,
+                        )
+                    )
+            except Exception as exc:
+                logger.warning("Failed to fetch git team members: %s", exc)
+
+        # Workspace project info check
+        if any(p in task.lower() for p in ["project", "which project", "what project", "active project", "current project", "where are we"]):
+            import os
+            from pathlib import Path
+            cwd = os.getcwd()
+            proj_name = Path(cwd).name
+            project_info = (
+                f"### Active Workspace Project Details\n\n"
+                f"- **Project Name**: `{proj_name}` (Repository Intelligence Platform)\n"
+                f"- **Workspace Path**: `{cwd}`\n"
+                f"- **Workspace ID**: `{ws}`\n"
+                f"- **Primary Architecture**: Context Gateway, Vector Search, Git AST, Flutter Client"
+            )
+            context_items.append(
+                ContextItem(
+                    source="workspace_memory",
+                    query_type="project_info",
+                    content=project_info,
+                    metadata={"workspace": ws, "project_name": proj_name},
+                    score=1.0,
+                )
+            )
+
+        try:
+            recent = await get_workspace_memory().get_recent(ws, limit=5)
+            if recent:
+                content = "### Workspace Recent Activity & Chat Memory\n\n" + "\n".join(
+                    f"- **[{r.get('agent_type', 'session')}]** {r.get('task', r.get('summary', 'Chat session'))}" for r in recent
+                )
+            else:
+                content = "### Workspace Recent Activity & Chat Memory\n\n- Active session initialized. No prior chat sessions archived for this workspace project."
+            
+            context_items.append(
+                ContextItem(
+                    source="workspace_memory",
+                    query_type="recent",
+                    content=content,
+                    metadata={"workspace": ws, "count": len(recent) if recent else 0},
+                    score=1.0,
+                )
+            )
+        except Exception as exc:
+            logger.warning("Failed to fetch workspace memory: %s", exc)
+            context_items.append(
+                ContextItem(
+                    source="workspace_memory",
+                    query_type="recent",
+                    content="### Workspace Memory\n\n- Active session in progress.",
+                    metadata={"workspace": ws},
+                    score=1.0,
+                )
+            )
+
         try:
             knowledge = await get_workspace_knowledge().search(
                 ws, task, min_confidence=0.5, limit=3
             )
             if knowledge:
-                content = "Relevant knowledge:\n" + "\n".join(
-                    f"- [{k.get('knowledge_type','')}] {k.get('summary','')}"
+                content = "### Workspace Knowledge & Architectural Decisions\n\n" + "\n".join(
+                    f"- **[{k.get('knowledge_type','ADR')}]** {k.get('summary','')}"
                     for k in knowledge
                 )
                 context_items.append(
@@ -142,98 +291,54 @@ class GatewayPipeline:
                         source="workspace_knowledge",
                         query_type="search",
                         content=content,
-                        metadata={},
+                        metadata={"count": len(knowledge)},
                         score=0.9,
                     )
                 )
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Failed to fetch workspace knowledge: %s", exc)
+
         try:
             goals = await get_goal_engine().get_active(ws, limit=5)
             if goals:
-                content = "Active goals:\n" + "\n".join(
-                    f"- {g['name']} ({g.get('progress',0):.0f}%)" for g in goals
+                content = "### Active Workspace Goals & Tasks\n\n" + "\n".join(
+                    f"- **{g['name']}** ({g.get('progress',0):.0f}% complete)" for g in goals
                 )
                 context_items.append(
                     ContextItem(
                         source="workspace_goals",
                         query_type="active",
                         content=content,
-                        metadata={},
+                        metadata={"count": len(goals)},
                         score=0.8,
                     )
                 )
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Failed to fetch workspace goals: %s", exc)
         tokens_used = sum(len((c.content or "").split()) for c in context_items)
         pkg = ContextPackage(
             session_id=str(uuid4()),
-            intent="recall",
+            intent=decision.reasoning,
             domain="general",
             context=context_items,
             tokens_used=tokens_used,
-            tokens_retrieved=0,
+            tokens_retrieved=tokens_used,
             token_allocation={},
             score_summary=[],
             conflicts=[],
             warnings=[],
+            escalated=getattr(decision, "escalated", False),
+            route_source=getattr(decision, "route_source", None),
         )
+        
+        # In V7, deterministic fast paths skip Synthesis LLM
+        if getattr(decision, "route_source", "") == "deterministic":
+            pkg.llm_synthesized = False
+            return pkg
+            
         return await self._ensure_human_readable(pkg)
 
-    async def _execute_medium_path(
-        self,
-        task: str,
-        project_id: str | None,
-        user_id: str | None,
-        role: str,
-        max_tokens: int,
-        decision,
-        event_sink=None,
-    ) -> ContextPackage:
-        """Medium path: RIP search + Memory + Knowledge. ~2-5s."""
-        classification = await self.classifier.classify_async(task)
-        plan = self.planner.plan_medium(
-            classification, task, max_tokens, project_id=project_id
-        )
-        execution_result = await self.executor.execute(plan, event_sink=event_sink)
-        successful = [r for r in execution_result.source_responses if r.success]
-        tagger = get_provenance_tagger()
-        for r in successful:
-            r.content = tagger.tag_and_wrap(r.source, r.content)
-        ranked = await self.ranker.rank_and_compress(
-            execution_result.source_responses, classification, task, max_tokens
-        )
-        context_items = [
-            ContextItem(
-                source=item.source,
-                query_type=item.query_type,
-                content=item.content,
-                metadata=item.metadata,
-                score=item.score,
-            )
-            for item in ranked.included
-        ]
-        warnings = [
-            f"{r.source}: {r.error}"
-            for r in execution_result.source_responses
-            if not r.success
-        ]
-        tokens_retrieved = sum(r.token_count for r in successful)
-        pkg = ContextPackage(
-            session_id=str(uuid4()),
-            intent=classification.intent.value,
-            domain=classification.domain,
-            context=context_items,
-            tokens_used=ranked.tokens_used,
-            tokens_retrieved=tokens_retrieved,
-            token_allocation=plan.token_allocation,
-            score_summary=[],
-            conflicts=[],
-            warnings=warnings,
-        )
-        return await self._ensure_human_readable(pkg)
-
-    async def _execute_deep_path(
+    async def _execute_v7_path(
         self,
         task: str,
         project_id: str | None,
@@ -244,9 +349,17 @@ class GatewayPipeline:
         decision,
         event_sink=None,
     ) -> ContextPackage:
-        """Deep path: Full pipeline with streaming, provenance, and security scanning."""
-        logger.info("Starting DEEP path pipeline")
+        """Unified V7 execution path based on Planner execution graph."""
+        effort_val = getattr(decision, 'effort', 'auto')
+        logger.info(f"=== [V7 PATH START] === effort={effort_val}, path={decision.path}, route_source={getattr(decision, 'route_source', 'unknown')}")
         classification = await self.classifier.classify_async(task)
+        logger.info(
+            "=== [CLASSIFIER RESULT] ===",
+            intent=classification.intent.value,
+            domain=classification.domain,
+            confidence=classification.confidence,
+        )
+        
         session = await self.session_store.create_session(
             agent_type="mcp_agent", task=task, classification=classification
         )
@@ -265,93 +378,70 @@ class GatewayPipeline:
                     meta=event.get("meta") or {},
                 )
 
-        await emit(
-            {
-                "stage": "intent",
-                "status": "done",
-                "detail": f"{classification.intent.value} - {classification.domain} - DEEP path",
-                "meta": {
-                    "intent": classification.intent.value,
-                    "domain": classification.domain,
-                    "confidence": classification.confidence,
-                },
-            }
+        plan = self.planner.plan_execution_graph(
+            decision, task, max_tokens, project_id=project_id
         )
-
-        plan = self.planner.plan_deep(
-            classification, task, max_tokens, project_id=project_id, role=role
+        logger.info(
+            "=== [PLANNER GRAPH CREATED] ===",
+            steps_count=len(plan.steps),
+            token_allocation=plan.token_allocation,
         )
-        await emit(
-            {
-                "stage": "plan",
-                "status": "done",
-                "detail": f"DEEP plan: {len(plan.steps)} steps, {max_tokens} tokens",
-                "meta": {
-                    "sources": list(plan.token_allocation),
-                    "token_budget": max_tokens,
-                },
-            }
-        )
-
+        
         execution_result = await self.executor.execute(plan, event_sink=emit)
         successful = [r for r in execution_result.source_responses if r.success]
+        logger.info(
+            "=== [EXECUTOR COMPLETED] ===",
+            total_responses=len(execution_result.source_responses),
+            success_count=execution_result.success_count,
+            failure_count=execution_result.failure_count,
+            total_latency_ms=execution_result.total_latency_ms,
+        )
 
+        # Security Gap #2: Wrap and scan tool output
         tagger = get_provenance_tagger()
         scanner = get_injection_scanner()
-        raw_items = [
-            {
+        raw_items = []
+        for r in successful:
+            # Wrap output in <tool_output> tags before scanning
+            wrapped_content = f'<tool_output source="{r.source}" tool_id="{r.query_type}">\n{r.content}\n</tool_output>'
+            raw_items.append({
                 "source": r.source,
                 "query_type": r.query_type,
-                "content": r.content,
+                "content": wrapped_content,
                 "metadata": r.metadata,
-            }
-            for r in successful
-        ]
+            })
+            
         tagged_raw = tagger.tag_all(raw_items)
         clean_items, flagged_items = scanner.scan_all(tagged_raw)
-        if flagged_items:
-            logger.warning(
-                "DEEP path: %d items flagged by injection scanner", len(flagged_items)
-            )
+        logger.info(
+            "=== [SECURITY SCANNER] ===",
+            scanned_count=len(tagged_raw),
+            clean_count=len(clean_items),
+            flagged_count=len(flagged_items),
+        )
 
         for i, item in enumerate(clean_items):
             if i < len(successful):
                 successful[i].content = item.get("content", successful[i].content)
 
-        files_accessed = self._extract_files_from_responses(
-            execution_result.source_responses
-        )
+        files_accessed = self._extract_files_from_responses(execution_result.source_responses)
         await self.session_store.update_files_accessed(session.id, files_accessed)
 
         conflicts = await self.conflict_detector.detect(session.id, files_accessed)
-        if conflicts:
-            await emit(
-                {
-                    "stage": "conflict_found",
-                    "status": "done",
-                    "detail": self._conflict_detail(conflicts),
-                    "meta": {"count": len(conflicts)},
-                }
-            )
 
         ranked = await self.ranker.rank_and_compress(
             execution_result.source_responses, classification, task, max_tokens
         )
-        await emit(
-            {
-                "stage": "compress",
-                "status": "done",
-                "detail": f"Compressed to {ranked.tokens_used} of {ranked.token_budget} tokens",
-                "meta": {
-                    "before": sum(r.token_count for r in successful),
-                    "after": ranked.tokens_used,
-                },
-            }
-        )
-
+        
         user_role = self._coerce_role(role)
         filtered = await self.permissions.filter_context(
             ranked.included, user_role, classification.domain, session_id=session_id
+        )
+        logger.info(
+            "=== [RANKING & PERMISSIONS] ===",
+            ranked_count=len(ranked.included),
+            filtered_count=len(filtered),
+            tokens_used=ranked.tokens_used,
         )
 
         context_items = [
@@ -364,28 +454,10 @@ class GatewayPipeline:
             )
             for item in filtered
         ]
+        
         warnings = self._build_warnings(execution_result.source_responses)
-        tokens_retrieved = sum(
-            r.token_count for r in execution_result.source_responses
-        )
-        await self.session_store.update_session_stats(
-            session.id,
-            sources_used=[r.source for r in execution_result.source_responses],
-            tokens_retrieved=tokens_retrieved,
-            tokens_delivered=ranked.tokens_used,
-        )
-        await emit(
-            {
-                "stage": "done",
-                "status": "done",
-                "detail": "DEEP path complete",
-                "meta": {
-                    "context_items": len(context_items),
-                    "tokens_used": ranked.tokens_used,
-                },
-            }
-        )
-
+        tokens_retrieved = sum(r.token_count for r in execution_result.source_responses)
+        
         pkg = ContextPackage(
             session_id=session_id,
             intent=classification.intent.value,
@@ -395,9 +467,19 @@ class GatewayPipeline:
             tokens_retrieved=tokens_retrieved,
             token_allocation=plan.token_allocation,
             score_summary=self._score_summary(ranked.included),
-            conflicts=[c.model_dump(mode="json") for c in conflicts],
+            conflicts=[c.model_dump(mode="json") for c in conflicts] if conflicts else [],
             warnings=warnings,
+            escalated=getattr(decision, "escalated", False),
+            route_source=getattr(decision, "route_source", None),
         )
+
+        # Conditional Synthesis: Skip LLM format for single tools in FAST effort
+        if getattr(decision, "effort", "auto") == "fast" and len(successful) == 1:
+            logger.info("=== [SYNTHESIS SKIPPED] === Fast effort single tool path.")
+            pkg.llm_synthesized = False
+            return pkg
+        
+        logger.info("=== [SYNTHESIS INVOKED] === Running synthesis LLM to structure response.")
         return await self._ensure_human_readable(pkg)
 
     def _coerce_role(self, role: str) -> UserRole:
@@ -470,17 +552,30 @@ class GatewayPipeline:
     async def _ensure_human_readable(self, package: ContextPackage) -> ContextPackage:
         """Ensure all context texts in response package are human readable.
         If non-human-readable content is detected, reformat/rewrite it using the currently configured LLM.
+        Track whether LLM synthesis was successfully applied.
         """
         if not package or not package.context:
             return package
 
+        llm_used = False
+        was_non_readable = False
+
         for item in package.context:
             if item.content and not self._is_human_readable(item.content):
+                was_non_readable = True
                 logger.info(
                     "Non-human-readable content detected in response context; converting using configured LLM",
                     source=item.source,
                 )
-                item.content = await self._make_human_readable_with_llm(item.content)
+                converted_text, success = await self._make_human_readable_with_llm(item.content)
+                item.content = converted_text
+                if success:
+                    llm_used = True
+
+        if was_non_readable and not llm_used:
+            package.llm_synthesized = False
+        else:
+            package.llm_synthesized = True
 
         return package
 
@@ -514,8 +609,10 @@ class GatewayPipeline:
 
         return True
 
-    async def _make_human_readable_with_llm(self, text: str) -> str:
-        """Use currently configured LLM to convert non-human-readable text into clean human-readable text."""
+    async def _make_human_readable_with_llm(self, text: str) -> tuple[str, bool]:
+        """Use currently configured LLM to convert non-human-readable text into clean human-readable text.
+        Returns (formatted_text, is_llm_success).
+        """
         prompt = (
             "The following text or data in context response is not easily human readable "
             "(it may contain raw binary dumps, corrupted characters, escaped sequences, or unformatted data).\n"
@@ -536,14 +633,14 @@ class GatewayPipeline:
                 temperature=0.1,
             )
             if formatted and formatted.strip():
-                return formatted.strip()
+                return formatted.strip(), True
         except Exception as exc:
             logger.warning("Failed to process text using configured LLM: %s", exc)
 
         # Fallback cleanup if LLM is unavailable
         cleaned = "".join(c for c in text if c.isprintable() or c in "\n\r\t")
         cleaned = re.sub(r"\\x[0-9a-fA-F]{2}", "", cleaned)
-        return cleaned.strip()
+        return cleaned.strip(), False
 
 
 # Global pipeline instance

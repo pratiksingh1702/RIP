@@ -84,8 +84,8 @@ class GatewaySettings(BaseSettings):
     slack_channel_id: str = ""
     
     # LLM for classifier fallback
-    llm_provider: str = "google"
-    llm_model: str = "gemini-2.5-flash"
+    llm_provider: str = "ollama"
+    llm_model: str = "qwen2.5:3b"
     llm_fallback_threshold: float = 0.70
     google_api_key: str = ""
     ollama_host: str = "http://localhost:11434"

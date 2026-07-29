@@ -1,4 +1,4 @@
-﻿"""LLM router and resource pool with database persistence."""
+"""LLM router and resource pool with database persistence."""
 
 from __future__ import annotations
 
@@ -77,19 +77,24 @@ class LLMRouter:
         except ImportError:
             try: import tomli as tomllib
             except ImportError: return
-        config_path = Path(".repo-intel/config.toml")
+        config_path = rip_root / ".repo-intel" / "config.toml"
+        if not config_path.exists():
+            config_path = Path(".repo-intel/config.toml")
         if not config_path.exists(): return
         try:
             with open(config_path, "rb") as f: data = tomllib.load(f)
             llm = data.get("llm", {})
-            p = llm.get("primary_provider", "google")
-            m = llm.get("primary_model", "gemini-2.5-flash")
-            cfgs = [LLMConfig(id="primary", provider=p, model=m, api_key=llm.get("google_api_key") or None), LLMConfig(id="ollama-local", provider="ollama", model="llama3.1", base_url=llm.get("ollama_host", "http://localhost:11434"))]
+            p = llm.get("primary_provider", "ollama")
+            m = llm.get("primary_model", "qwen2.5:3b")
+            cfgs = [LLMConfig(id="primary", provider=p, model=m, api_key=llm.get("google_api_key") or None), LLMConfig(id="ollama-local", provider="ollama", model="qwen2.5:3b", base_url=llm.get("ollama_host", "http://localhost:11434"))]
             if llm.get("openrouter_api_key"): cfgs.append(LLMConfig(id="openrouter", provider="openrouter", model="openai/gpt-4o", api_key=llm["openrouter_api_key"], base_url=llm.get("openrouter_base_url", "https://openrouter.ai/api/v1")))
             if llm.get("google_api_key"): cfgs.append(LLMConfig(id="google", provider="google", model=m, api_key=llm["google_api_key"]))
             for cfg in cfgs:
                 self.configs[cfg.id] = cfg
-                await self._save_to_db(cfg)
+                try:
+                    await self._save_to_db(cfg)
+                except Exception:
+                    pass
         except Exception: pass
 
     async def register_config(self, config: LLMConfig):
@@ -153,14 +158,39 @@ class LLMRouter:
         return chain
 
     async def query_llm(self, prompt: str, config: LLMConfig, system_prompt: str = "You are an expert software engineer.", max_tokens: int | None = None, temperature: float | None = None) -> str:
-        from core.llm.client import query_llm as rip_query_llm
         router_logger.info("ROUTER_LLM: Calling LLM - config_id=%s provider=%s model=%s has_key=%s", config.id, config.provider, config.model, bool(config.api_key))
         errors = []
         chain = await self.get_fallback_chain(config_id=config.id)
         router_logger.info("ROUTER_LLM: Fallback chain: %s", [c.id for c in chain])
+        
+        import httpx
         for candidate in chain:
             try:
                 router_logger.info("ROUTER_LLM: Trying candidate id=%s provider=%s model=%s", candidate.id, candidate.provider, candidate.model)
+                if candidate.provider == "ollama":
+                    base_url = candidate.base_url or "http://localhost:11434"
+                    url = f"{base_url.rstrip('/')}/api/chat"
+                    payload = {
+                        "model": candidate.model or "qwen2.5:3b",
+                        "messages": [
+                            {"role": "system", "content": system_prompt},
+                            {"role": "user", "content": prompt},
+                        ],
+                        "stream": False,
+                    }
+                    if max_tokens:
+                        payload["options"] = {"num_predict": max_tokens}
+                    async with httpx.AsyncClient(timeout=15.0) as client:
+                        resp = await client.post(url, json=payload)
+                        if resp.status_code == 200:
+                            data = resp.json()
+                            content = data.get("message", {}).get("content", "")
+                            router_logger.info("ROUTER_LLM: Ollama response received, length=%d", len(content))
+                            return content
+                        else:
+                            raise RuntimeError(f"Ollama returned HTTP {resp.status_code}: {resp.text}")
+
+                from core.llm.client import query_llm as rip_query_llm
                 return await rip_query_llm(prompt=prompt, system_prompt=system_prompt, max_tokens=max_tokens, temperature=temperature, provider=candidate.provider, model=candidate.model, api_key=candidate.api_key, base_url=candidate.base_url)
             except Exception as exc:
                 errors.append(f"{candidate.id}: {exc}")

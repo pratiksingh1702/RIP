@@ -1,4 +1,4 @@
-﻿"""Multi-source planner engine."""
+"""Multi-source planner engine."""
 
 from datetime import datetime
 from typing import Any
@@ -332,6 +332,96 @@ class PlannerEngine:
         match = re.search(r"\b[A-Z][A-Z0-9]+-\d+\b", task)
         return match.group(0) if match else None
 
+
+    def plan_execution_graph(
+        self,
+        decision: Any, # RouteDecision
+        task: str,
+        max_tokens: int = 6000,
+        project_id: str | None = None
+    ) -> Plan:
+        """Create a V7 deterministic execution graph from the router's decision."""
+        from gateway.core.router.capability_map import get_capability_map
+        cap_map = get_capability_map()
+
+        queries: list[SourceQuery] = []
+        parallel_safe_tools = []
+        sequential_tools = []
+
+        # Filter out disabled tools and group them
+        for tool_id in decision.selected_tools:
+            tool = cap_map.get(tool_id)
+            if not tool or not tool.enabled:
+                # If tool isn't in map but was selected, we assume it's parallel_safe (e.g. dynamic MCP)
+                parallel_safe_tools.append(tool_id)
+                continue
+            
+            if tool.parallel_safe:
+                parallel_safe_tools.append(tool_id)
+            else:
+                sequential_tools.append(tool_id)
+
+        # Build SourceQueries for parallel tools
+        for tool_id in parallel_safe_tools:
+            queries.append(self._build_query(
+                source=tool_id,
+                query_type="search",
+                task=task,
+                project_id=project_id,
+                priority=1,
+                estimated_tokens=1000
+            ))
+            
+        seq_queries = []
+        for tool_id in sequential_tools:
+            seq_queries.append(self._build_query(
+                source=tool_id,
+                query_type="execute",
+                task=task,
+                project_id=project_id,
+                priority=1,
+                estimated_tokens=1500
+            ))
+
+        steps = []
+        # Create a single parallel step for all parallel safe tools
+        if queries:
+            steps.append(RetrievalStep(queries=queries, parallel=True, condition="always"))
+            
+        # Create individual sequential steps for non-parallel-safe tools (like docker_terminal)
+        for sq in seq_queries:
+            steps.append(RetrievalStep(queries=[sq], parallel=False, condition="always"))
+
+        if not steps:
+            steps = [RetrievalStep(queries=[], parallel=True, condition="always")]
+
+        # Fake classification result for the existing Plan model compatibility
+        from gateway.core.classifier.models import ClassificationResult, IntentType, RiskLevel
+        classification = ClassificationResult(
+            intent=IntentType.INVESTIGATION,
+            domain="general",
+            domain_keywords_found=[],
+            confidence=decision.confidence,
+            risk_level=RiskLevel.LOW,
+            strategy="rules",
+            raw_task=task,
+        )
+
+        weights = {q.source: 0.1 for q in queries + seq_queries}
+        token_allocation = allocate_token_budget(
+            total_budget=max_tokens,
+            token_weights=weights,
+            enabled_sources=list(set(q.source for q in queries + seq_queries))
+        )
+
+        return Plan(
+            classification=classification,
+            steps=steps,
+            token_budget=max_tokens,
+            token_allocation=token_allocation,
+            estimated_tokens_raw=sum(q.estimated_tokens for q in queries + seq_queries),
+            created_at=datetime.utcnow()
+        )
 
 def plan(
     classification: ClassificationResult,

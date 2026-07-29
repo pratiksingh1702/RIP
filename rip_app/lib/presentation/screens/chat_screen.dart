@@ -229,6 +229,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bgColor = isDark ? Colors.black : Theme.of(context).scaffoldBackgroundColor;
     final messages = ref.watch(chatProvider);
     final activeProject = ref.watch(activeProjectProvider);
     final connectionStatus = ref.watch(connectionStatusProvider);
@@ -239,7 +241,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       extendBodyBehindAppBar: true,
       drawer: const AppDrawer(),
       drawerEdgeDragWidth: MediaQuery.sizeOf(context).width * 0.4,
-      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      backgroundColor: bgColor,
       body: Builder(
         builder: (context) {
           return GestureDetector(
@@ -252,8 +254,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             },
             child: Stack(
               children: [
-
-              ColoredBox(color: Theme.of(context).scaffoldBackgroundColor),
+                ColoredBox(color: bgColor),
               Column(
                 children: [
                   Expanded(
@@ -465,49 +466,62 @@ class _ProjectContextCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Padding(
       padding: const EdgeInsets.fromLTRB(14, 0, 14, 10),
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: AppColors.surface.withValues(alpha: 0.94),
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: AppColors.border),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(14),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(18),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+          child: Container(
+            decoration: BoxDecoration(
+              color: isDark
+                  ? Colors.white.withValues(alpha: 0.06)
+                  : Colors.black.withValues(alpha: 0.04),
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(
+                color: isDark
+                    ? Colors.white.withValues(alpha: 0.1)
+                    : Colors.black.withValues(alpha: 0.08),
+              ),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Icon(Icons.account_tree_rounded, color: AppColors.primary, size: 20),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      project.projectName,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: AppColors.textPrimary,
-                        fontSize: 15,
-                        fontWeight: FontWeight.w900,
+                  Row(
+                    children: [
+                      const Icon(Icons.account_tree_rounded, color: AppColors.primary, size: 20),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          project.projectName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: isDark ? Colors.white : Colors.black87,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
                       ),
-                    ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      _ProjectStatPill(label: 'Files', value: '${project.filesCount}'),
+                      _ProjectStatPill(label: 'Entities', value: '${project.entitiesCount}'),
+                      _ProjectStatPill(label: 'Language', value: _primaryLanguage(project)),
+                      _ProjectStatPill(label: 'Indexed', value: _indexedLabel(project)),
+                    ],
                   ),
                 ],
               ),
-              const SizedBox(height: 10),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  _ProjectStatPill(label: 'Files', value: '${project.filesCount}'),
-                  _ProjectStatPill(label: 'Entities', value: '${project.entitiesCount}'),
-                  _ProjectStatPill(label: 'Language', value: _primaryLanguage(project)),
-                  _ProjectStatPill(label: 'Indexed', value: _indexedLabel(project)),
-                ],
-              ),
-            ],
+            ),
           ),
         ),
       ),
@@ -534,17 +548,24 @@ class _ProjectStatPill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.055),
+        color: isDark
+            ? Colors.white.withValues(alpha: 0.08)
+            : Colors.black.withValues(alpha: 0.05),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.075)),
+        border: Border.all(
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.1)
+              : Colors.black.withValues(alpha: 0.08),
+        ),
       ),
       child: Text(
         '$label: $value',
-        style: const TextStyle(
-          color: AppColors.textSecondary,
+        style: TextStyle(
+          color: isDark ? Colors.white70 : Colors.black87,
           fontSize: 11,
           fontWeight: FontWeight.w800,
         ),
@@ -573,8 +594,8 @@ class _FloatingHeader extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final top = MediaQuery.paddingOf(context).top;
-    final chrome = Theme.of(context).extension<ChatChromeTheme>() ??
-        const ChatChromeTheme.dark();
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final fadeColor = isDark ? Colors.black : Theme.of(context).scaffoldBackgroundColor;
     final height = lerpDouble(72, 60, progress)!;
     final veilAlpha = lerpDouble(0.74, 0.96, progress)!;
     final midFadeAlpha = lerpDouble(0.38, 0.66, progress)!;
@@ -597,12 +618,11 @@ class _FloatingHeader extends ConsumerWidget {
                       end: Alignment.bottomCenter,
                       stops: const [0, 0.48, 0.72, 0.90, 1],
                       colors: [
-                        chrome.fadeColor.withValues(alpha: veilAlpha),
-                        chrome.fadeColor
-                            .withValues(alpha: veilAlpha * 0.96),
-                        chrome.fadeColor.withValues(alpha: midFadeAlpha),
-                        chrome.fadeColor.withValues(alpha: tailFadeAlpha),
-                        chrome.fadeColor.withValues(alpha: 0),
+                        fadeColor.withValues(alpha: veilAlpha),
+                        fadeColor.withValues(alpha: veilAlpha * 0.96),
+                        fadeColor.withValues(alpha: midFadeAlpha),
+                        fadeColor.withValues(alpha: tailFadeAlpha),
+                        fadeColor.withValues(alpha: 0),
                       ],
                     ),
                   ),
@@ -633,13 +653,19 @@ class _FloatingHeader extends ConsumerWidget {
                         onPressed: onNewChatTap,
                       ),
                       const SizedBox(width: 8),
-                      _GlassIconButton(icon: Icons.dashboard_rounded, tooltip: 'Dashboard', onPressed: () => context.push('/workspace')),
+                      _GlassIconButton(
+                        icon: Icons.dashboard_rounded,
+                        tooltip: 'Dashboard',
+                        onPressed: () => context.push('/workspace'),
+                      ),
                       const SizedBox(width: 8),
                       _GlassIconButton(
                         icon: Icons.tune_rounded,
                         tooltip: 'Settings',
                         onPressed: onSettingsTap,
                       ),
+                      const SizedBox(width: 8),
+                      const _EffortSelectorButton(),
                     ],
                   ),
                 ),
@@ -670,21 +696,18 @@ class __HeaderDropdownSelectorState
 
   @override
   Widget build(BuildContext context) {
-    final chrome = Theme.of(context).extension<ChatChromeTheme>() ??
-        const ChatChromeTheme.dark();
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onVerticalDragEnd: (details) {
         final dy = details.primaryVelocity ?? 0;
         if (dy < -100) {
-          // Swiped UPWARD -> Switch to Project dropdown
           if (!_showProjectSelector) {
             HapticFeedback.mediumImpact();
             setState(() => _showProjectSelector = true);
           }
         } else if (dy > 100) {
-          // Swiped DOWNWARD -> Switch to LLM Config dropdown
           if (_showProjectSelector) {
             HapticFeedback.mediumImpact();
             setState(() => _showProjectSelector = false);
@@ -694,16 +717,20 @@ class __HeaderDropdownSelectorState
       child: ClipRRect(
         borderRadius: BorderRadius.circular(20),
         child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+          filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 220),
             margin: const EdgeInsets.symmetric(vertical: 2),
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
             decoration: BoxDecoration(
-              color: chrome.controlSurface.withValues(alpha: 0.45),
+              color: isDark
+                  ? Colors.white.withValues(alpha: 0.08)
+                  : Colors.black.withValues(alpha: 0.05),
               borderRadius: BorderRadius.circular(20),
               border: Border.all(
-                color: Colors.white.withValues(alpha: 0.15),
+                color: isDark
+                    ? Colors.white.withValues(alpha: 0.12)
+                    : Colors.black.withValues(alpha: 0.1),
                 width: 1,
               ),
             ),
@@ -730,6 +757,7 @@ class __HeaderDropdownSelectorState
   }
 
   Widget _buildLlmDropdown(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final llmConfigsAsync = ref.watch(gatewayLlmConfigsProvider);
     final preferredConfigId = ref.watch(preferredLLMConfigProvider);
     final configs = llmConfigsAsync.value ?? [];
@@ -759,9 +787,15 @@ class __HeaderDropdownSelectorState
       offset: const Offset(0, 40),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: Colors.white.withValues(alpha: 0.12)),
+        side: BorderSide(
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.15)
+              : Colors.black.withValues(alpha: 0.1),
+        ),
       ),
-      color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.96),
+      color: isDark
+          ? const Color(0xFF13132B).withValues(alpha: 0.96)
+          : Colors.white.withValues(alpha: 0.96),
       elevation: 0,
       onSelected: (val) {
         HapticFeedback.selectionClick();
@@ -775,18 +809,18 @@ class __HeaderDropdownSelectorState
         final items = <PopupMenuEntry<String>>[];
 
         items.add(
-          const PopupMenuItem<String>(
+          PopupMenuItem<String>(
             enabled: false,
             child: Row(
               children: [
-                Icon(Icons.psychology_rounded, size: 16, color: AppColors.primary),
-                SizedBox(width: 8),
+                const Icon(Icons.psychology_rounded, size: 16, color: AppColors.primary),
+                const SizedBox(width: 8),
                 Text(
                   'LLM Models',
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.bold,
-                    color: AppColors.textSecondary,
+                    color: isDark ? Colors.white70 : Colors.black54,
                   ),
                 ),
               ],
@@ -797,9 +831,15 @@ class __HeaderDropdownSelectorState
 
         if (configs.isEmpty) {
           items.add(
-            const PopupMenuItem<String>(
+            PopupMenuItem<String>(
               enabled: false,
-              child: Text('No models loaded', style: TextStyle(fontSize: 13)),
+              child: Text(
+                'No models loaded',
+                style: TextStyle(
+                  fontSize: 13,
+                  color: isDark ? Colors.white70 : Colors.black87,
+                ),
+              ),
             ),
           );
         } else {
@@ -817,7 +857,7 @@ class __HeaderDropdownSelectorState
                     Icon(
                       isSelected ? Icons.check_circle_rounded : Icons.radio_button_unchecked_rounded,
                       size: 18,
-                      color: isSelected ? AppColors.primary : Colors.grey,
+                      color: isSelected ? AppColors.primary : (isDark ? Colors.white38 : Colors.black38),
                     ),
                     const SizedBox(width: 10),
                     Expanded(
@@ -830,15 +870,15 @@ class __HeaderDropdownSelectorState
                             style: TextStyle(
                               fontSize: 13,
                               fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                              color: AppColors.textPrimary,
+                              color: isDark ? Colors.white : Colors.black87,
                             ),
                           ),
                           if (provider.isNotEmpty)
                             Text(
                               provider,
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 11,
-                                color: AppColors.textSecondary,
+                                color: isDark ? Colors.white54 : Colors.black54,
                               ),
                             ),
                         ],
@@ -853,13 +893,20 @@ class __HeaderDropdownSelectorState
 
         items.add(const PopupMenuDivider());
         items.add(
-          const PopupMenuItem<String>(
+          PopupMenuItem<String>(
             value: '__manage__',
             child: Row(
               children: [
-                Icon(Icons.tune_rounded, size: 18, color: AppColors.primary),
-                SizedBox(width: 10),
-                Text('Manage LLM Settings', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                const Icon(Icons.tune_rounded, size: 18, color: AppColors.primary),
+                const SizedBox(width: 10),
+                Text(
+                  'Manage LLM Settings',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: isDark ? Colors.white : Colors.black87,
+                  ),
+                ),
               ],
             ),
           ),
@@ -878,21 +925,26 @@ class __HeaderDropdownSelectorState
               displayName,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: AppColors.textPrimary,
+              style: TextStyle(
+                color: isDark ? Colors.white : Colors.black87,
                 fontSize: 14,
                 fontWeight: FontWeight.w700,
               ),
             ),
           ),
           const SizedBox(width: 4),
-          const Icon(Icons.keyboard_arrow_down_rounded, size: 18, color: AppColors.textSecondary),
+          Icon(
+            Icons.keyboard_arrow_down_rounded,
+            size: 18,
+            color: isDark ? Colors.white60 : Colors.black54,
+          ),
         ],
       ),
     );
   }
 
   Widget _buildProjectDropdown(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final projectsAsync = ref.watch(projectListProvider);
     final activeProjectId = ref.watch(activeProjectIdProvider);
     final projects = projectsAsync.value ?? [];
@@ -906,9 +958,15 @@ class __HeaderDropdownSelectorState
       offset: const Offset(0, 40),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: Colors.white.withValues(alpha: 0.12)),
+        side: BorderSide(
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.15)
+              : Colors.black.withValues(alpha: 0.1),
+        ),
       ),
-      color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.96),
+      color: isDark
+          ? const Color(0xFF13132B).withValues(alpha: 0.96)
+          : Colors.white.withValues(alpha: 0.96),
       elevation: 0,
       onSelected: (val) async {
         HapticFeedback.selectionClick();
@@ -918,18 +976,18 @@ class __HeaderDropdownSelectorState
         final items = <PopupMenuEntry<String>>[];
 
         items.add(
-          const PopupMenuItem<String>(
+          PopupMenuItem<String>(
             enabled: false,
             child: Row(
               children: [
-                Icon(Icons.account_tree_rounded, size: 16, color: AppColors.primary),
-                SizedBox(width: 8),
+                const Icon(Icons.account_tree_rounded, size: 16, color: AppColors.primary),
+                const SizedBox(width: 8),
                 Text(
                   'Projects',
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.bold,
-                    color: AppColors.textSecondary,
+                    color: isDark ? Colors.white70 : Colors.black54,
                   ),
                 ),
               ],
@@ -940,9 +998,15 @@ class __HeaderDropdownSelectorState
 
         if (projects.isEmpty) {
           items.add(
-            const PopupMenuItem<String>(
+            PopupMenuItem<String>(
               enabled: false,
-              child: Text('No projects indexed', style: TextStyle(fontSize: 13)),
+              child: Text(
+                'No projects indexed',
+                style: TextStyle(
+                  fontSize: 13,
+                  color: isDark ? Colors.white70 : Colors.black87,
+                ),
+              ),
             ),
           );
         } else {
@@ -956,7 +1020,7 @@ class __HeaderDropdownSelectorState
                     Icon(
                       isSelected ? Icons.check_circle_rounded : Icons.radio_button_unchecked_rounded,
                       size: 18,
-                      color: isSelected ? AppColors.primary : Colors.grey,
+                      color: isSelected ? AppColors.primary : (isDark ? Colors.white38 : Colors.black38),
                     ),
                     const SizedBox(width: 10),
                     Expanded(
@@ -969,14 +1033,14 @@ class __HeaderDropdownSelectorState
                             style: TextStyle(
                               fontSize: 13,
                               fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                              color: AppColors.textPrimary,
+                              color: isDark ? Colors.white : Colors.black87,
                             ),
                           ),
                           Text(
                             '${p.filesCount} files • ${p.entitiesCount} entities',
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 11,
-                              color: AppColors.textSecondary,
+                              color: isDark ? Colors.white54 : Colors.black54,
                             ),
                           ),
                         ],
@@ -1002,15 +1066,19 @@ class __HeaderDropdownSelectorState
               displayName,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: AppColors.textPrimary,
+              style: TextStyle(
+                color: isDark ? Colors.white : Colors.black87,
                 fontSize: 14,
                 fontWeight: FontWeight.w700,
               ),
             ),
           ),
           const SizedBox(width: 4),
-          const Icon(Icons.keyboard_arrow_down_rounded, size: 18, color: AppColors.textSecondary),
+          Icon(
+            Icons.keyboard_arrow_down_rounded,
+            size: 18,
+            color: isDark ? Colors.white60 : Colors.black54,
+          ),
         ],
       ),
     );
@@ -1023,13 +1091,14 @@ class _BottomComposerFade extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final bottom = MediaQuery.paddingOf(context).bottom;
-    final chrome = Theme.of(context).extension<ChatChromeTheme>() ??
-        const ChatChromeTheme.dark();
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final fadeColor = isDark ? Colors.black : Theme.of(context).scaffoldBackgroundColor;
+
     return Positioned(
       left: 0,
       right: 0,
       bottom: 0,
-      height: bottom + chrome.bottomFadeHeight,
+      height: bottom + 110,
       child: IgnorePointer(
         child: DecoratedBox(
           decoration: BoxDecoration(
@@ -1038,11 +1107,11 @@ class _BottomComposerFade extends StatelessWidget {
               end: Alignment.bottomCenter,
               stops: const [0, 0.28, 0.58, 0.82, 1],
               colors: [
-                chrome.fadeColor.withValues(alpha: 0),
-                chrome.fadeColor.withValues(alpha: 0.16),
-                chrome.fadeColor.withValues(alpha: 0.48),
-                chrome.fadeColor.withValues(alpha: 0.78),
-                chrome.fadeColor.withValues(alpha: 0.96),
+                fadeColor.withValues(alpha: 0),
+                fadeColor.withValues(alpha: 0.16),
+                fadeColor.withValues(alpha: 0.48),
+                fadeColor.withValues(alpha: 0.78),
+                fadeColor.withValues(alpha: 0.96),
               ],
             ),
           ),
@@ -1158,8 +1227,7 @@ class _FloatingComposerState extends State<_FloatingComposer> {
   Widget build(BuildContext context) {
     final bottom = MediaQuery.paddingOf(context).bottom;
     final hasFocus = widget.focusNode.hasFocus;
-    final chrome = Theme.of(context).extension<ChatChromeTheme>() ??
-        const ChatChromeTheme.dark();
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final radius = widget.expanded ? 28.0 : 24.0;
     final suffix = _getInlineSuggestionSuffix(widget.controller.text);
 
@@ -1170,7 +1238,7 @@ class _FloatingComposerState extends State<_FloatingComposer> {
           borderRadius: BorderRadius.circular(radius),
           boxShadow: [
             BoxShadow(
-              color: chrome.shadowColor.withValues(alpha: 0.42),
+              color: isDark ? Colors.black45 : Colors.black12,
               blurRadius: 36,
               offset: const Offset(0, 20),
             ),
@@ -1184,26 +1252,31 @@ class _FloatingComposerState extends State<_FloatingComposer> {
               duration: const Duration(milliseconds: 240),
               curve: Curves.easeOutCubic,
               decoration: BoxDecoration(
-                color: chrome.composerSurface.withValues(alpha: 0.94),
+                color: isDark
+                    ? const Color(0xFF13132B).withValues(alpha: 0.85)
+                    : Colors.white.withValues(alpha: 0.85),
                 borderRadius: BorderRadius.circular(radius),
                 border: Border.all(
                   color: hasFocus
-                      ? AppColors.primary.withValues(alpha: 0.55)
-                      : chrome.borderColor.withValues(alpha: 0.82),
+                      ? AppColors.primary
+                      : (isDark
+                          ? Colors.white.withValues(alpha: 0.12)
+                          : Colors.black.withValues(alpha: 0.1)),
                   width: 1,
                 ),
               ),
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(12, 9, 12, 9),
+                padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     AnimatedSize(
                       duration: const Duration(milliseconds: 200),
                       curve: Curves.easeOutCubic,
                       child: widget.isBusy
                           ? Padding(
-                              padding: const EdgeInsets.fromLTRB(4, 2, 4, 8),
+                              padding: const EdgeInsets.fromLTRB(2, 2, 2, 8),
                               child: _ComposerLoadingBar(onStop: widget.onStop),
                             )
                           : const SizedBox.shrink(),
@@ -1214,7 +1287,7 @@ class _FloatingComposerState extends State<_FloatingComposer> {
                       alignment: Alignment.topCenter,
                       child: widget.expanded
                           ? Padding(
-                              padding: const EdgeInsets.fromLTRB(4, 4, 4, 8),
+                              padding: const EdgeInsets.fromLTRB(2, 2, 2, 8),
                               child: _ComposerSuggestions(
                                 controller: widget.controller,
                                 onCommandSelected: widget.onCommandSelected,
@@ -1223,144 +1296,192 @@ class _FloatingComposerState extends State<_FloatingComposer> {
                             )
                           : const SizedBox.shrink(),
                     ),
+                    // Row 1: Active Project / Context Chip (Top Tag)
+                    if (widget.activeProjectName != null) ...[
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 6),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: isDark
+                                ? Colors.white.withValues(alpha: 0.08)
+                                : Colors.black.withValues(alpha: 0.06),
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(
+                              color: isDark
+                                  ? Colors.white.withValues(alpha: 0.12)
+                                  : Colors.black.withValues(alpha: 0.08),
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.account_tree_rounded, size: 13, color: AppColors.primary),
+                              const SizedBox(width: 5),
+                              Text(
+                                widget.activeProjectName!,
+                                style: TextStyle(
+                                  fontSize: 11.5,
+                                  fontWeight: FontWeight.w600,
+                                  color: isDark ? Colors.white70 : Colors.black87,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                    // Row 2: Text Input Field Area
                     GestureDetector(
                       onHorizontalDragEnd: (details) {
                         if (details.primaryVelocity != null && details.primaryVelocity! > 50) {
                           _acceptSuggestion(suffix);
                         }
                       },
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.end,
+                      child: Stack(
+                        alignment: Alignment.centerLeft,
                         children: [
-                          _ComposerButton(
-                            label: '@',
-                            tooltip: 'Projects',
-                            onPressed: () {
-                              widget.controller.text = '@';
-                              widget.controller.selection = TextSelection.collapsed(
-                                offset: widget.controller.text.length,
-                              );
-                              widget.focusNode.requestFocus();
-                            },
-                          ),
-                          Expanded(
-                            child: Stack(
-                              alignment: Alignment.centerLeft,
-                              children: [
-                                if (suffix.isNotEmpty && widget.controller.text.isNotEmpty)
-                                  IgnorePointer(
-                                    child: Padding(
-                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
-                                      child: Text.rich(
-                                        TextSpan(
-                                          children: [
-                                            TextSpan(
-                                              text: widget.controller.text,
-                                              style: const TextStyle(
-                                                color: Colors.transparent,
-                                                fontSize: 14.5,
-                                                height: 1.35,
-                                                fontWeight: FontWeight.w500,
-                                              ),
-                                            ),
-                                            TextSpan(
-                                              text: suffix,
-                                              style: TextStyle(
-                                                color: AppColors.textSecondary.withValues(alpha: 0.42),
-                                                fontSize: 14.5,
-                                                height: 1.35,
-                                                fontWeight: FontWeight.w500,
-                                                fontStyle: FontStyle.italic,
-                                              ),
-                                            ),
-                                          ],
+                          if (suffix.isNotEmpty && widget.controller.text.isNotEmpty)
+                            IgnorePointer(
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                                child: Text.rich(
+                                  TextSpan(
+                                    children: [
+                                      TextSpan(
+                                        text: widget.controller.text,
+                                        style: const TextStyle(
+                                          color: Colors.transparent,
+                                          fontSize: 14.5,
+                                          height: 1.35,
+                                          fontWeight: FontWeight.w500,
                                         ),
-                                        maxLines: 4,
-                                        overflow: TextOverflow.ellipsis,
                                       ),
-                                    ),
+                                      TextSpan(
+                                        text: suffix,
+                                        style: TextStyle(
+                                          color: isDark ? Colors.white38 : Colors.black38,
+                                          fontSize: 14.5,
+                                          height: 1.35,
+                                          fontWeight: FontWeight.w500,
+                                          fontStyle: FontStyle.italic,
+                                        ),
+                                      ),
+                                    ],
                                   ),
-                                ConstrainedBox(
-                                  constraints: const BoxConstraints(maxHeight: 136),
-                                  child: TextField(
-                                    controller: widget.controller,
-                                    focusNode: widget.focusNode,
-                                    cursorColor: AppColors.primary,
-                                    minLines: 1,
-                                    maxLines: 5,
-                                    textInputAction: TextInputAction.newline,
-                                    keyboardType: TextInputType.multiline,
-                                    style: const TextStyle(
-                                      color: AppColors.textPrimary,
-                                      fontSize: 14.5,
-                                      height: 1.35,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                    decoration: InputDecoration(
-                                      hintText: widget.activeProjectName == null
-                                          ? 'Select a repository, then query architecture'
-                                          : 'Explore ${widget.activeProjectName!}...',
-                                      hintStyle: TextStyle(
-                                        color: AppColors.textSecondary.withValues(alpha: 0.60),
-                                        fontSize: 14.0,
-                                      ),
-                                      filled: false,
-                                      isDense: true,
-                                      border: InputBorder.none,
-                                      enabledBorder: InputBorder.none,
-                                      focusedBorder: InputBorder.none,
-                                      contentPadding: const EdgeInsets.symmetric(
-                                        horizontal: 8,
-                                        vertical: 10,
-                                      ),
-                                    ),
-                                    onSubmitted: (_) => widget.onSend(),
-                                  ),
+                                  maxLines: 4,
+                                  overflow: TextOverflow.ellipsis,
                                 ),
-                                if (suffix.isNotEmpty)
-                                  Positioned(
-                                    right: 4,
-                                    top: 2,
-                                    child: GestureDetector(
-                                      onTap: () => _acceptSuggestion(suffix),
-                                      child: Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                        decoration: BoxDecoration(
-                                          color: AppColors.primary.withValues(alpha: 0.12),
-                                          borderRadius: BorderRadius.circular(6),
-                                          border: Border.all(color: AppColors.primary.withValues(alpha: 0.25)),
-                                        ),
-                                        child: Text(
-                                          'Swipe → to complete',
-                                          style: TextStyle(
-                                            fontSize: 9.5,
-                                            fontWeight: FontWeight.w600,
-                                            color: AppColors.primary.withValues(alpha: 0.85),
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                              ],
+                              ),
+                            ),
+                          ConstrainedBox(
+                            constraints: const BoxConstraints(maxHeight: 120),
+                            child: TextField(
+                              controller: widget.controller,
+                              focusNode: widget.focusNode,
+                              cursorColor: AppColors.primary,
+                              minLines: 1,
+                              maxLines: 4,
+                              textInputAction: TextInputAction.newline,
+                              keyboardType: TextInputType.multiline,
+                              style: TextStyle(
+                                color: isDark ? Colors.white : Colors.black87,
+                                fontSize: 14.5,
+                                height: 1.35,
+                                fontWeight: FontWeight.w500,
+                              ),
+                              decoration: InputDecoration(
+                                hintText: 'Ask RIP anything...',
+                                hintStyle: TextStyle(
+                                  color: isDark ? Colors.white38 : Colors.black38,
+                                  fontSize: 14.0,
+                                ),
+                                filled: false,
+                                isDense: true,
+                                border: InputBorder.none,
+                                enabledBorder: InputBorder.none,
+                                focusedBorder: InputBorder.none,
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 4,
+                                  vertical: 4,
+                                ),
+                              ),
+                              onSubmitted: (_) => widget.onSend(),
                             ),
                           ),
-                          _ComposerButton(
-                            label: '/',
-                            tooltip: 'Commands & Flags',
-                            onPressed: () {
-                              widget.controller.text = '/';
-                              widget.controller.selection = TextSelection.collapsed(
-                                offset: widget.controller.text.length,
-                              );
-                              widget.focusNode.requestFocus();
-                            },
-                          ),
-                          const SizedBox(width: 4),
-                          widget.isBusy
-                              ? _StopSendButton(onPressed: widget.onStop)
-                              : _SendButton(onPressed: widget.onSend),
+                          if (suffix.isNotEmpty)
+                            Positioned(
+                              right: 2,
+                              top: 0,
+                              child: GestureDetector(
+                                onTap: () => _acceptSuggestion(suffix),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.primary.withValues(alpha: 0.12),
+                                    borderRadius: BorderRadius.circular(6),
+                                    border: Border.all(color: AppColors.primary.withValues(alpha: 0.25)),
+                                  ),
+                                  child: Text(
+                                    'Swipe → to complete',
+                                    style: TextStyle(
+                                      fontSize: 9.5,
+                                      fontWeight: FontWeight.w600,
+                                      color: AppColors.primary.withValues(alpha: 0.85),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
                         ],
                       ),
+                    ),
+                    const SizedBox(height: 8),
+                    // Row 3: Bottom Tools & Actions Toolbar (Attach +, Effort Pill, Search, Slash Commands, Send Button)
+                    Row(
+                      children: [
+                        _ComposerIconButton(
+                          icon: Icons.add_rounded,
+                          tooltip: 'Attach / Projects',
+                          onPressed: () {
+                            widget.controller.text = '@';
+                            widget.controller.selection = TextSelection.collapsed(
+                              offset: widget.controller.text.length,
+                            );
+                            widget.focusNode.requestFocus();
+                          },
+                        ),
+                        const SizedBox(width: 6),
+                        const _ComposerEffortPill(),
+                        const SizedBox(width: 6),
+                        _ComposerIconButton(
+                          icon: Icons.search_rounded,
+                          tooltip: 'Search Codebase',
+                          onPressed: () {
+                            widget.controller.text = 'search ';
+                            widget.controller.selection = TextSelection.collapsed(
+                              offset: widget.controller.text.length,
+                            );
+                            widget.focusNode.requestFocus();
+                          },
+                        ),
+                        const SizedBox(width: 4),
+                        _ComposerIconButton(
+                          icon: Icons.terminal_rounded,
+                          tooltip: 'Commands & Flags',
+                          onPressed: () {
+                            widget.controller.text = '/';
+                            widget.controller.selection = TextSelection.collapsed(
+                              offset: widget.controller.text.length,
+                            );
+                            widget.focusNode.requestFocus();
+                          },
+                        ),
+                        const Spacer(),
+                        widget.isBusy
+                            ? _StopSendButton(onPressed: widget.onStop)
+                            : _SendButton(onPressed: widget.onSend),
+                      ],
                     ),
                   ],
                 ),
@@ -1380,14 +1501,15 @@ class _ComposerLoadingBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final chrome = Theme.of(context).extension<ChatChromeTheme>() ??
-        const ChatChromeTheme.dark();
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return ClipRRect(
       borderRadius: BorderRadius.circular(16),
       child: DecoratedBox(
         decoration: BoxDecoration(
-          color: chrome.suggestionSurface.withValues(alpha: 0.42),
-          border: Border.all(color: chrome.borderColor.withValues(alpha: 0.76)),
+          color: isDark ? Colors.white.withValues(alpha: 0.06) : Colors.black.withValues(alpha: 0.04),
+          border: Border.all(
+            color: isDark ? Colors.white.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.08),
+          ),
           borderRadius: BorderRadius.circular(16),
         ),
         child: Column(
@@ -1417,7 +1539,7 @@ class _ComposerLoadingBar extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        color: AppColors.textSecondary.withValues(alpha: 0.88),
+                        color: isDark ? Colors.white70 : Colors.black87,
                         fontSize: 12,
                         fontWeight: FontWeight.w700,
                       ),
@@ -1433,7 +1555,7 @@ class _ComposerLoadingBar extends StatelessWidget {
                       style: IconButton.styleFrom(
                         fixedSize: const Size(32, 32),
                         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                        backgroundColor: chrome.controlSurface,
+                        backgroundColor: isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.05),
                         shape: const CircleBorder(),
                       ),
                     ),
@@ -1532,8 +1654,7 @@ class _ComposerButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final chrome = Theme.of(context).extension<ChatChromeTheme>() ??
-        const ChatChromeTheme.dark();
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Tooltip(
       message: tooltip,
       child: IconButton(
@@ -1543,15 +1664,17 @@ class _ComposerButton extends StatelessWidget {
         },
         icon: Text(
           label,
-          style: const TextStyle(
-            color: AppColors.textPrimary,
+          style: TextStyle(
+            color: isDark ? Colors.white : Colors.black87,
             fontSize: 16,
             fontWeight: FontWeight.w900,
           ),
         ),
         style: IconButton.styleFrom(
           fixedSize: const Size(38, 38),
-          backgroundColor: chrome.controlSurface,
+          backgroundColor: isDark
+              ? Colors.white.withValues(alpha: 0.08)
+              : Colors.black.withValues(alpha: 0.05),
           shape: const CircleBorder(),
         ),
       ),
@@ -1572,6 +1695,7 @@ class _ComposerSuggestions extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final text = controller.text.trimLeft();
     if (text.startsWith('@')) {
       final filter = text.substring(1).toLowerCase();
@@ -1601,7 +1725,7 @@ class _ComposerSuggestions extends ConsumerWidget {
             error: (error, _) => Text(
               'Projects unavailable',
               style: TextStyle(
-                color: AppColors.textSecondary.withValues(alpha: 0.78),
+                color: isDark ? Colors.white54 : Colors.black54,
               ),
             ),
             data: (projects) {
@@ -1677,7 +1801,7 @@ class _ComposerSuggestions extends ConsumerWidget {
               style: TextStyle(
                 fontSize: 10.5,
                 fontWeight: FontWeight.w600,
-                color: AppColors.textSecondary.withValues(alpha: 0.65),
+                color: isDark ? Colors.white54 : Colors.black54,
               ),
             ),
           ),
@@ -1730,8 +1854,7 @@ class _FlagChips extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final chrome = Theme.of(context).extension<ChatChromeTheme>() ??
-        const ChatChromeTheme.dark();
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Align(
       alignment: Alignment.centerLeft,
       child: Wrap(
@@ -1747,10 +1870,14 @@ class _FlagChips extends StatelessWidget {
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
-                    color: chrome.controlSurface.withValues(alpha: 0.35),
+                    color: isDark
+                        ? Colors.white.withValues(alpha: 0.08)
+                        : Colors.black.withValues(alpha: 0.05),
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(
-                      color: Colors.white.withValues(alpha: 0.08),
+                      color: isDark
+                          ? Colors.white.withValues(alpha: 0.12)
+                          : Colors.black.withValues(alpha: 0.1),
                       width: 1,
                     ),
                   ),
@@ -1760,7 +1887,7 @@ class _FlagChips extends StatelessWidget {
                       Text(
                         flag['name'].toString(),
                         style: TextStyle(
-                          color: AppColors.textSecondary.withValues(alpha: 0.8),
+                          color: isDark ? Colors.white70 : Colors.black87,
                           fontSize: 11,
                           fontWeight: FontWeight.w600,
                         ),
@@ -1770,7 +1897,7 @@ class _FlagChips extends StatelessWidget {
                         Text(
                           flag['value'] == 'true' ? '(default: true)' : flag['value'].toString(),
                           style: TextStyle(
-                            color: AppColors.textSecondary.withValues(alpha: 0.55),
+                            color: isDark ? Colors.white38 : Colors.black38,
                             fontSize: 10,
                             fontWeight: FontWeight.normal,
                           ),
@@ -1798,14 +1925,13 @@ class _SuggestionHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final chrome = Theme.of(context).extension<ChatChromeTheme>() ??
-        const ChatChromeTheme.dark();
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Row(
       children: [
         Text(
           title,
           style: TextStyle(
-            color: AppColors.textSecondary.withValues(alpha: 0.82),
+            color: isDark ? Colors.white70 : Colors.black54,
             fontSize: 12,
             fontWeight: FontWeight.w800,
           ),
@@ -1816,11 +1942,13 @@ class _SuggestionHeader extends StatelessWidget {
           child: IconButton(
             onPressed: onRefresh,
             icon: const Icon(Icons.refresh_rounded, size: 18),
-            color: AppColors.textSecondary,
+            color: isDark ? Colors.white70 : Colors.black54,
             style: IconButton.styleFrom(
               fixedSize: const Size(32, 32),
               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              backgroundColor: chrome.controlSurface,
+              backgroundColor: isDark
+                  ? Colors.white.withValues(alpha: 0.08)
+                  : Colors.black.withValues(alpha: 0.05),
               shape: const CircleBorder(),
             ),
           ),
@@ -1838,12 +1966,13 @@ class _SuggestionList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     if (children.isEmpty) {
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 10),
         child: Text(
           emptyText,
-          style: TextStyle(color: AppColors.textSecondary.withValues(alpha: 0.78)),
+          style: TextStyle(color: isDark ? Colors.white54 : Colors.black54),
         ),
       );
     }
@@ -1875,10 +2004,11 @@ class _SuggestionRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final chrome = Theme.of(context).extension<ChatChromeTheme>() ??
-        const ChatChromeTheme.dark();
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Material(
-      color: chrome.suggestionSurface.withValues(alpha: 0.54),
+      color: isDark
+          ? Colors.white.withValues(alpha: 0.06)
+          : Colors.black.withValues(alpha: 0.04),
       borderRadius: BorderRadius.circular(16),
       child: InkWell(
         borderRadius: BorderRadius.circular(16),
@@ -1887,7 +2017,7 @@ class _SuggestionRow extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           child: Row(
             children: [
-              Icon(icon, size: 18, color: AppColors.textSecondary),
+              Icon(icon, size: 18, color: isDark ? Colors.white54 : Colors.black54),
               const SizedBox(width: 10),
               Expanded(
                 child: Column(
@@ -1897,8 +2027,8 @@ class _SuggestionRow extends StatelessWidget {
                       title,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: AppColors.textPrimary,
+                      style: TextStyle(
+                        color: isDark ? Colors.white : Colors.black87,
                         fontSize: 13,
                         fontWeight: FontWeight.w700,
                       ),
@@ -1909,7 +2039,7 @@ class _SuggestionRow extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        color: AppColors.textSecondary.withValues(alpha: 0.72),
+                        color: isDark ? Colors.white54 : Colors.black54,
                         fontSize: 11,
                       ),
                     ),
@@ -2026,26 +2156,290 @@ class _GlassIconButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final chrome = Theme.of(context).extension<ChatChromeTheme>() ??
-        const ChatChromeTheme.dark();
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Tooltip(
       message: tooltip,
       child: ClipOval(
-        child: Material(
-          color: chrome.controlSurface,
-          shape: CircleBorder(
-            side: BorderSide(color: chrome.borderColor.withValues(alpha: 0.82)),
-          ),
-          child: InkWell(
-            customBorder: const CircleBorder(),
-            onTap: onPressed,
-            child: SizedBox(
-              width: 44,
-              height: 44,
-              child: Icon(icon, color: AppColors.textPrimary, size: 22),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+          child: Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: isDark
+                  ? Colors.white.withValues(alpha: 0.08)
+                  : Colors.black.withValues(alpha: 0.05),
+              border: Border.all(
+                color: isDark
+                    ? Colors.white.withValues(alpha: 0.12)
+                    : Colors.black.withValues(alpha: 0.1),
+                width: 1,
+              ),
+              shape: BoxShape.circle,
+            ),
+            child: IconButton(
+              icon: Icon(icon, size: 20),
+              color: isDark ? Colors.white70 : Colors.black87,
+              onPressed: onPressed,
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _EffortSelectorButton extends ConsumerWidget {
+  const _EffortSelectorButton();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final effort = ref.watch(gatewayEffortProvider);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    
+    return PopupMenuButton<String>(
+      tooltip: 'Select Effort',
+      offset: const Offset(0, 48),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(
+          color: isDark ? Colors.white.withValues(alpha: 0.15) : Colors.black.withValues(alpha: 0.1),
+        ),
+      ),
+      color: isDark ? const Color(0xFF13132B).withValues(alpha: 0.96) : Colors.white.withValues(alpha: 0.96),
+      elevation: 0,
+      onSelected: (val) {
+        HapticFeedback.selectionClick();
+        ref.read(gatewayEffortProvider.notifier).state = val;
+      },
+      itemBuilder: (context) => [
+        _buildItem(context, 'auto', 'Auto', Icons.auto_awesome_rounded),
+        _buildItem(context, 'fast', 'Fast', Icons.bolt_rounded),
+        _buildItem(context, 'medium', 'Medium', Icons.speed_rounded),
+        _buildItem(context, 'deep', 'Deep', Icons.query_stats_rounded),
+      ],
+      child: ClipOval(
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+          child: Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: isDark
+                  ? Colors.white.withValues(alpha: 0.08)
+                  : Colors.black.withValues(alpha: 0.05),
+              border: Border.all(
+                color: isDark
+                    ? Colors.white.withValues(alpha: 0.12)
+                    : Colors.black.withValues(alpha: 0.1),
+              ),
+            ),
+            child: Material(
+              color: Colors.transparent,
+              child: Center(
+                child: Icon(
+                  effort == 'fast'
+                      ? Icons.bolt_rounded
+                      : effort == 'medium'
+                          ? Icons.speed_rounded
+                          : effort == 'deep'
+                              ? Icons.query_stats_rounded
+                              : Icons.auto_awesome_rounded,
+                  color: isDark ? Colors.white : Colors.black87,
+                  size: 20,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  PopupMenuItem<String> _buildItem(
+    BuildContext context,
+    String value,
+    String title,
+    IconData icon,
+  ) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return PopupMenuItem<String>(
+      value: value,
+      child: Row(
+        children: [
+          Icon(icon, size: 18, color: isDark ? Colors.white70 : Colors.black87),
+          const SizedBox(width: 12),
+          Text(
+            title,
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              color: isDark ? Colors.white : Colors.black87,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+
+class _ComposerIconButton extends StatelessWidget {
+  const _ComposerIconButton({
+    required this.icon,
+    required this.tooltip,
+    required this.onPressed,
+  });
+
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Tooltip(
+      message: tooltip,
+      child: Material(
+        color: isDark
+            ? Colors.white.withValues(alpha: 0.08)
+            : Colors.black.withValues(alpha: 0.05),
+        shape: const CircleBorder(),
+        child: InkWell(
+          customBorder: const CircleBorder(),
+          onTap: () {
+            HapticFeedback.selectionClick();
+            onPressed();
+          },
+          child: Padding(
+            padding: const EdgeInsets.all(7.0),
+            child: Icon(
+              icon,
+              size: 18,
+              color: isDark ? Colors.white70 : Colors.black87,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ComposerEffortPill extends ConsumerWidget {
+  const _ComposerEffortPill();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final effort = ref.watch(gatewayEffortProvider);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    
+    final label = effort == 'fast'
+        ? 'Fast'
+        : effort == 'medium'
+            ? 'Medium'
+            : effort == 'deep'
+                ? 'Deep'
+                : 'Auto';
+
+    final icon = effort == 'fast'
+        ? Icons.bolt_rounded
+        : effort == 'medium'
+            ? Icons.speed_rounded
+            : effort == 'deep'
+                ? Icons.query_stats_rounded
+                : Icons.auto_awesome_rounded;
+
+    return PopupMenuButton<String>(
+      tooltip: 'Select Effort Tier',
+      offset: const Offset(0, -220),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(18),
+        side: BorderSide(
+          color: isDark ? Colors.white.withValues(alpha: 0.15) : Colors.black.withValues(alpha: 0.1),
+        ),
+      ),
+      color: isDark ? const Color(0xFF13132B).withValues(alpha: 0.96) : Colors.white.withValues(alpha: 0.96),
+      elevation: 0,
+      onSelected: (val) {
+        HapticFeedback.selectionClick();
+        ref.read(gatewayEffortProvider.notifier).state = val;
+      },
+      itemBuilder: (context) => [
+        _buildItem(context, 'auto', 'Auto Effort', Icons.auto_awesome_rounded, 'Smart routing & execution'),
+        _buildItem(context, 'fast', 'Fast Effort', Icons.bolt_rounded, 'Sub-100ms deterministic path'),
+        _buildItem(context, 'medium', 'Medium Effort', Icons.speed_rounded, 'Balanced LLM reasoning'),
+        _buildItem(context, 'deep', 'Deep Effort', Icons.query_stats_rounded, 'Exhaustive graph analysis'),
+      ],
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        decoration: BoxDecoration(
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.08)
+              : Colors.black.withValues(alpha: 0.05),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: isDark
+                ? Colors.white.withValues(alpha: 0.12)
+                : Colors.black.withValues(alpha: 0.08),
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 15, color: AppColors.primary),
+            const SizedBox(width: 5),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 12.5,
+                fontWeight: FontWeight.w700,
+                color: isDark ? Colors.white : Colors.black87,
+              ),
+            ),
+       
+          ],
+        ),
+      ),
+    );
+  }
+
+  PopupMenuItem<String> _buildItem(
+    BuildContext context,
+    String value,
+    String title,
+    IconData icon,
+    String subtitle,
+  ) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return PopupMenuItem<String>(
+      value: value,
+      child: Row(
+        children: [
+          Icon(icon, size: 18, color: AppColors.primary),
+          const SizedBox(width: 12),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                title,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: isDark ? Colors.white : Colors.black87,
+                ),
+              ),
+              Text(
+                subtitle,
+                style: TextStyle(
+                  fontSize: 10.5,
+                  color: isDark ? Colors.white54 : Colors.black54,
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }

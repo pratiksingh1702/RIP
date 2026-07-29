@@ -14,6 +14,8 @@ class UserMessage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Align(
       alignment: Alignment.centerRight,
       child: Container(
@@ -23,19 +25,34 @@ class UserMessage extends ConsumerWidget {
             maxWidth: MediaQuery.of(context).size.width * 0.78,
           ),
           child: Container(
-            decoration: const BoxDecoration(
-              color: AppColors.primary,
-              borderRadius: BorderRadius.only(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: isDark
+                    ? [
+                        AppColors.primary,
+                        const Color(0xFF4C1D95),
+                      ]
+                    : [
+                        AppColors.primary,
+                        const Color(0xFF6D28D9),
+                      ],
+              ),
+              borderRadius: const BorderRadius.only(
                 topLeft: Radius.circular(20),
                 topRight: Radius.circular(20),
                 bottomLeft: Radius.circular(20),
                 bottomRight: Radius.circular(4),
               ),
+              border: isDark
+                  ? Border.all(color: Colors.white.withValues(alpha: 0.15), width: 1)
+                  : null,
               boxShadow: [
                 BoxShadow(
-                  color: Color(0x1F5F3ADD),
+                  color: AppColors.primary.withValues(alpha: isDark ? 0.35 : 0.25),
                   blurRadius: 16,
-                  offset: Offset(0, 6),
+                  offset: const Offset(0, 6),
                 ),
               ],
             ),

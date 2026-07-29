@@ -33,6 +33,7 @@ class ChatNotifier extends Notifier<List<Message>> {
   CancelToken? _activeCancelToken;
   String? _activePendingId;
   String? _lastGatewaySessionId;
+  Map<String, dynamic>? _lastGatewayResult;
   String? _currentSessionId;
   String? _activeAgentRunId;
 
@@ -207,9 +208,13 @@ class ChatNotifier extends Notifier<List<Message>> {
           return PipelineTrace.empty(pendingId);
         },
       );
-      final persistedTrace = useGatewayPipeline && _lastGatewaySessionId != null
+      var persistedTrace = useGatewayPipeline && _lastGatewaySessionId != null
           ? trace.withSessionId(_lastGatewaySessionId!)
           : trace;
+
+      if (!persistedTrace.hasEvents && _lastGatewayResult != null) {
+        persistedTrace = _buildSyntheticTrace(pendingId, _lastGatewayResult!);
+      }
 
       // 4. Parse response into blocks
       final blocks = ResponseParser.parse(
@@ -617,6 +622,7 @@ class ChatNotifier extends Notifier<List<Message>> {
           sessionId: gatewaySessionId ?? uuid.v4(),
           projectId: projectId,
           role: ref.read(gatewayRoleProvider),
+          effort: ref.read(gatewayEffortProvider),
           cancelToken: cancelToken,
         );
         return _formatGatewayContext(result);
@@ -664,42 +670,130 @@ class ChatNotifier extends Notifier<List<Message>> {
   }
 
   String _formatGatewayContext(Map<String, dynamic> result) {
-    final buffer = StringBuffer();
+    _lastGatewaySessionId = result['session_id'] as String?;
+    _lastGatewayResult = result;
+
     if (result['needs_clarification'] == true) {
-      buffer.writeln('Could you please clarify your request?\n');
       final interpretations = result['suggested_interpretations'] as List? ?? const [];
+      final buffer = StringBuffer('Could you please clarify your request?\n\n');
       for (final interp in interpretations) {
         buffer.writeln('- $interp');
       }
-      return buffer.toString();
+      return buffer.toString().trim();
     }
-    final intent = result['intent'];
-    final domain = result['domain'];
-    _lastGatewaySessionId = result['session_id'] as String?;
-    if (intent != null || domain != null) {
-      buffer.writeln('Intent: ${intent ?? 'unknown'} - Domain: ${domain ?? 'general'}\n');
-    }
+
     final context = result['context'] as List? ?? const [];
     if (context.isEmpty) {
-      return buffer.isEmpty ? 'No context returned.' : buffer.toString();
+      return 'No relevant context returned from repository.';
     }
-    for (final item in context.take(6)) {
+
+    // 1. Look for explicit conversational or primary synthesis answers
+    for (final item in context) {
       if (item is Map<String, dynamic>) {
-        final source = item['source'] ?? 'source';
-        final score = (item['score'] as num?)?.toStringAsFixed(2);
-        buffer.writeln('### $source${score == null ? '' : ' - score $score'}');
-        buffer.writeln(item['content'] ?? '');
-        buffer.writeln();
+        final source = item['source']?.toString() ?? '';
+        final rawContent = item['content']?.toString() ?? '';
+        if (source == 'conversational' || source == 'synthesis' || source == 'llm_synthesis') {
+          final cleaned = rawContent
+              .replaceAll(RegExp(r'^###\s*Conversational Response\s*\n?', multiLine: true), '')
+              .trim();
+          if (cleaned.isNotEmpty) return cleaned;
+        }
       }
     }
-    final tokenAllocation = result['token_allocation'];
-    if (tokenAllocation is Map && tokenAllocation.isNotEmpty) {
-      buffer.writeln('Token allocation:');
-      tokenAllocation.forEach((source, tokens) {
-        buffer.writeln('- $source: $tokens');
-      });
+
+    // 2. Otherwise compile primary content items (excluding purely background items)
+    final mainParts = <String>[];
+    for (final item in context.take(4)) {
+      if (item is Map<String, dynamic>) {
+        final source = item['source']?.toString() ?? 'context';
+        if (source == 'workspace_memory' || source == 'source_registry') continue;
+
+        var text = item['content']?.toString() ?? '';
+        text = text.replaceAll(RegExp(r'^###\s*[\w_]+.*?\n', multiLine: true), '').trim();
+        if (text.isNotEmpty) {
+          mainParts.add(text);
+        }
+      }
     }
-    return buffer.toString();
+
+    if (mainParts.isNotEmpty) {
+      return mainParts.join('\n\n');
+    }
+
+    // 3. Fallback to first non-empty context content
+    for (final item in context) {
+      if (item is Map<String, dynamic>) {
+        var text = (item['content']?.toString() ?? '').trim();
+        text = text.replaceAll(RegExp(r'^###\s*[\w_]+.*?\n', multiLine: true), '').trim();
+        if (text.isNotEmpty) return text;
+      }
+    }
+
+    return 'No relevant response available.';
+  }
+
+  PipelineTrace _buildSyntheticTrace(String sessionId, Map<String, dynamic> result) {
+    final events = <PipelineEvent>[];
+    int seq = 1;
+
+    final intent = result['intent']?.toString();
+    final domain = result['domain']?.toString();
+    final routeSource = result['route_source']?.toString();
+    final escalated = result['escalated'] == true;
+
+    if (intent != null || domain != null) {
+      events.add(PipelineEvent(
+        sessionId: sessionId,
+        stage: 'intent',
+        status: 'ok',
+        detail: intent ?? 'Intent classification complete',
+        meta: {
+          'intent': intent ?? 'general',
+          'domain': domain ?? 'general',
+          'route_source': routeSource ?? 'deterministic',
+          'escalated': escalated,
+        },
+        seq: seq++,
+        timestamp: DateTime.now(),
+      ));
+    }
+
+    final contextList = result['context'] as List? ?? const [];
+    for (final item in contextList) {
+      if (item is Map<String, dynamic>) {
+        final src = item['source']?.toString() ?? 'source';
+        final queryType = item['query_type']?.toString() ?? 'fetch';
+        final score = item['score'];
+        events.add(PipelineEvent(
+          sessionId: sessionId,
+          stage: 'source_done',
+          status: 'ok',
+          detail: 'Retrieved context from $src ($queryType)',
+          source: src,
+          meta: {
+            'query_type': queryType,
+            'score': score,
+          },
+          seq: seq++,
+          timestamp: DateTime.now(),
+        ));
+      }
+    }
+
+    final tokensUsed = result['tokens_used'] ?? result['tokens_retrieved'];
+    events.add(PipelineEvent(
+      sessionId: sessionId,
+      stage: 'done',
+      status: 'ok',
+      detail: 'Completed response generation',
+      meta: {
+        if (tokensUsed != null) 'after_tokens': tokensUsed,
+      },
+      seq: seq++,
+      timestamp: DateTime.now(),
+    ));
+
+    return PipelineTrace(sessionId: sessionId, events: events);
   }
 
   String _encodeMetadata(

@@ -37,10 +37,10 @@ redis_url = "redis://localhost:6379"
 use_sqlite = false
 
 [llm]
-primary_provider = "google"
-primary_model = "gemini-2.5-flash"
+primary_provider = "ollama"
+primary_model = "qwen2.5:3b"
 fallback_providers = [
-    "openrouter",
+    "google",
 ]
 timeout = 60
 max_tokens = 1500

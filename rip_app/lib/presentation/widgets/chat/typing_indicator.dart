@@ -13,15 +13,23 @@ class TypingIndicator extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final surfaceColor = isDark
+        ? Colors.white.withValues(alpha: 0.04)
+        : AppColors.surface;
+    final borderColor = isDark
+        ? Colors.white.withValues(alpha: 0.08)
+        : AppColors.border;
+
     return Container(
       width: double.infinity,
       margin: const EdgeInsets.symmetric(vertical: 10),
       padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
-      decoration: const BoxDecoration(
-        color: AppColors.surface,
+      decoration: BoxDecoration(
+        color: surfaceColor,
         border: Border(
-          top: BorderSide(color: AppColors.border, width: 1),
-          bottom: BorderSide(color: AppColors.border, width: 1),
+          top: BorderSide(color: borderColor, width: 1),
+          bottom: BorderSide(color: borderColor, width: 1),
         ),
       ),
       child: Row(
@@ -40,7 +48,7 @@ class TypingIndicator extends StatelessWidget {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: AppTextStyles.bodySm.copyWith(
-                color: AppColors.textSecondary,
+                color: isDark ? Colors.white70 : AppColors.textSecondary,
                 fontWeight: FontWeight.w600,
               ),
             ),
@@ -52,7 +60,6 @@ class TypingIndicator extends StatelessWidget {
               icon: const Icon(Icons.stop_rounded, size: 16),
               onPressed: onStop,
             ),
-
           ],
         ],
       ),

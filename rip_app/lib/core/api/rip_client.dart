@@ -427,6 +427,7 @@ class RipClient {
     String? projectId,
     int maxTokens = 12000,
     String role = 'developer',
+    String effort = 'auto',
     CancelToken? cancelToken,
   }) async {
     try {
@@ -439,6 +440,7 @@ class RipClient {
             if (projectId != null) 'project_id': projectId,
             'max_tokens': maxTokens,
             'role': role,
+            'effort': effort,
           },
           cancelToken: cancelToken);
       Map<String, dynamic> data;

@@ -203,7 +203,14 @@ class ResponseParser {
   }
 
   static List<String> _extractSuggestionChips(String text) {
-    return ['Show state flow', 'Show impact', 'Show consumers', 'Find similar'];
+    final t = text.toLowerCase();
+    if (t.contains('hello') || t.contains('how can i help') || t.contains('welcome') || t.contains('goodbye') || text.length < 80) {
+      return [];
+    }
+    if (t.contains('class ') || t.contains('function ') || t.contains('file') || t.contains('import') || t.contains('workflow') || t.contains('repository')) {
+      return ['Show state flow', 'Show impact', 'Show consumers', 'Find similar'];
+    }
+    return [];
   }
 }
 

@@ -1,4 +1,4 @@
-﻿"""Goal Engine — goals, features, tasks, progress tracking."""
+"""Goal Engine — goals, features, tasks, progress tracking."""
 
 from __future__ import annotations
 import json, logging
@@ -11,12 +11,35 @@ logger = logging.getLogger(__name__)
 class GoalEngine:
     """Manages workspace goals: create, track progress, link to knowledge."""
     
+    async def _ensure_table(self, session) -> None:
+        try:
+            await session.execute(text("""
+                CREATE TABLE IF NOT EXISTS workspace_goals (
+                    id VARCHAR(36) PRIMARY KEY,
+                    workspace_id VARCHAR(36) NOT NULL,
+                    name VARCHAR(255) NOT NULL,
+                    description TEXT,
+                    status VARCHAR(20) DEFAULT 'active',
+                    progress REAL DEFAULT 0.0,
+                    priority VARCHAR(20) DEFAULT 'medium',
+                    deadline VARCHAR(50),
+                    parent_goal_id VARCHAR(36),
+                    created_by VARCHAR(100),
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """))
+            await session.commit()
+        except Exception as e:
+            logger.debug("GOALS: Ensure table check: %s", e)
+
     async def create(self, workspace_id: str, name: str, description: str = "",
                      priority: str = "medium", deadline: str | None = None,
                      parent_goal_id: str | None = None, created_by: str | None = None) -> str:
         goal_id = str(uuid4())
         try:
             async with async_session_factory() as session:
+                await self._ensure_table(session)
                 await session.execute(text("""
                     INSERT INTO workspace_goals (id,workspace_id,name,description,priority,deadline,
                     parent_goal_id,created_by) VALUES (:id,:ws,:n,:d,:p,:dl,:pid,:by)
@@ -45,6 +68,7 @@ class GoalEngine:
     async def get_active(self, workspace_id: str, limit: int = 10) -> list[dict]:
         try:
             async with async_session_factory() as session:
+                await self._ensure_table(session)
                 r = await session.execute(text("""
                     SELECT id,name,description,status,progress,priority,deadline,created_at
                     FROM workspace_goals WHERE workspace_id=:ws AND status IN ('active','in_progress')

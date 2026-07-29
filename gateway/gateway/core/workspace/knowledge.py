@@ -1,4 +1,4 @@
-﻿"""Workspace Knowledge — extracted insights with confidence scoring."""
+"""Workspace Knowledge — extracted insights with confidence scoring."""
 
 from __future__ import annotations
 import json, logging
@@ -11,6 +11,33 @@ logger = logging.getLogger(__name__)
 class WorkspaceKnowledge:
     """Stores extracted knowledge: decisions, patterns, relationships. Scored by confidence."""
     
+    async def _ensure_table(self, session) -> None:
+        try:
+            await session.execute(text("""
+                CREATE TABLE IF NOT EXISTS workspace_knowledge (
+                    id VARCHAR(36) PRIMARY KEY,
+                    workspace_id VARCHAR(36) NOT NULL,
+                    project_id VARCHAR(36),
+                    knowledge_type VARCHAR(50) NOT NULL,
+                    summary TEXT NOT NULL,
+                    detail TEXT,
+                    confidence REAL DEFAULT 0.0,
+                    source_type VARCHAR(50),
+                    source_event_id VARCHAR(36),
+                    human_override VARCHAR(20),
+                    linked_goal_id VARCHAR(36),
+                    linked_entity_id VARCHAR(36),
+                    frequency INTEGER DEFAULT 1,
+                    cross_val_count INTEGER DEFAULT 0,
+                    status VARCHAR(20) DEFAULT 'active',
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """))
+            await session.commit()
+        except Exception as e:
+            logger.debug("KNOWLEDGE: Ensure table check: %s", e)
+
     async def store(self, workspace_id: str, knowledge_type: str, summary: str,
                     detail: str | None = None, confidence: float = 0.0, source_type: str = "unknown",
                     source_event_id: str | None = None, human_override: str | None = None,
@@ -20,6 +47,7 @@ class WorkspaceKnowledge:
         status = "active" if confidence >= 0.7 else "pending"
         try:
             async with async_session_factory() as session:
+                await self._ensure_table(session)
                 await session.execute(text("""
                     INSERT INTO workspace_knowledge (id,workspace_id,project_id,knowledge_type,summary,
                     detail,confidence,source_type,source_event_id,human_override,linked_goal_id,
@@ -44,6 +72,7 @@ class WorkspaceKnowledge:
                 kt_filter = f"AND knowledge_type IN ({ph})"
                 for i,k in enumerate(knowledge_types): params[f"kt{i}"] = k
             async with async_session_factory() as session:
+                await self._ensure_table(session)
                 r = await session.execute(text(f"""
                     SELECT id,knowledge_type,summary,detail,confidence,source_type,human_override,
                            linked_goal_id,linked_entity_id,frequency,cross_val_count,status,created_at
