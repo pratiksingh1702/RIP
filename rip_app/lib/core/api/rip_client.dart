@@ -1341,4 +1341,46 @@ class RipClient {
         .where((line) => line.startsWith('data: '))
         .map((line) => jsonDecode(line.substring(6)) as Map<String, dynamic>);
   }
+
+  // --- AUTHENTICATION & USER MANAGEMENT ---
+
+  Future<Map<String, dynamic>> getAuthProviders() async {
+    final response = await _dio.get('/auth/providers');
+    return response.data as Map<String, dynamic>;
+  }
+
+  Future<String> getOAuthLoginUrl(String provider, {required String redirectUri}) async {
+    final response = await _dio.get('/auth/$provider/login', queryParameters: {'redirect_uri': redirectUri});
+    final data = response.data as Map<String, dynamic>;
+    return data['url'] as String;
+  }
+
+  Future<Map<String, dynamic>> exchangeOAuthCode({
+    required String provider,
+    required String code,
+    required String redirectUri,
+    String? deviceInfo,
+  }) async {
+    final response = await _dio.post(
+      '/auth/oauth/exchange',
+      data: {
+        'provider': provider,
+        'code': code,
+        'redirect_uri': redirectUri,
+        'device_info': deviceInfo ?? 'RIP Mobile App',
+      },
+    );
+    return response.data as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> getCurrentUser() async {
+    final response = await _dio.get('/auth/me');
+    return response.data as Map<String, dynamic>;
+  }
+
+  Future<void> logoutUser() async {
+    try {
+      await _dio.post('/auth/logout');
+    } catch (_) {}
+  }
 }

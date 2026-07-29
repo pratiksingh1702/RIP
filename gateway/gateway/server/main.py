@@ -1,4 +1,4 @@
-﻿"""FastAPI server for Context Gateway."""
+"""FastAPI server for Context Gateway."""
 
 import asyncio
 from contextlib import asynccontextmanager
@@ -24,6 +24,7 @@ from gateway.server.routers import (
     oauth,
     sessions,
     sources,
+    supervisor,
     validate,
     workflows,
 )
@@ -127,6 +128,7 @@ def create_app() -> FastAPI:
     app.include_router(feedback.router, prefix="/api/feedback", tags=["feedback"])
     app.include_router(workflows.router, prefix="/api/workflows", tags=["workflows"])
     app.include_router(active_project.router, prefix="/api/projects", tags=["projects"])
+    app.include_router(supervisor.router)
 
     return app
 

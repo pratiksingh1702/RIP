@@ -8,6 +8,7 @@ import '../widgets/sandbox/terminal_view.dart';
 import '../widgets/sandbox/environment_picker.dart';
 import '../widgets/sandbox/file_browser.dart';
 import '../widgets/sidebar/app_drawer.dart';
+import '../widgets/chat/supervisor_chat_sheet.dart';
 
 class SandboxScreen extends ConsumerStatefulWidget {
   final String? projectId;
@@ -336,6 +337,11 @@ class _SandboxScreenState extends ConsumerState<SandboxScreen> {
                     onNewSandboxTap: _openEnvSelectorModal,
                     onEditSandboxTap: activeSession != null ? () => _openEditSandboxModal(activeSession) : null,
                     onFilesTap: _openFilesModal,
+                    onSupervisorTap: () {
+                      HapticFeedback.selectionClick();
+                      final taskId = activeSession?.sandbox.id ?? 'sandbox-terminal';
+                      SupervisorChatSheet.show(context, taskId);
+                    },
                     onInfoTap: () => _showCornerInfoDialog(context, activeSession, activeSessions.length),
                   ),
                 ),
@@ -411,15 +417,20 @@ class _GlassIconButton extends StatelessWidget {
   final IconData icon;
   final String tooltip;
   final VoidCallback onPressed;
+  final Color? iconColor;
 
   const _GlassIconButton({
     required this.icon,
     required this.tooltip,
     required this.onPressed,
+    this.iconColor,
   });
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final defaultColor = isDark ? Colors.white : Colors.black87;
+
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -433,11 +444,11 @@ class _GlassIconButton extends StatelessWidget {
               width: 42,
               height: 42,
               decoration: BoxDecoration(
-                color: Theme.of(context).brightness == Brightness.dark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.05),
+                color: isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.05),
                 borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: Theme.of(context).brightness == Brightness.dark ? Colors.white.withValues(alpha: 0.12) : Colors.black.withValues(alpha: 0.1)),
+                border: Border.all(color: isDark ? Colors.white.withValues(alpha: 0.12) : Colors.black.withValues(alpha: 0.1)),
               ),
-              child: Icon(icon, color: Theme.of(context).brightness == Brightness.dark ? Colors.white : Colors.black87, size: 20),
+              child: Icon(icon, color: iconColor ?? defaultColor, size: 20),
             ),
           ),
         ),
@@ -453,6 +464,7 @@ class _FloatingSandboxHeader extends ConsumerWidget {
   final VoidCallback onNewSandboxTap;
   final VoidCallback? onEditSandboxTap;
   final VoidCallback onFilesTap;
+  final VoidCallback onSupervisorTap;
   final VoidCallback onInfoTap;
 
   const _FloatingSandboxHeader({
@@ -462,6 +474,7 @@ class _FloatingSandboxHeader extends ConsumerWidget {
     required this.onNewSandboxTap,
     required this.onEditSandboxTap,
     required this.onFilesTap,
+    required this.onSupervisorTap,
     required this.onInfoTap,
   });
 
@@ -486,6 +499,13 @@ class _FloatingSandboxHeader extends ConsumerWidget {
               onNewSandboxTap: onNewSandboxTap,
               onEditSandboxTap: onEditSandboxTap,
             ),
+          ),
+          const SizedBox(width: 8),
+          _GlassIconButton(
+            icon: Icons.psychology_rounded,
+            tooltip: 'Ask Supervisor',
+            iconColor: const Color(0xFF06B6D4), // Cyan Accent
+            onPressed: onSupervisorTap,
           ),
           const SizedBox(width: 8),
           _GlassIconButton(

@@ -810,3 +810,116 @@ def mcp_remove_command(
         params={"agent": agent, "all_agents": all_agents},
         action=lambda: mcp_remove(agent=agent, all_agents=all_agents),
     )
+
+
+def _get_cli_config() -> dict[str, str]:
+    import os, json
+    from pathlib import Path
+    cfg_file = Path.home() / ".rip" / "config.json"
+    cfg = {
+        "server_url": os.getenv("RIP_SERVER_URL", "http://localhost:8000"),
+        "api_key": os.getenv("RIP_API_KEY", "rip_HPzvDrzd5QQ3Bk9pvzVuYie-zUI110Fly-x1KjRnMpQ"),
+    }
+    if cfg_file.exists():
+        try:
+            with open(cfg_file, "r") as f:
+                data = json.load(f)
+                cfg.update(data)
+        except Exception:
+            pass
+    return cfg
+
+
+supervisor_app = typer.Typer(help="Supervisor Agent real-time oversight and signal control")
+app.add_typer(supervisor_app, name="supervisor")
+
+
+@supervisor_app.command("chat")
+def supervisor_chat_command(
+    task_id: Annotated[str, typer.Argument(help="Active Task ID")],
+    message: Annotated[str, typer.Argument(help="Question or retask directive for Supervisor")],
+    verbose: Annotated[bool, typer.Option("-v", "--verbose")] = False,
+) -> None:
+    """Ask the Supervisor Agent a question or send a retask directive."""
+    import httpx
+    config = _get_cli_config()
+    server_url = config.get("server_url", "http://localhost:8000")
+    api_key = config.get("api_key")
+
+    headers = {"Content-Type": "application/json"}
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+
+    try:
+        with httpx.Client(timeout=60.0) as client:
+            resp = client.post(f"{server_url}/gateway/api/supervisor/chat", json={"task_id": task_id, "message": message}, headers=headers)
+            if resp.status_code == 200:
+                data = resp.json()
+                typer.echo(f"\n🧠 [Supervisor - Tier {data.get('tier', '1')}]\n{data.get('answer')}\n")
+            else:
+                typer.echo(f"Error ({resp.status_code}): {resp.text}")
+    except Exception as e:
+        typer.echo(f"Failed to connect to Supervisor: {e}")
+
+
+@supervisor_app.command("status")
+def supervisor_status_command(
+    task_id: Annotated[str, typer.Argument(help="Active Task ID")],
+    verbose: Annotated[bool, typer.Option("-v", "--verbose")] = False,
+) -> None:
+    """Fetch real-time task progress metrics and event history."""
+    import httpx
+    config = _get_cli_config()
+    server_url = config.get("server_url", "http://localhost:8000")
+    api_key = config.get("api_key")
+
+    headers = {}
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+
+    try:
+        with httpx.Client(timeout=10.0) as client:
+            resp = client.get(f"{server_url}/gateway/api/supervisor/status/{task_id}", headers=headers)
+            if resp.status_code == 200:
+                data = resp.json()
+                progress = data.get("progress", {})
+                events = data.get("events", [])
+                typer.echo(f"\n📊 Task Progress [{task_id}]")
+                typer.echo(f"• Query: {progress.get('original_query')}")
+                typer.echo(f"• Active Step: {progress.get('current_step_id', 'Executing')}")
+                typer.echo(f"• Git Branch: {progress.get('git_branch', 'active')}")
+                typer.echo(f"• Files Touched: {len(progress.get('files_changed', []))}")
+                typer.echo(f"\nRecent Events ({len(events)}):")
+                for ev in events[-5:]:
+                    typer.echo(f"  [{ev.get('timestamp')[:19]}] {ev.get('event_type')}: {ev.get('data')}")
+            else:
+                typer.echo(f"Task not found ({resp.status_code})")
+    except Exception as e:
+        typer.echo(f"Failed to connect: {e}")
+
+
+@supervisor_app.command("signal")
+def supervisor_signal_command(
+    task_id: Annotated[str, typer.Argument(help="Active Task ID")],
+    signal_type: Annotated[str, typer.Argument(help="Signal type: pause, resume, or abort")],
+    verbose: Annotated[bool, typer.Option("-v", "--verbose")] = False,
+) -> None:
+    """Send non-blocking control signals (pause, resume, abort) to Main Agent."""
+    import httpx
+    config = _get_cli_config()
+    server_url = config.get("server_url", "http://localhost:8000")
+    api_key = config.get("api_key")
+
+    headers = {"Content-Type": "application/json"}
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+
+    try:
+        with httpx.Client(timeout=10.0) as client:
+            resp = client.post(f"{server_url}/gateway/api/supervisor/signal", json={"task_id": task_id, "signal_type": signal_type.lower()}, headers=headers)
+            if resp.status_code == 200:
+                typer.echo(f"✅ Signal `{signal_type.upper()}` transmitted to task `{task_id}`.")
+            else:
+                typer.echo(f"Signal error ({resp.status_code}): {resp.text}")
+    except Exception as e:
+        typer.echo(f"Failed to transmit signal: {e}")

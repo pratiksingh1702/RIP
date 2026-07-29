@@ -1,4 +1,4 @@
-﻿"""FastAPI app factory."""
+"""FastAPI app factory."""
 
 from __future__ import annotations
 
@@ -29,6 +29,7 @@ from server.routers import (
     trace,
 )
 from server.routers.api_keys import router as api_keys_router
+from server.routers.auth import router as auth_router
 from server.routers.git import router as git_router
 from server.routers.projects import router as projects_router
 from server.routers.runtime import health_router
@@ -50,11 +51,11 @@ from gateway.server.routers import (
     settings as gateway_settings,
     sessions as gateway_sessions,
     sources as gateway_sources,
+    supervisor as gateway_supervisor,
     validate as gateway_validate,
     workflows as gateway_workflows,
 )
 from gateway.core.blocks import register_all_blocks
-# Sandbox imported on demand in lifespan
 from gateway.core.llm_pool import seed_llm_configs
 from gateway.core.prompts import seed_prompt_templates
 from gateway.core.sources.registry import get_source_registry as get_gateway_source_registry
@@ -96,6 +97,7 @@ def create_app() -> FastAPI:
     app.include_router(onboard.router, dependencies=[Depends(verify_api_key)])
     app.include_router(explain.router, dependencies=[Depends(verify_api_key)])
     app.include_router(health_router)
+    app.include_router(auth_router)
     app.include_router(runtime.router, dependencies=[Depends(verify_api_key)])
     app.include_router(git_router, dependencies=[Depends(verify_api_key)])
     app.include_router(projects_router, dependencies=[Depends(verify_api_key)])
@@ -179,18 +181,20 @@ def create_app() -> FastAPI:
         tags=["gateway-agent"],
         dependencies=[Depends(verify_api_key)],
     )
-    
+    app.include_router(
+        gateway_supervisor.router,
+        dependencies=[Depends(verify_api_key)],
+    )
     app.include_router(
         gateway_sandbox.router,
         prefix="/gateway/api/sandbox",
         tags=["gateway-sandbox"],
         dependencies=[Depends(verify_api_key)],
     )
-    app.include_router(file_tree_router, dependencies=[Depends(verify_api_key)])
+    app.include_router(file_tree_router, dependencies=[Depends(verify_api_key)])
     app.include_router(git_metadata_router, dependencies=[Depends(verify_api_key)])
 
     return app
 
 
 app = create_app()
-

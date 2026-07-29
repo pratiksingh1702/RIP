@@ -9,6 +9,7 @@ import 'package:rip_app/presentation/providers/chat_provider.dart';
 import 'package:rip_app/presentation/providers/project_provider.dart';
 import 'package:rip_app/presentation/providers/settings_provider.dart';
 import 'package:rip_app/presentation/providers/chat_session_provider.dart';
+import 'package:rip_app/presentation/providers/auth_provider.dart';
 import 'package:rip_app/presentation/widgets/overlays/add_repo_sheet.dart';
 import 'package:rip_app/presentation/widgets/sidebar/project_list.dart';
 
@@ -296,6 +297,16 @@ class AppDrawer extends ConsumerWidget {
                       title: 'Settings',
                       children: [
                         _CompactRow(
+                          icon: Icons.person_rounded,
+                          title: 'User profile & telemetry',
+                          subtitle: 'Identity, tokens and graph metrics',
+                          onTap: () {
+                            HapticFeedback.selectionClick();
+                            Navigator.pop(context);
+                            context.push('/profile');
+                          },
+                        ),
+                        _CompactRow(
                           icon: AppIcons.settings,
                           title: 'Server settings',
                           subtitle: 'Connection and API key',
@@ -303,6 +314,19 @@ class AppDrawer extends ConsumerWidget {
                             HapticFeedback.selectionClick();
                             Navigator.pop(context);
                             context.push('/setup');
+                          },
+                        ),
+                        _CompactRow(
+                          icon: Icons.logout_rounded,
+                          title: 'Sign Out',
+                          subtitle: 'Logout active user session',
+                          onTap: () async {
+                            HapticFeedback.mediumImpact();
+                            Navigator.pop(context);
+                            await ref.read(authNotifierProvider.notifier).logout();
+                            if (context.mounted) {
+                              context.go('/setup');
+                            }
                           },
                         ),
                         const _CompactRow(
@@ -329,43 +353,53 @@ class _DrawerHeaderRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Row(
-        children: [
-          const RipMascotWidget(
-            pose: RipMascotPose.waving,
-            width: 48,
-            height: 48,
+        onTap: () {
+          HapticFeedback.selectionClick();
+          Navigator.pop(context);
+          context.push('/profile');
+        },
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: AppColors.border),
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  'Welcome to RIP',
-                  style: AppTextStyles.bodyMdBold.copyWith(
-                    fontSize: 16,
-                    color: AppColors.textPrimary,
-                  ),
+          child: Row(
+            children: [
+              const RipMascotWidget(
+                pose: RipMascotPose.waving,
+                width: 48,
+                height: 48,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'Welcome to RIP',
+                      style: AppTextStyles.bodyMdBold.copyWith(
+                        fontSize: 16,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Repository Intelligence',
+                      style: AppTextStyles.bodySmMuted.copyWith(fontSize: 11),
+                    ),
+                  ],
                 ),
-
-                const SizedBox(height: 2),
-                Text(
-                  'Repository Intelligence',
-                  style: AppTextStyles.bodySmMuted.copyWith(fontSize: 11),
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }

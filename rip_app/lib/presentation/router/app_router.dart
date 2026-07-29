@@ -11,9 +11,10 @@ import '../screens/mcp_export_screen.dart';
 import '../screens/agent_runs_screen.dart';
 import '../screens/workflows_screen.dart';
 import '../screens/llm_settings_screen.dart';
+import '../screens/profile_screen.dart';
 
 final appRouter = GoRouter(
-  initialLocation: '/chat',
+  initialLocation: '/splash',
   routes: [
     GoRoute(
       path: '/chat',
@@ -30,6 +31,7 @@ final appRouter = GoRouter(
     GoRoute(path: '/workspace', builder: (context, state) => const WorkspaceDashboard()),
     GoRoute(path: '/splash', builder: (context, state) => const SplashScreen()),
     GoRoute(path: '/setup', builder: (context, state) => const SetupScreen()),
+    GoRoute(path: '/profile', builder: (context, state) => const ProfileScreen()),
     GoRoute(path: '/activity', builder: (context, state) => const GatewayActivityScreen()),
     GoRoute(path: '/sources', builder: (context, state) => const GatewaySourcesScreen()),
     GoRoute(path: '/workflows', builder: (context, state) {
@@ -43,3 +45,4 @@ final appRouter = GoRouter(
     GoRoute(path: '/mcp-export', builder: (context, state) => const McpExportScreen()),
   ],
 );
+

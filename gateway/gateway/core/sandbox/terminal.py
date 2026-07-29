@@ -1,4 +1,4 @@
-﻿"""Terminal Session — PTY + WebSocket streaming for real-time terminal I/O."""
+"""Terminal Session — PTY + WebSocket streaming for real-time terminal I/O."""
 from __future__ import annotations
 import asyncio, codecs, json, logging, time, re
 from datetime import UTC, datetime
@@ -106,6 +106,18 @@ class TerminalSession:
         allowed, reason, risk = self._security.validate_command(command)
         sanitized = self._security.sanitize_for_logging(command)
         await self._broadcast({"type": "command_start", "command": sanitized, "risk": risk.value})
+        
+        # Log to TaskStatusLog so Supervisor Agent can track Docker terminal sessions
+        try:
+            from gateway.core.agent.status_log import status_log
+            from gateway.core.agent.task_state import LogEventType
+            progress = await status_log.get_task_progress(self.sandbox_id)
+            if not progress:
+                await status_log.init_task(self.sandbox_id, query=command)
+            await status_log.append_event(self.sandbox_id, LogEventType.STEP_STARTED, step_id="cmd", data={"command": sanitized})
+        except Exception as e:
+            logger.warning("Failed to log terminal event to status_log: %s", e)
+
         if not allowed:
             await self._broadcast({"type": "command_blocked", "command": sanitized, "reason": reason})
             return
@@ -214,9 +226,23 @@ class TerminalSession:
             await self._broadcast({"type": "command_error", "command": sanitized, "error": str(e)})
 
     async def _record_completion(self, sanitized: str, exit_code: int, output: str, duration_ms: int) -> None:
-        record = {"command": sanitized, "exit_code": exit_code, "output_preview": output[:200], "duration_ms": duration_ms, "timestamp": datetime.now(UTC).isoformat()}
+        record = {"command": sanitized, "exit_code": exit_code, "output_preview": output[:3000], "duration_ms": duration_ms, "timestamp": datetime.now(UTC).isoformat()}
         self._command_history.append(record)
         await self._event_bus.emit(self.session_id, stage="sandbox_command", status="done" if exit_code == 0 else "failed", detail=f"{sanitized[:80]} (exit {exit_code})", source="sandbox", meta={"command": sanitized, "exit_code": exit_code, "duration_ms": duration_ms})
+        
+        # Log to TaskStatusLog for Supervisor
+        try:
+            from gateway.core.agent.status_log import status_log
+            from gateway.core.agent.task_state import LogEventType
+            event_type = LogEventType.STEP_COMPLETED if exit_code == 0 else LogEventType.STEP_FAILED
+            await status_log.append_event(
+                self.sandbox_id,
+                event_type,
+                step_id="cmd",
+                data={"command": sanitized, "exit_code": exit_code, "output": output[:3000]}
+            )
+        except Exception: pass
+
         try:
             await self._workspace_memory.record(workspace_id=self.project_id, project_id=self.project_id, category="sandbox_command", query=sanitized, summary=f"Exit {exit_code} in {duration_ms}ms", status="completed" if exit_code == 0 else "failed", created_by=self.user_id)
         except Exception: pass
@@ -235,6 +261,11 @@ class TerminalManager:
     def create_terminal(self, sandbox_id: str, session_id: str, user_id: str, project_id: str) -> TerminalSession:
         t = TerminalSession(sandbox_id, session_id, user_id, project_id); self._terminals[t.terminal_id] = t; return t
     def get_terminal(self, terminal_id: str) -> TerminalSession | None: return self._terminals.get(terminal_id)
+    def get_terminal_by_sandbox(self, sandbox_id: str) -> TerminalSession | None:
+        for t in self._terminals.values():
+            if t.sandbox_id == sandbox_id or t.session_id == sandbox_id:
+                return t
+        return None
     def remove_terminal(self, terminal_id: str) -> None: self._terminals.pop(terminal_id, None)
     def get_active_count(self) -> int: return len(self._terminals)
 

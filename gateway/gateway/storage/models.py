@@ -1,4 +1,4 @@
-﻿"""ORM models for Context Gateway."""
+"""ORM models for Context Gateway."""
 
 from __future__ import annotations
 
@@ -528,6 +528,18 @@ class SandboxCommandLog(Base):
     duration_ms: Mapped[int] = mapped_column(Integer, nullable=False)
     risk_level: Mapped[str] = mapped_column(String(20), nullable=False)
     needed_approval: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+
+
+class SupervisorTaskLogModel(Base):
+    """Storage model for structured Supervisor status log events."""
+    __tablename__ = "supervisor_status_logs"
+    id: Mapped[UUIDType] = mapped_column(PortableUUID, primary_key=True, default=uuid4)
+    task_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    seq: Mapped[int] = mapped_column(Integer, nullable=False)
+    event_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    step_id: Mapped[str | None] = mapped_column(String(100))
+    data: Mapped[dict] = mapped_column(JSON, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
 
 

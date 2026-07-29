@@ -48,13 +48,35 @@ async def verify_api_key(
     else:
         provided_key = auth_header[7:]  # Remove "Bearer "
         
-        # First try to verify from database
+        # First try to verify from database api_keys
         api_key = await verify_api_key_from_db(db, provided_key)
         if api_key:
             request.state.api_key = api_key
             request.state.api_key_scope = "all"
             api_key._rip_access_scope = request.state.api_key_scope
             return
+
+        # Next check if token belongs to an OAuth UserSession
+        try:
+            from core.services.auth_service import AuthService
+            user_session_res = await AuthService.verify_user_session(db, provided_key)
+            if user_session_res:
+                user, user_session = user_session_res
+                request.state.user = user
+                request.state.user_session = user_session
+                request.state.user_id = user.id
+                request.state.api_key = ApiKey(
+                    name=f"Session ({user.display_name})",
+                    key_hash=user_session.token_hash,
+                    prefix=user_session.token_prefix,
+                    is_active=True,
+                    project_id=None
+                )
+                request.state.api_key_scope = "all"
+                request.state.api_key._rip_access_scope = "all"
+                return
+        except Exception:
+            pass
         
         # Then fall back to environment variable keys
         env_keys = get_valid_env_api_keys()

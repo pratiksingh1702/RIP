@@ -8,5 +8,16 @@ from core.storage.models.file_hash import FileHash
 from core.storage.models.index_state import IndexState
 from core.storage.models.project import Project
 from core.storage.models.api_key import ApiKey
+from core.storage.models.user import User, UserOAuthAccount, UserSession
 
-__all__ = ["FileHash", "IndexState", "AnalysisJob", "EmbeddingCache", "Project", "ApiKey"]
+__all__ = [
+    "FileHash",
+    "IndexState",
+    "AnalysisJob",
+    "EmbeddingCache",
+    "Project",
+    "ApiKey",
+    "User",
+    "UserOAuthAccount",
+    "UserSession",
+]

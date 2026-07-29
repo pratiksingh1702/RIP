@@ -18,6 +18,7 @@ import '../response_blocks/mermaid_block.dart';
 import '../response_blocks/table_block.dart';
 import '../response_blocks/workflow_tree_block.dart';
 import 'pipeline_trace_widgets.dart';
+import 'supervisor_chat_sheet.dart';
 import 'typing_indicator.dart';
 import 'suggestion_chips.dart';
 
@@ -112,11 +113,33 @@ class RipMessage extends ConsumerWidget {
                   ref.read(chatProvider.notifier).regenerateFromAssistant(message.id);
                 },
               ),
+              const SizedBox(width: 8),
+              _AssistantActionButton(
+                icon: Icons.psychology_rounded,
+                tooltip: 'Ask Supervisor',
+                label: 'Ask Supervisor',
+                onTap: () {
+                  HapticFeedback.mediumImpact();
+                  final runId = _extractRunId(message);
+                  SupervisorChatSheet.show(context, runId);
+                },
+              ),
             ],
           ),
         ],
       ),
     );
+  }
+
+  String _extractRunId(Message msg) {
+    final runMatch = RegExp(r'run_id:\s*([a-f0-9\-]+)', caseSensitive: false).firstMatch(msg.content);
+    if (runMatch != null) return runMatch.group(1)!;
+    final uuidMatch = RegExp(r'\b[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}\b', caseSensitive: false).firstMatch(msg.content);
+    if (uuidMatch != null) return uuidMatch.group(0)!;
+    if (msg.metadata != null && msg.metadata!['run_id'] != null) {
+      return msg.metadata!['run_id'].toString();
+    }
+    return msg.id;
   }
 
   String _cleanMessageContent(String raw) {

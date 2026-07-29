@@ -92,4 +92,11 @@ abstract final class AppTextStyles {
   // Backward compatibility aliases
   static TextStyle get headingLg => headlineLg;
   static TextStyle get headingMd => headlineMd;
+  static TextStyle get headlineSm => headlineMd;
+  static TextStyle get bodySmBold => GoogleFonts.inter(
+        fontSize: 12,
+        fontWeight: FontWeight.w600,
+        height: 18 / 12,
+        color: AppColors.textPrimary,
+      );
 }

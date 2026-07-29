@@ -1,4 +1,4 @@
-﻿"""Gateway-controlled Agent Runtime. The LLM reasons, the Gateway executes."""
+"""Gateway-controlled Agent Runtime. The LLM reasons, the Gateway executes."""
 
 from __future__ import annotations
 
@@ -39,6 +39,11 @@ from gateway.core.sandbox.orchestrator import get_orchestrator as get_sandbox_or
 from gateway.core.sandbox.security import get_security_policy
 
 from core.storage.database import async_session_factory as core_async_session_factory
+from core.projects import get_project
+from gateway.core.agent.status_log import status_log
+from gateway.core.agent.signal_channel import signal_channel, SignalType
+from gateway.core.agent.checkpoints import checkpoint_manager
+from gateway.core.agent.task_state import LogEventType, StepStatus, FilePlan
 
 logger = logging.getLogger(__name__)
 
@@ -287,6 +292,13 @@ class AgentRuntime:
         else:
             plan = await self.planner.plan(query, rip_context, llm_config)
 
+        git_branch = await checkpoint_manager.init_task_branch(run_id, Path(resolved_root))
+        await status_log.init_task(run_id, query, total_steps=len(plan.subtasks), git_branch=git_branch)
+        step_statuses = [
+            StepStatus(step_id=s.id, title=s.title, description=s.description) for s in plan.subtasks
+        ]
+        await status_log.set_steps(run_id, step_statuses)
+
         await self._emit_progress(run_id, "planned", f"{len(plan.subtasks)} subtasks", query)
         await self._notify_run_state(on_state_change, run_id, {"status": "running", "plan": [asdict(s) for s in plan.subtasks]})
 
@@ -297,6 +309,30 @@ class AgentRuntime:
 
         try:
             while not plan.is_complete:
+                # 1. Wait if execution paused by Supervisor
+                await signal_channel.wait_if_paused(run_id)
+
+                # 2. Poll for incoming supervisor signals
+                sig = await signal_channel.poll_signal(run_id)
+                if sig:
+                    await status_log.append_event(
+                        run_id,
+                        LogEventType.SIGNAL_EMITTED,
+                        data={"signal_type": sig.signal_type.value, "issued_by": sig.issued_by, "payload": sig.payload},
+                    )
+                    if sig.signal_type == SignalType.ABORT:
+                        status, final_summary = "failed", "Task aborted by user/supervisor signal"
+                        break
+                    elif sig.signal_type == SignalType.MODIFY_PLAN and "new_subtasks" in sig.payload:
+                        new_subtask_dicts = sig.payload["new_subtasks"]
+                        new_subtasks = [Subtask(**st) for st in new_subtask_dicts]
+                        plan.subtasks = new_subtasks
+                        step_statuses = [
+                            StepStatus(step_id=s.id, title=s.title, description=s.description) for s in plan.subtasks
+                        ]
+                        await status_log.set_steps(run_id, step_statuses)
+                        await self._notify_run_state(on_state_change, run_id, {"status": "running", "plan": [asdict(s) for s in plan.subtasks]})
+
                 ready = plan.ready_subtasks
                 if not ready and any(s.status == SubtaskStatus.PENDING for s in plan.subtasks):
                     for p in [s for s in plan.subtasks if s.status == SubtaskStatus.PENDING]:
@@ -390,17 +426,36 @@ class AgentRuntime:
 
     async def _execute_ready_subtask(self, subtask, rip_context, memory_context, llm_config, ctx, run_id, query, on_state_change):
         subtask.status = SubtaskStatus.RUNNING
+        await status_log.append_event(run_id, LogEventType.STEP_STARTED, step_id=subtask.id, data={"title": subtask.title})
         await self._emit_progress(run_id, "subtask_start", subtask.title, query, {"subtask_id": subtask.id})
         await self._notify_run_state(on_state_change, run_id, {"status": "running", "current_subtask": asdict(subtask)})
         budgeted_rip = self._trim_context_to_budget(rip_context, 800)
         steps, changes, tokens, sub_summary, sub_status, sub_error = await self._execute_subtask(subtask, budgeted_rip, memory_context, llm_config, ctx, run_id, on_state_change)
         subtask.result_summary = sub_summary
+        
+        # Step checkpoint
+        commit_hash = None
+        if ctx.get("project_root"):
+            commit_hash = await checkpoint_manager.create_step_checkpoint(run_id, subtask.id, subtask.title, Path(ctx["project_root"]))
+
         if sub_status == "completed":
             subtask.status = SubtaskStatus.COMPLETED
+            await status_log.append_event(
+                run_id,
+                LogEventType.STEP_COMPLETED,
+                step_id=subtask.id,
+                data={"title": subtask.title, "summary": sub_summary, "commit_hash": commit_hash},
+            )
             await self._emit_progress(run_id, "subtask_done", f"Done: {subtask.title}", query, {"subtask_id": subtask.id})
         else:
             subtask.status = SubtaskStatus.FAILED
             subtask.error = sub_error
+            await status_log.append_event(
+                run_id,
+                LogEventType.STEP_FAILED,
+                step_id=subtask.id,
+                data={"title": subtask.title, "error": sub_error},
+            )
             await self._emit_progress(run_id, "subtask_failed", f"Failed: {subtask.title}", query, {"subtask_id": subtask.id, "error": sub_error})
         return steps, changes, tokens, sub_summary, sub_status, sub_error
 

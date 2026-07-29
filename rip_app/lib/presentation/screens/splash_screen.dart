@@ -24,10 +24,10 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
     await ref.read(settingsProvider.future);
     await ref.read(activeProjectNotifierProvider.notifier).loadActiveProject();
 
-    final connectionStatus = await ref.read(connectionStatusProvider.future);
+    final isAuthenticated = await ref.read(isAuthenticatedProvider.future);
 
     if (mounted) {
-      if (connectionStatus) {
+      if (isAuthenticated) {
         context.go('/chat');
       } else {
         context.go('/setup');

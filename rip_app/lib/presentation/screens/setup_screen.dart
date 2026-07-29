@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../core/design/design.dart';
 import '../providers/settings_provider.dart';
 import '../providers/gateway_provider.dart';
+import '../providers/auth_provider.dart';
+import '../providers/connection_provider.dart';
 import '../../core/api/rip_client.dart';
 
 class SetupScreen extends ConsumerStatefulWidget {
@@ -104,6 +107,108 @@ class _SetupScreenState extends ConsumerState<SetupScreen> {
     }
   }
 
+  Future<void> _handleOAuthLogin(String provider) async {
+    final serverUrl = _serverUrlController.text.trim();
+    if (serverUrl.isEmpty) {
+      setState(() => _connectionError = 'Please enter server URL first');
+      return;
+    }
+    await ref.read(settingsNotifierProvider.notifier).saveServerUrl(serverUrl);
+
+    final redirectUri = '$serverUrl/auth/$provider/callback';
+    try {
+      final client = RipClient(serverUrl: serverUrl);
+      final loginUrl = await client.getOAuthLoginUrl(provider, redirectUri: redirectUri);
+      final uri = Uri.parse(loginUrl);
+
+      // Auto-launch system browser
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      }
+
+      if (!mounted) return;
+
+      final codeController = TextEditingController();
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: AppColors.surface,
+          title: Text('Sign in with ${provider == "github" ? "GitHub" : "Google"}', style: AppTextStyles.headlineSm),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Opening browser for authentication...',
+                style: AppTextStyles.bodySmBold.copyWith(color: AppColors.primary),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                provider == 'github'
+                    ? 'Grant full repository access in GitHub. Your browser will complete the login.'
+                    : 'Authenticate your profile in the browser.',
+                style: AppTextStyles.bodySm.copyWith(color: AppColors.textSecondary),
+              ),
+              const SizedBox(height: 12),
+              OutlinedButton.icon(
+                icon: const Icon(Icons.open_in_browser_rounded, size: 18),
+                label: const Text('Re-open Browser'),
+                onPressed: () async {
+                  if (await canLaunchUrl(uri)) {
+                    await launchUrl(uri, mode: LaunchMode.externalApplication);
+                  }
+                },
+              ),
+              const SizedBox(height: 16),
+              RipTextField(
+                label: 'Authorization Code or Token (rip_...)',
+                controller: codeController,
+                hintText: 'Paste code or rip_ token from browser',
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                final input = codeController.text.trim();
+                if (input.isNotEmpty) {
+                  Navigator.pop(ctx);
+                  if (input.startsWith('rip_')) {
+                    // Direct session token input
+                    await ref.read(settingsNotifierProvider.notifier).saveApiKey(input);
+                    ref.invalidate(isAuthenticatedProvider);
+                  } else {
+                    // OAuth Code exchange
+                    await ref.read(authNotifierProvider.notifier).loginWithOAuthCode(
+                      provider: provider,
+                      code: input,
+                      redirectUri: redirectUri,
+                    );
+                  }
+                  if (mounted) {
+                    setState(() {
+                      _isConnected = true;
+                    });
+                    context.go('/chat');
+                  }
+                }
+              },
+              child: const Text('Submit & Login'),
+            ),
+          ],
+        ),
+      );
+    } catch (e) {
+      if (mounted) {
+        setState(() => _connectionError = 'OAuth login error: $e');
+      }
+    }
+  }
+
   void _onContinue() {
     context.go('/chat');
   }
@@ -170,30 +275,93 @@ class _SetupScreenState extends ConsumerState<SetupScreen> {
                     ),
                     const SizedBox(height: 28),
 
-                    // Standard Form Controls (Match image)
+                    // Server URL Input
                     RipTextField(
                       label: 'Server URL',
                       controller: _serverUrlController,
-                      hintText: 'https://rip.yourserver.com',
+                      hintText: 'http://192.168.31.113:8000',
                       keyboardType: TextInputType.url,
-                    ),
-                    const SizedBox(height: 16),
-                    RipTextField(
-                      label: 'API Key',
-                      controller: _apiKeyController,
-                      hintText: '••••••••••••',
-                      isPassword: true,
                     ),
                     const SizedBox(height: 24),
 
-                    // Primary Test Connection Button (Match image)
-                    RipButton.primary(
-                      label: _isTestingConnection ? 'Testing Connection...' : 'Test Connection',
-                      onPressed: _isTestingConnection ? null : _testConnection,
-                      isLoading: _isTestingConnection,
-                      isFullWidth: true,
+                    // --- SIGN IN WITH OAUTH (FIRST MANDATORY STEP) ---
+                    Text(
+                      'SIGN IN TO CONTINUE',
+                      style: AppTextStyles.caption.copyWith(
+                        color: AppColors.textSecondary,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 1.0,
+                      ),
                     ),
+                    const SizedBox(height: 14),
 
+                    Column(
+                      children: [
+                        InkWell(
+                          onTap: () => _handleOAuthLogin('github'),
+                          borderRadius: BorderRadius.circular(16),
+                          child: Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF24292E),
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(color: Colors.white24, width: 1),
+                              boxShadow: const [
+                                BoxShadow(
+                                  color: Colors.black26,
+                                  blurRadius: 8,
+                                  offset: Offset(0, 4),
+                                ),
+                              ],
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                const Text('🐙', style: TextStyle(fontSize: 20)),
+                                const SizedBox(width: 10),
+                                Text(
+                                  'Continue with GitHub (Full Repo)',
+                                  style: AppTextStyles.bodyMdBold.copyWith(color: Colors.white),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        InkWell(
+                          onTap: () => _handleOAuthLogin('google'),
+                          borderRadius: BorderRadius.circular(16),
+                          child: Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF4285F4),
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(color: Colors.white24, width: 1),
+                              boxShadow: const [
+                                BoxShadow(
+                                  color: Colors.black26,
+                                  blurRadius: 8,
+                                  offset: Offset(0, 4),
+                                ),
+                              ],
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                const Text('🌐', style: TextStyle(fontSize: 20)),
+                                const SizedBox(width: 10),
+                                Text(
+                                  'Continue with Google',
+                                  style: AppTextStyles.bodyMdBold.copyWith(color: Colors.white),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                     // Connection Error Feedback
                     if (_connectionError != null) ...[
                       const SizedBox(height: 16),
