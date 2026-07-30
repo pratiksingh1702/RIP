@@ -30,6 +30,7 @@ from server.routers import (
 )
 from server.routers.api_keys import router as api_keys_router
 from server.routers.auth import router as auth_router
+from server.routers.admin import router as admin_router
 from server.routers.git import router as git_router
 from server.routers.projects import router as projects_router
 from server.routers.runtime import health_router
@@ -98,6 +99,7 @@ def create_app() -> FastAPI:
     app.include_router(explain.router, dependencies=[Depends(verify_api_key)])
     app.include_router(health_router)
     app.include_router(auth_router)
+    app.include_router(admin_router)
     app.include_router(runtime.router, dependencies=[Depends(verify_api_key)])
     app.include_router(git_router, dependencies=[Depends(verify_api_key)])
     app.include_router(projects_router, dependencies=[Depends(verify_api_key)])

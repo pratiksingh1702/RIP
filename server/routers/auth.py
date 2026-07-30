@@ -75,30 +75,41 @@ async def oauth_browser_callback(
             device_info="Browser Callback",
             ip_address=ip_addr,
         )
+        deep_link_url = f"riplink://oauth/callback?api_key={plaintext_token}"
         html_content = f"""
-        <! illusion HTML >
+        <!DOCTYPE html>
         <html>
         <head>
-            <title>RIP Authentication Success</title>
+            <title>Redirecting to RIP App...</title>
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <meta http-equiv="refresh" content="0;url={deep_link_url}">
             <style>
-                body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0F172A; color: #F8FAFC; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; padding: 20px; text-align: center; }}
-                .card {{ background: #1E293B; border: 1px solid #334155; border-radius: 24px; padding: 32px; max-width: 440px; width: 100%; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.5); }}
-                .icon {{ font-size: 48px; margin-bottom: 16px; }}
-                h2 {{ margin: 0 0 8px 0; color: #38BDF8; font-size: 24px; }}
-                p {{ color: #94A3B8; font-size: 14px; line-height: 1.5; margin-bottom: 24px; }}
-                .code-box {{ background: #090D16; border: 1px solid #334155; border-radius: 12px; padding: 12px; font-family: monospace; font-size: 13px; color: #38BDF8; word-break: break-all; margin-bottom: 20px; user-select: all; }}
-                .btn {{ display: inline-block; background: #0EA5E9; color: white; text-decoration: none; font-weight: 600; padding: 12px 24px; border-radius: 12px; transition: all 0.2s; }}
-                .btn:hover {{ background: #0284C7; }}
+                body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0B0F17; color: #F8FAFC; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; padding: 20px; text-align: center; }}
+                .card {{ background: #131B2E; border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 24px; padding: 36px 32px; max-width: 440px; width: 100%; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5); }}
+                .spinner {{ border: 3px solid rgba(56, 189, 248, 0.1); border-top: 3px solid #38BDF8; border-radius: 50%; width: 44px; height: 44px; animation: spin 0.8s linear infinite; margin: 0 auto 20px auto; }}
+                @keyframes spin {{ 0% {{ transform: rotate(0deg); }} 100% {{ transform: rotate(360deg); }} }}
+                h2 {{ margin: 0 0 8px 0; color: #38BDF8; font-size: 22px; font-weight: 700; }}
+                p {{ color: #94A3B8; font-size: 13.5px; line-height: 1.5; margin-bottom: 24px; }}
+                .btn {{ display: inline-block; background: linear-gradient(135deg, #0EA5E9, #2563EB); color: white; text-decoration: none; font-weight: 700; padding: 12px 28px; border-radius: 12px; transition: transform 0.1s, opacity 0.2s; box-shadow: 0 4px 14px rgba(14, 165, 233, 0.4); }}
+                .btn:hover {{ opacity: 0.92; }}
+                .btn:active {{ transform: scale(0.98); }}
             </style>
+            <script>
+                (function() {{
+                    const target = "{deep_link_url}";
+                    window.location.href = target;
+                    setTimeout(function() {{
+                        window.location.replace(target);
+                    }}, 250);
+                }})();
+            </script>
         </head>
         <body>
             <div class="card">
-                <div class="icon">🎉</div>
+                <div class="spinner"></div>
                 <h2>Authentication Successful!</h2>
-                <p>Welcome back, <strong>{user.display_name}</strong>. Your RIP Mobile App session is created.</p>
-                <div class="code-box" id="token">{plaintext_token}</div>
-                <a class="btn" href="riplink://oauth/callback?api_key={plaintext_token}">Open RIP Mobile App</a>
+                <p>Redirecting back to <strong>RIP App</strong> for <strong>{user.display_name}</strong>...</p>
+                <a class="btn" href="{deep_link_url}">Open RIP App</a>
             </div>
         </body>
         </html>

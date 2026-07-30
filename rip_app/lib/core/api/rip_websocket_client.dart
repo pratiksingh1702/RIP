@@ -74,6 +74,59 @@ class RipWebSocketClient {
     );
   }
 
+  Future<void> connectJobs() async {
+    RipLogger.info('Connecting for global jobs stream', tag: 'RipWebSocketClient');
+    try {
+      final uri = _buildJobsUri();
+      RipLogger.info('WebSocket URI: $uri', tag: 'RipWebSocketClient');
+
+      _channel = IOWebSocketChannel.connect(
+        uri,
+        headers: apiKey != null && apiKey!.isNotEmpty
+            ? {'Authorization': 'Bearer $apiKey'}
+            : null,
+      );
+      RipLogger.success('Connected jobs WS stream', tag: 'RipWebSocketClient');
+
+      _channel!.stream.listen(
+        (data) {
+          try {
+            final decoded = data is String
+                ? data
+                : String.fromCharCodes(data as List<int>);
+            final json = jsonDecode(decoded);
+            if (json is List) {
+              _controller.add({'jobs': json});
+            } else if (json is Map<String, dynamic>) {
+              _controller.add(json);
+            }
+          } catch (e) {
+            RipLogger.error('Error decoding jobs stream: $e', tag: 'RipWebSocketClient', error: e);
+          }
+        },
+        onError: (error) {
+          RipLogger.error('Jobs stream error: $error', tag: 'RipWebSocketClient', error: error);
+        },
+        onDone: () {
+          RipLogger.warning('Jobs stream done', tag: 'RipWebSocketClient');
+        },
+      );
+    } catch (e) {
+      RipLogger.error('Error connecting jobs WS: $e', tag: 'RipWebSocketClient', error: e);
+    }
+  }
+
+  Uri _buildJobsUri() {
+    final base = Uri.parse(serverUrl.trim());
+    final scheme = base.scheme == 'https' ? 'wss' : 'ws';
+    return base.replace(
+      scheme: scheme,
+      path: '/ws/jobs',
+      query: null,
+      fragment: null,
+    );
+  }
+
   void disconnect() {
     RipLogger.info('Disconnecting', tag: 'RipWebSocketClient');
     _channel?.sink.close();

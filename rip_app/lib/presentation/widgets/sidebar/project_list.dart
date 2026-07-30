@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/api/rip_client.dart';
 import '../../../core/design/app_colors.dart';
 import '../../../domain/enums/job_status.dart';
+import '../../providers/connection_provider.dart';
 import '../../providers/project_provider.dart';
 import '../common/status_badge.dart';
 
@@ -95,6 +97,7 @@ class ProjectList extends ConsumerWidget {
                       final project = projects[index];
                       final isActive = project.projectId == activeProjectId;
                       return _ProjectCard(
+                        projectId: project.projectId,
                         name: project.projectName,
                         location: project.locationLabel,
                         owner: project.repositoryOwner,
@@ -110,6 +113,7 @@ class ProjectList extends ConsumerWidget {
                               .setActiveProject(project.projectId);
                           Navigator.of(context).maybePop();
                         },
+                        onDelete: () => _confirmDeleteProject(context, ref, project.projectId, project.projectName),
                       );
                     },
                   ),
@@ -120,10 +124,75 @@ class ProjectList extends ConsumerWidget {
       ),
     );
   }
+
+  Future<void> _confirmDeleteProject(
+    BuildContext context,
+    WidgetRef ref,
+    String projectId,
+    String projectName,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF14141A),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text('Delete $projectName?', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        content: const Text(
+          'This will permanently delete this project, including its Neo4j AST graph nodes, Qdrant vector embeddings, database memories, and cloned folder in .remote-repos.',
+          style: TextStyle(color: Colors.white70, fontSize: 13),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel', style: TextStyle(color: Colors.white60)),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFEF4444),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            child: const Text('Delete', style: TextStyle(fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && context.mounted) {
+      try {
+        final activeId = ref.read(activeProjectIdProvider);
+        if (activeId == projectId) {
+          await ref.read(activeProjectNotifierProvider.notifier).setActiveProject(null);
+        }
+        final client = ref.read(ripClientProvider);
+        await client.deleteProject(projectId);
+        ref.invalidate(projectListProvider);
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Project "$projectName" deleted'),
+              backgroundColor: const Color(0xFF22C55E),
+            ),
+          );
+        }
+      } catch (e) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Failed to delete project: $e'),
+              backgroundColor: const Color(0xFFEF4444),
+            ),
+          );
+        }
+      }
+    }
+  }
 }
 
 class _ProjectCard extends StatelessWidget {
   const _ProjectCard({
+    required this.projectId,
     required this.name,
     required this.location,
     required this.filesCount,
@@ -131,10 +200,12 @@ class _ProjectCard extends StatelessWidget {
     required this.languages,
     required this.isActive,
     required this.onTap,
+    required this.onDelete,
     this.owner,
     this.branch,
   });
 
+  final String projectId;
   final String name;
   final String location;
   final String? owner;
@@ -144,6 +215,7 @@ class _ProjectCard extends StatelessWidget {
   final List<String> languages;
   final bool isActive;
   final VoidCallback onTap;
+  final VoidCallback onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -233,8 +305,13 @@ class _ProjectCard extends StatelessWidget {
                     ],
                   ),
                 ),
-                const SizedBox(width: 10),
-                const StatusBadge(status: JobStatus.complete),
+                const SizedBox(width: 8),
+                IconButton(
+                  onPressed: onDelete,
+                  icon: const Icon(Icons.delete_outline_rounded, size: 18, color: Color(0xFFEF4444)),
+                  tooltip: 'Delete Project',
+                  visualDensity: VisualDensity.compact,
+                ),
               ],
             ),
           ),

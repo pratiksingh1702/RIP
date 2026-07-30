@@ -1383,4 +1383,34 @@ class RipClient {
       await _dio.post('/auth/logout');
     } catch (_) {}
   }
+
+  Future<List<Map<String, dynamic>>> getUserGithubRepos() async {
+    try {
+      final response = await _dio.get('/git/user-repos');
+      final data = response.data as Map<String, dynamic>;
+      if (data.containsKey('repos') && data['repos'] is List) {
+        return List<Map<String, dynamic>>.from(data['repos'] as List);
+      }
+      return [];
+    } catch (_) {
+      return [];
+    }
+  }
+
+  Future<Map<String, dynamic>> getGitJobStatus(String jobId) async {
+    final response = await _dio.get('/git/status/$jobId');
+    return response.data as Map<String, dynamic>;
+  }
+
+  Future<List<Map<String, dynamic>>> listGitJobs() async {
+    try {
+      final response = await _dio.get('/git/jobs');
+      if (response.data is List) {
+        return List<Map<String, dynamic>>.from(response.data as List);
+      }
+      return [];
+    } catch (_) {
+      return [];
+    }
+  }
 }

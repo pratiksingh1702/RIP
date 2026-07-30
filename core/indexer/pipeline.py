@@ -190,7 +190,7 @@ def _parse_file_worker_optimized(args: tuple) -> tuple:
 
     try:
         file_size = file_path.stat().st_size
-        content = file_path.read_text(encoding="utf-8", errors="replace")
+        content = file_path.read_text(encoding="utf-8-sig", errors="replace").lstrip('\ufeff')
         result = parser.parse_file(file_path, content)
         elapsed = time.perf_counter() - start
         if elapsed > 5:

@@ -26,6 +26,10 @@ final activeProjectIdProvider = StateProvider<String?>((ref) {
   return null;
 });
 
+final activeGitJobsProvider = StateProvider<Set<String>>((ref) {
+  return {};
+});
+
 final activeProjectProvider = FutureProvider.autoDispose<Project?>((ref) async {
   final projectId = ref.watch(activeProjectIdProvider);
   if (projectId == null) return null;

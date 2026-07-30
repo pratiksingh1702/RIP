@@ -11,6 +11,7 @@ import 'package:rip_app/presentation/providers/project_provider.dart';
 import 'package:rip_app/presentation/providers/settings_provider.dart';
 import 'package:rip_app/presentation/providers/chat_session_provider.dart';
 import 'package:rip_app/presentation/widgets/overlays/add_repo_sheet.dart';
+import 'package:rip_app/presentation/widgets/overlays/first_time_github_onboarding_dialog.dart';
 import 'package:rip_app/presentation/widgets/sidebar/project_list.dart';
 
 class AppDrawer extends ConsumerWidget {
@@ -69,11 +70,10 @@ class AppDrawer extends ConsumerWidget {
                       isDark: isDark,
                       onTap: () {
                         HapticFeedback.selectionClick();
-                        showModalBottomSheet(
+                        Navigator.pop(context);
+                        showDialog(
                           context: context,
-                          isScrollControlled: true,
-                          backgroundColor: Colors.transparent,
-                          builder: (context) => const AddRepoSheet(),
+                          builder: (context) => const FirstTimeGithubOnboardingDialog(),
                         );
                       },
                     ),
@@ -86,15 +86,8 @@ class AppDrawer extends ConsumerWidget {
                       isDark: isDark,
                       onTap: () {
                         HapticFeedback.selectionClick();
-                        ref.invalidate(projectListProvider);
-                        showDialog(
-                          context: context,
-                          builder: (context) => const Dialog(
-                            backgroundColor: Colors.transparent,
-                            insetPadding: EdgeInsets.all(18),
-                            child: SizedBox(height: 440, child: ProjectList()),
-                          ),
-                        );
+                        Navigator.pop(context);
+                        context.push('/projects');
                       },
                     ),
                   ),
@@ -292,6 +285,11 @@ class AppDrawer extends ConsumerWidget {
                           title: 'Index Context',
                           subtitle: 'Graph-backed workspace memory',
                           isDark: isDark,
+                          onTap: () {
+                            HapticFeedback.selectionClick();
+                            Navigator.pop(context);
+                            context.push('/projects');
+                          },
                         ),
                       ],
                     ),

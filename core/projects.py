@@ -251,18 +251,45 @@ async def verify_project_access(
 
 
 async def delete_project(session: AsyncSession, project_id: str) -> bool:
-    # First delete Neo4j data
     from qdrant_client import AsyncQdrantClient
     from qdrant_client.http.exceptions import UnexpectedResponse
     from qdrant_client.models import FieldCondition, Filter, MatchValue
+    from sqlalchemy import text
 
+    from core.git.cloner import _force_rmtree
     from core.graph.client import Neo4jClient
     from server.config import get_settings
 
     settings = get_settings()
     COLLECTION_NAME = "repo_entities"
 
-    # Delete from Neo4j
+    # Get project row to find file path
+    row = await session.get(Project, project_id)
+    if row is None:
+        return False
+
+    # 1. Delete cloned folder in .remote-repos / remote-repos if applicable
+    if row.root:
+        try:
+            root_path = Path(row.root)
+            if root_path.exists() and ("remote-repos" in str(root_path).lower() or ".repo-intel" in str(root_path).lower()):
+                _force_rmtree(root_path)
+        except Exception:
+            pass
+
+    # 2. Delete memory tables (workspace_memory, workspace_knowledge, workspace_goals, workspace_entities)
+    memory_tables = ["workspace_memory", "workspace_knowledge", "workspace_goals", "workspace_entities"]
+    for table_name in memory_tables:
+        try:
+            async with session.begin_nested():
+                await session.execute(
+                    text(f"DELETE FROM {table_name} WHERE project_id = :pid OR workspace_id = :pid"),
+                    {"pid": project_id},
+                )
+        except Exception:
+            pass
+
+    # 3. Delete from Neo4j
     neo4j_client = Neo4jClient(settings.neo4j_uri, settings.neo4j_user, settings.neo4j_password)
     try:
         if await neo4j_client.connect():
@@ -281,10 +308,12 @@ async def delete_project(session: AsyncSession, project_id: str) -> bool:
                 DETACH DELETE n
                 """
             )
+    except Exception:
+        pass
     finally:
         await neo4j_client.close()
 
-    # Delete from Qdrant
+    # 4. Delete from Qdrant
     qdrant_client = AsyncQdrantClient(host=settings.qdrant_host, port=settings.qdrant_port)
     filter_ = Filter(
         must=[FieldCondition(key="project_id", match=MatchValue(value=project_id))]
@@ -299,10 +328,7 @@ async def delete_project(session: AsyncSession, project_id: str) -> bool:
     finally:
         await qdrant_client.close()
 
-    # Delete from storage
-    row = await session.get(Project, project_id)
-    if row is None:
-        return False
+    # 5. Delete project record from PostgreSQL
     await session.delete(row)
     await session.commit()
     return True
