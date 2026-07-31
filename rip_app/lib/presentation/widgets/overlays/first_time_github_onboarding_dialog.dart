@@ -131,7 +131,8 @@ class _FirstTimeGithubOnboardingDialogState
       // Connect WebSocket push stream for instant progress updates
       try {
         final baseUrl = ref.read(serverUrlProvider);
-        _wsClient = RipWebSocketClient(serverUrl: baseUrl);
+        final apiKey = ref.read(apiKeyProvider);
+        _wsClient = RipWebSocketClient(serverUrl: baseUrl, apiKey: apiKey);
         _wsClient!.connect(jobId);
         _wsClient!.stream.listen((job) async {
           if (!mounted) return;

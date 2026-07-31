@@ -18,6 +18,7 @@ import '../screens/workflows_screen.dart';
 import '../screens/llm_settings_screen.dart';
 import '../screens/profile_screen.dart';
 import '../screens/projects_screen.dart';
+import '../screens/project_details_screen.dart';
 import '../widgets/overlays/first_time_github_onboarding_dialog.dart';
 
 class _OAuthCallbackWidget extends ConsumerStatefulWidget {
@@ -110,6 +111,10 @@ final appRouter = GoRouter(
     GoRoute(path: '/setup', builder: (context, state) => const SetupScreen()),
     GoRoute(path: '/profile', builder: (context, state) => const ProfileScreen()),
     GoRoute(path: '/projects', builder: (context, state) => const ProjectsScreen()),
+    GoRoute(
+      path: '/projects/:projectId',
+      builder: (context, state) => ProjectDetailsScreen(projectId: state.pathParameters['projectId']!),
+    ),
     GoRoute(path: '/activity', builder: (context, state) => const GatewayActivityScreen()),
     GoRoute(path: '/sources', builder: (context, state) => const GatewaySourcesScreen()),
     GoRoute(path: '/workflows', builder: (context, state) {

@@ -1,4 +1,4 @@
-﻿"""Git history, contributors, and code ownership API."""
+"""Git history, contributors, and code ownership API."""
 from __future__ import annotations
 import subprocess
 from pathlib import Path
@@ -27,7 +27,7 @@ def _run_git(root: Path, args: list[str], timeout: int = 30) -> str:
 async def get_git_history(
     project_id: str,
     file_path: str = Query(default="", description="Filter by file path"),
-    limit: int = Query(default=20, le=100),
+    limit: int = Query(default=100, le=1000),
     api_key = Depends(verify_api_key),
 ):
     """Get git commit history for a project or specific file."""
@@ -87,7 +87,7 @@ async def get_git_history(
 @router.get("/{project_id}/git/contributors")
 async def get_contributors(
     project_id: str,
-    limit: int = Query(default=20, le=50),
+    limit: int = Query(default=20, le=100),
     api_key = Depends(verify_api_key),
 ):
     """Get top contributors with commit counts."""
@@ -110,7 +110,7 @@ async def get_contributors(
     if not (git_root / ".git").exists():
         return {"project_id": project_id, "contributors": [], "note": "No git repository found"}
     
-    output = _run_git(git_root, ["shortlog", "-sne", "--all", f"--max-count={limit * 10}"])
+    output = _run_git(git_root, ["shortlog", "-sne", "--all"])
     if not output:
         return {"project_id": project_id, "contributors": []}
     

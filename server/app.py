@@ -195,6 +195,7 @@ def create_app() -> FastAPI:
     )
     app.include_router(file_tree_router, dependencies=[Depends(verify_api_key)])
     app.include_router(git_metadata_router, dependencies=[Depends(verify_api_key)])
+    app.include_router(ws_router, dependencies=[Depends(verify_api_key)])
 
     return app
 

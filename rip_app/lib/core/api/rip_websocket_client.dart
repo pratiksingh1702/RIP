@@ -66,10 +66,14 @@ class RipWebSocketClient {
   Uri _buildIndexUri(String jobId) {
     final base = Uri.parse(serverUrl.trim());
     final scheme = base.scheme == 'https' ? 'wss' : 'ws';
+    final queryParams = <String, String>{};
+    if (apiKey != null && apiKey!.isNotEmpty) {
+      queryParams['token'] = apiKey!;
+    }
     return base.replace(
       scheme: scheme,
       path: '/ws/index/$jobId',
-      query: null,
+      queryParameters: queryParams.isNotEmpty ? queryParams : null,
       fragment: null,
     );
   }
@@ -119,10 +123,14 @@ class RipWebSocketClient {
   Uri _buildJobsUri() {
     final base = Uri.parse(serverUrl.trim());
     final scheme = base.scheme == 'https' ? 'wss' : 'ws';
+    final queryParams = <String, String>{};
+    if (apiKey != null && apiKey!.isNotEmpty) {
+      queryParams['token'] = apiKey!;
+    }
     return base.replace(
       scheme: scheme,
       path: '/ws/jobs',
-      query: null,
+      queryParameters: queryParams.isNotEmpty ? queryParams : null,
       fragment: null,
     );
   }

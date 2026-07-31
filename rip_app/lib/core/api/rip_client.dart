@@ -1413,4 +1413,30 @@ class RipClient {
       return [];
     }
   }
+
+  Future<List<Map<String, dynamic>>> getGitHistory(String projectId, {int limit = 20}) async {
+    try {
+      final response = await _dio.get('/projects/$projectId/git/history', queryParameters: {'limit': limit});
+      final data = response.data as Map<String, dynamic>;
+      if (data.containsKey('commits') && data['commits'] is List) {
+        return List<Map<String, dynamic>>.from(data['commits'] as List);
+      }
+      return [];
+    } catch (_) {
+      return [];
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> getGitContributors(String projectId, {int limit = 20}) async {
+    try {
+      final response = await _dio.get('/projects/$projectId/git/contributors', queryParameters: {'limit': limit});
+      final data = response.data as Map<String, dynamic>;
+      if (data.containsKey('contributors') && data['contributors'] is List) {
+        return List<Map<String, dynamic>>.from(data['contributors'] as List);
+      }
+      return [];
+    } catch (_) {
+      return [];
+    }
+  }
 }

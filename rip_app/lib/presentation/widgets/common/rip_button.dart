@@ -98,9 +98,13 @@ class RipButton extends StatelessWidget {
           ),
           const SizedBox(width: 8),
         ],
-        Text(
-          label,
-          style: AppTextStyles.bodyMdBold.copyWith(color: foregroundColor),
+        Flexible(
+          child: Text(
+            label,
+            style: AppTextStyles.bodyMdBold.copyWith(color: foregroundColor),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
         ),
       ],
     );
