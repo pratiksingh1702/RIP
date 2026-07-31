@@ -135,6 +135,50 @@ class RipClient {
     }
   }
 
+  Future<List<Map<String, dynamic>>> getProjectFiles(String projectId, {String path = '', int maxDepth = 10}) async {
+    try {
+      RipLogger.info('Calling getProjectFiles(projectId: $projectId, path: $path)', tag: 'RipClient_Endpoint');
+      final response = await _dio.get('/projects/$projectId/files', queryParameters: {
+        'path': path,
+        'max_depth': maxDepth,
+      });
+      final data = response.data as Map<String, dynamic>;
+      final List<dynamic> tree = data['tree'] as List? ?? [];
+      return tree.cast<Map<String, dynamic>>();
+    } catch (e, stack) {
+      RipLogger.error('getProjectFiles failed', tag: 'RipClient_Endpoint', error: e, stackTrace: stack);
+      return [];
+    }
+  }
+
+  Future<Map<String, dynamic>> getFileContent(String projectId, String path) async {
+    try {
+      RipLogger.info('Calling getFileContent(projectId: $projectId, path: $path)', tag: 'RipClient_Endpoint');
+      final response = await _dio.get('/projects/$projectId/file-content', queryParameters: {
+        'path': path,
+      });
+      return response.data as Map<String, dynamic>;
+    } catch (e, stack) {
+      RipLogger.error('getFileContent failed', tag: 'RipClient_Endpoint', error: e, stackTrace: stack);
+      rethrow;
+    }
+  }
+
+  Future<Map<String, dynamic>> updateFileContent(String projectId, String path, String content, {String? commitMessage}) async {
+    try {
+      RipLogger.info('Calling updateFileContent(projectId: $projectId, path: $path)', tag: 'RipClient_Endpoint');
+      final response = await _dio.put('/projects/$projectId/file-content', data: {
+        'path': path,
+        'content': content,
+        if (commitMessage != null && commitMessage.trim().isNotEmpty) 'commit_message': commitMessage.trim(),
+      });
+      return response.data as Map<String, dynamic>;
+    } catch (e, stack) {
+      RipLogger.error('updateFileContent failed', tag: 'RipClient_Endpoint', error: e, stackTrace: stack);
+      rethrow;
+    }
+  }
+
   Future<void> deleteProject(String projectId) async {
     try {
       RipLogger.info('Calling deleteProject(projectId: $projectId)',

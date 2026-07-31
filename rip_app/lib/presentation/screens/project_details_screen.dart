@@ -10,6 +10,7 @@ import 'package:rip_app/presentation/providers/connection_provider.dart';
 import 'package:rip_app/presentation/providers/project_provider.dart';
 import 'package:rip_app/presentation/widgets/common/rip_button.dart';
 import 'package:rip_app/presentation/widgets/overlays/first_time_github_onboarding_dialog.dart';
+import 'package:rip_app/presentation/screens/code_editor_screen.dart';
 
 class ProjectDetailsScreen extends ConsumerStatefulWidget {
   const ProjectDetailsScreen({
@@ -30,7 +31,9 @@ class _ProjectDetailsScreenState extends ConsumerState<ProjectDetailsScreen> {
 
   List<Map<String, dynamic>> _gitCommits = [];
   List<Map<String, dynamic>> _gitContributors = [];
+  List<Map<String, dynamic>> _projectFiles = [];
   bool _isLoadingGitData = true;
+  bool _isLoadingFiles = true;
 
   @override
   void initState() {
@@ -59,24 +62,29 @@ class _ProjectDetailsScreenState extends ConsumerState<ProjectDetailsScreen> {
   Future<void> _fetchRealGitData() async {
     setState(() {
       _isLoadingGitData = true;
+      _isLoadingFiles = true;
     });
     try {
       final client = ref.read(ripClientProvider);
       final results = await Future.wait([
         client.getGitHistory(widget.projectId, limit: 100),
         client.getGitContributors(widget.projectId, limit: 50),
+        client.getProjectFiles(widget.projectId, maxDepth: 10),
       ]);
       if (mounted) {
         setState(() {
-          _gitCommits = results[0];
-          _gitContributors = results[1];
+          _gitCommits = results[0] as List<Map<String, dynamic>>;
+          _gitContributors = results[1] as List<Map<String, dynamic>>;
+          _projectFiles = results[2] as List<Map<String, dynamic>>;
           _isLoadingGitData = false;
+          _isLoadingFiles = false;
         });
       }
     } catch (_) {
       if (mounted) {
         setState(() {
           _isLoadingGitData = false;
+          _isLoadingFiles = false;
         });
       }
     }
@@ -266,10 +274,18 @@ class _ProjectDetailsScreenState extends ConsumerState<ProjectDetailsScreen> {
                     _buildKnowledgeAnalyticsCard(p, isDark, cardBgColor, textColor, mutedTextColor),
                     const SizedBox(height: 28),
 
-                    // --- SECTION 4: PERFORMANCE & QUERY ACTIVITY SPARKLINE ---
-                    _SectionLabel(title: '7-DAY QUERY ACTIVITY & PERFORMANCE', icon: Icons.speed_rounded, isDark: isDark),
+                    // --- SECTION 4.5: PROJECT FILES & DIRECTORY EXPLORER ---
+                    _SectionLabel(title: 'PROJECT FILES & WORKSPACE EXPLORER', icon: Icons.folder_open_rounded, isDark: isDark),
                     const SizedBox(height: 12),
-                    _buildSparklineActivityCard(isDark, cardBgColor, textColor, mutedTextColor),
+                    _ProjectFilesExplorerCard(
+                      projectId: widget.projectId,
+                      files: _projectFiles,
+                      isLoading: _isLoadingFiles,
+                      isDark: isDark,
+                      cardBgColor: cardBgColor,
+                      textColor: textColor,
+                      mutedTextColor: mutedTextColor,
+                    ),
                     const SizedBox(height: 28),
 
                     // --- SECTION 5: REAL GITHUB CONTRIBUTIONS & COMMIT HISTORY ---
@@ -1979,3 +1995,394 @@ class _RingPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant _RingPainter oldDelegate) => true;
 }
+
+class _ProjectFilesExplorerCard extends StatefulWidget {
+  final String projectId;
+  final List<Map<String, dynamic>> files;
+  final bool isLoading;
+  final bool isDark;
+  final Color cardBgColor;
+  final Color textColor;
+  final Color mutedTextColor;
+
+  const _ProjectFilesExplorerCard({
+    required this.projectId,
+    required this.files,
+    required this.isLoading,
+    required this.isDark,
+    required this.cardBgColor,
+    required this.textColor,
+    required this.mutedTextColor,
+  });
+
+  @override
+  State<_ProjectFilesExplorerCard> createState() => _ProjectFilesExplorerCardState();
+}
+
+class _ProjectFilesExplorerCardState extends State<_ProjectFilesExplorerCard> {
+  String _searchQuery = '';
+  final Set<String> _expandedPaths = {};
+
+  @override
+  Widget build(BuildContext context) {
+    if (widget.isLoading) {
+      return Container(
+        padding: const EdgeInsets.all(24),
+        decoration: BoxDecoration(
+          color: widget.cardBgColor,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: widget.isDark ? Colors.white.withOpacity(0.08) : Colors.black.withOpacity(0.08),
+          ),
+        ),
+        child: Row(
+          children: [
+            const SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.grey),
+            ),
+            const SizedBox(width: 12),
+            Text(
+              'Scanning project files & directory tree...',
+              style: TextStyle(
+                color: widget.mutedTextColor,
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (widget.files.isEmpty) {
+      return Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: widget.cardBgColor,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: widget.isDark ? Colors.white.withOpacity(0.08) : Colors.black.withOpacity(0.08),
+          ),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.folder_off_outlined, color: widget.mutedTextColor, size: 20),
+            const SizedBox(width: 10),
+            Text(
+              'No source files discovered in workspace root',
+              style: TextStyle(color: widget.mutedTextColor, fontSize: 13),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final filteredFiles = _filterFiles(widget.files, _searchQuery);
+
+    return Container(
+      decoration: BoxDecoration(
+        color: widget.cardBgColor,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: widget.isDark ? Colors.white.withOpacity(0.08) : Colors.black.withOpacity(0.08),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header + Search bar
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.account_tree_outlined, size: 18, color: widget.textColor),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Workspace Files',
+                          style: TextStyle(
+                            color: widget.textColor,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: -0.2,
+                          ),
+                        ),
+                      ],
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: widget.isDark ? Colors.white.withOpacity(0.06) : Colors.black.withOpacity(0.05),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        '${widget.files.length} items',
+                        style: TextStyle(
+                          color: widget.mutedTextColor,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                // Ultra-Sleek Monochrome Hairline Search Bar (No Purple, No White Box)
+                Container(
+                  height: 36,
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                  decoration: BoxDecoration(
+                    color: widget.isDark ? const Color(0xFF121217) : const Color(0xFFE8E8EC),
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(
+                      color: widget.isDark ? Colors.white.withOpacity(0.12) : Colors.black.withOpacity(0.12),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.filter_list_rounded, size: 15, color: widget.mutedTextColor),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Theme(
+                          data: Theme.of(context).copyWith(
+                            colorScheme: Theme.of(context).colorScheme.copyWith(
+                              primary: widget.textColor, // Eliminates Flutter default purple active focus
+                            ),
+                            textSelectionTheme: TextSelectionThemeData(
+                              cursorColor: widget.textColor,
+                              selectionColor: widget.isDark ? Colors.white24 : Colors.black12,
+                              selectionHandleColor: widget.textColor,
+                            ),
+                          ),
+                          child: TextField(
+                            onChanged: (val) => setState(() => _searchQuery = val),
+                            style: TextStyle(
+                              color: widget.textColor,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w400,
+                            ),
+                            cursorColor: widget.textColor,
+                            decoration: InputDecoration(
+                              hintText: 'Type to filter workspace files...',
+                              hintStyle: TextStyle(
+                                color: widget.mutedTextColor.withOpacity(0.5),
+                                fontSize: 12,
+                                fontWeight: FontWeight.w400,
+                              ),
+                              border: InputBorder.none,
+                              enabledBorder: InputBorder.none,
+                              focusedBorder: InputBorder.none,
+                              focusedErrorBorder: InputBorder.none,
+                              errorBorder: InputBorder.none,
+                              disabledBorder: InputBorder.none,
+                              isDense: true,
+                              contentPadding: EdgeInsets.zero,
+                            ),
+                          ),
+                        ),
+                      ),
+                      if (_searchQuery.isNotEmpty)
+                        GestureDetector(
+                          onTap: () => setState(() => _searchQuery = ''),
+                          child: Container(
+                            padding: const EdgeInsets.all(2),
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: widget.isDark ? Colors.white.withOpacity(0.1) : Colors.black.withOpacity(0.1),
+                            ),
+                            child: Icon(Icons.close, size: 12, color: widget.textColor),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Divider(
+            height: 1,
+            color: widget.isDark ? Colors.white.withOpacity(0.06) : Colors.black.withOpacity(0.06),
+          ),
+          // File list tree
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxHeight: 320),
+            child: ListView.separated(
+              shrinkWrap: true,
+              physics: const BouncingScrollPhysics(),
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              itemCount: filteredFiles.length,
+              separatorBuilder: (_, __) => Divider(
+                height: 1,
+                indent: 16,
+                endIndent: 16,
+                color: widget.isDark ? Colors.white.withOpacity(0.03) : Colors.black.withOpacity(0.03),
+              ),
+              itemBuilder: (context, index) {
+                final item = filteredFiles[index];
+                return _buildFileTreeItem(item, 0);
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  List<Map<String, dynamic>> _filterFiles(List<Map<String, dynamic>> items, String query) {
+    if (query.trim().isEmpty) return items;
+    final q = query.toLowerCase();
+    final result = <Map<String, dynamic>>[];
+    for (final item in items) {
+      final name = (item['name'] as String? ?? '').toLowerCase();
+      final path = (item['path'] as String? ?? '').toLowerCase();
+      final isDir = item['is_directory'] == true;
+      if (name.contains(q) || path.contains(q)) {
+        result.add(item);
+      } else if (isDir && item['children'] != null) {
+        final children = (item['children'] as List).cast<Map<String, dynamic>>();
+        final matchingChildren = _filterFiles(children, query);
+        if (matchingChildren.isNotEmpty) {
+          final copy = Map<String, dynamic>.from(item);
+          copy['children'] = matchingChildren;
+          result.add(copy);
+        }
+      }
+    }
+    return result;
+  }
+
+  Widget _buildFileTreeItem(Map<String, dynamic> item, int depth) {
+    final name = item['name'] as String? ?? 'file';
+    final path = item['path'] as String? ?? name;
+    final isDir = item['is_directory'] == true;
+    final children = (item['children'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+    final sizeBytes = item['size_bytes'] as int? ?? 0;
+    final isExpanded = _expandedPaths.contains(path) || _searchQuery.isNotEmpty;
+
+    final fileIcon = _getFileIcon(name, isDir, isExpanded);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        InkWell(
+          onTap: () {
+            if (isDir) {
+              setState(() {
+                if (_expandedPaths.contains(path)) {
+                  _expandedPaths.remove(path);
+                } else {
+                  _expandedPaths.add(path);
+                }
+              });
+            } else {
+              HapticFeedback.mediumImpact();
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => CodeEditorScreen(
+                    projectId: widget.projectId,
+                    filePath: path,
+                    fileName: name,
+                  ),
+                ),
+              );
+            }
+          },
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(16 + (depth * 14.0), 8, 16, 8),
+            child: Row(
+              children: [
+                Icon(fileIcon.icon, size: 16, color: fileIcon.color ?? widget.mutedTextColor),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: widget.textColor,
+                      fontSize: 12.5,
+                      fontWeight: isDir ? FontWeight.w600 : FontWeight.w400,
+                    ),
+                  ),
+                ),
+                if (isDir) ...[
+                  if (item['file_count'] != null)
+                    Text(
+                      '${item['file_count']} files',
+                      style: TextStyle(color: widget.mutedTextColor.withOpacity(0.7), fontSize: 11),
+                    ),
+                  const SizedBox(width: 6),
+                  Icon(
+                    isExpanded ? Icons.keyboard_arrow_down : Icons.keyboard_arrow_right,
+                    size: 16,
+                    color: widget.mutedTextColor,
+                  ),
+                ] else if (sizeBytes > 0) ...[
+                  Text(
+                    _formatFileSize(sizeBytes),
+                    style: TextStyle(
+                      color: widget.mutedTextColor.withOpacity(0.6),
+                      fontSize: 11,
+                      fontFamily: 'monospace',
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+        if (isDir && isExpanded && children.isNotEmpty)
+          ...children.map((child) => _buildFileTreeItem(child, depth + 1)),
+      ],
+    );
+  }
+
+  _FileIconData _getFileIcon(String fileName, bool isDir, bool isExpanded) {
+    if (isDir) {
+      return _FileIconData(
+        isExpanded ? Icons.folder_open_rounded : Icons.folder_rounded,
+        color: const Color(0xFFD4D4D4),
+      );
+    }
+    final ext = fileName.contains('.') ? fileName.split('.').last.toLowerCase() : '';
+    switch (ext) {
+      case 'dart':
+        return _FileIconData(Icons.code_rounded, color: const Color(0xFF54C5F8));
+      case 'py':
+        return _FileIconData(Icons.terminal_rounded, color: const Color(0xFFFFD43B));
+      case 'ts':
+      case 'tsx':
+      case 'js':
+      case 'jsx':
+        return _FileIconData(Icons.javascript_rounded, color: const Color(0xFFF7DF1E));
+      case 'json':
+      case 'yaml':
+      case 'toml':
+        return _FileIconData(Icons.data_object_rounded, color: const Color(0xFFA6E22E));
+      case 'md':
+        return _FileIconData(Icons.article_outlined, color: const Color(0xFFE6DB74));
+      default:
+        return _FileIconData(Icons.insert_drive_file_outlined, color: null);
+    }
+  }
+
+  String _formatFileSize(int bytes) {
+    if (bytes < 1024) return '$bytes B';
+    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+  }
+}
+
+class _FileIconData {
+  final IconData icon;
+  final Color? color;
+  _FileIconData(this.icon, {this.color});
+}
+

@@ -59,6 +59,21 @@
       ],
       "failed_patterns": [],
       "last_run_at": "2026-07-30T15:03:13.637446+00:00"
+    },
+    "2bfbd302-8b04-543d-a8f8-aa2eb0989e53": {
+      "files": {
+        "REPOSITORY_ROOT": {
+          "risk_level": "low",
+          "times_modified": 1,
+          "last_error": null,
+          "successful_patterns": []
+        }
+      },
+      "successful_tools": [
+        "git_onboarding_indexer"
+      ],
+      "failed_patterns": [],
+      "last_run_at": "2026-07-31T09:26:24.581404+00:00"
     }
   }
 }
