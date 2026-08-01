@@ -1483,4 +1483,83 @@ class RipClient {
       return [];
     }
   }
+
+  Future<Map<String, dynamic>> getGatewayMarketplace({
+    String? category,
+    String? trustTier,
+    String? search,
+    bool includeUnverified = true,
+    int page = 1,
+    int limit = 30,
+    CancelToken? cancelToken,
+  }) async {
+    final params = {
+      if (category != null && category.isNotEmpty) 'category': category,
+      if (trustTier != null && trustTier.isNotEmpty) 'trust_tier': trustTier,
+      if (search != null && search.isNotEmpty) 'search': search,
+      'include_unverified': includeUnverified ? 'true' : 'false',
+      'page': page,
+      'limit': limit,
+    };
+    try {
+      final response = await _dio.get('/gateway/api/sources/marketplace/servers', queryParameters: params, cancelToken: cancelToken);
+      final data = response.data as Map<String, dynamic>;
+      return data['data'] as Map<String, dynamic>? ?? data;
+    } catch (_) {
+      final response = await _dio.get('/gateway/api/sources/marketplace', queryParameters: params, cancelToken: cancelToken);
+      final data = response.data as Map<String, dynamic>;
+      return data['data'] as Map<String, dynamic>? ?? data;
+    }
+  }
+
+
+  Future<Map<String, dynamic>> getGatewayMarketplaceDetail(String sourceId, {CancelToken? cancelToken}) async {
+    try {
+      final response = await _dio.get('/gateway/api/sources/marketplace/servers/$sourceId', cancelToken: cancelToken);
+      return response.data as Map<String, dynamic>;
+    } catch (_) {
+      final response = await _dio.get('/gateway/api/sources/marketplace/$sourceId', cancelToken: cancelToken);
+      return response.data as Map<String, dynamic>;
+    }
+  }
+
+  Future<Map<String, dynamic>> installGatewayMarketplaceSource(String sourceId, {String? projectId, CancelToken? cancelToken}) async {
+    try {
+      final response = await _dio.post('/gateway/api/sources/marketplace/servers/$sourceId/connect', queryParameters: {
+        if (projectId != null) 'project_id': projectId,
+      }, cancelToken: cancelToken);
+      final data = response.data as Map<String, dynamic>;
+      return data['data'] as Map<String, dynamic>? ?? data;
+    } catch (_) {
+      final response = await _dio.post('/gateway/api/sources/marketplace/$sourceId/install', queryParameters: {
+        if (projectId != null) 'project_id': projectId,
+      }, cancelToken: cancelToken);
+      final data = response.data as Map<String, dynamic>;
+      return data['data'] as Map<String, dynamic>? ?? data;
+    }
+  }
+
+  Future<Map<String, dynamic>> getGatewayMarketplaceServerVersions(String sourceId, {CancelToken? cancelToken}) async {
+
+
+    try {
+      final response = await _dio.get('/gateway/api/sources/marketplace/servers/$sourceId/versions', cancelToken: cancelToken);
+      return response.data as Map<String, dynamic>;
+    } catch (_) {
+      return {'servers': []};
+    }
+  }
+
+  Future<Map<String, dynamic>> getGatewayMarketplaceServerVersionDetail(String sourceId, String version, {CancelToken? cancelToken}) async {
+    final response = await _dio.get('/gateway/api/sources/marketplace/servers/$sourceId/versions/$version', cancelToken: cancelToken);
+    return response.data as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> validateGatewayMarketplaceServerJson(Map<String, dynamic> serverJson, {CancelToken? cancelToken}) async {
+    final response = await _dio.post('/gateway/api/sources/marketplace/validate', data: serverJson, cancelToken: cancelToken);
+    return response.data as Map<String, dynamic>;
+  }
 }
+
+
+

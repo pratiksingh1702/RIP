@@ -13,6 +13,8 @@ import '../providers/gateway_provider.dart';
 import '../providers/project_provider.dart';
 import '../widgets/overlays/add_repo_sheet.dart';
 
+import 'mcp_marketplace_screen.dart';
+
 class GatewaySourcesScreen extends ConsumerStatefulWidget {
   const GatewaySourcesScreen({super.key});
 
@@ -48,12 +50,22 @@ class _GatewaySourcesScreenState extends ConsumerState<GatewaySourcesScreen> {
         title: const Text('Integrations'),
         actions: [
           IconButton(
+            tooltip: 'MCP Marketplace',
+            icon: const Icon(Icons.storefront_rounded, color: AppColors.primary),
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const MCPMarketplaceScreen()),
+              );
+            },
+          ),
+          IconButton(
             tooltip: 'Add custom MCP',
             icon: const Icon(Icons.add_rounded),
             onPressed: _showCustomMcpSheet,
           ),
         ],
       ),
+
       body: RefreshIndicator(
         onRefresh: () async {
           ref.invalidate(gatewaySourcesProvider);

@@ -60,6 +60,18 @@ async def _background_oauth_refresh():
         await asyncio.sleep(300)
 
 
+async def _background_marketplace_sync():
+    """Periodically sync Official MCP Registry catalog every 6 hours in the background."""
+    from gateway.core.marketplace.catalog_service import catalog_service
+    while True:
+        try:
+            logger.info("Starting background MCP Marketplace sync")
+            await catalog_service.sync()
+        except Exception as e:
+            logger.error("Background MCP Marketplace sync failed", error=str(e))
+        await asyncio.sleep(21600)  # 6 hours
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan for setup/teardown."""
@@ -72,25 +84,25 @@ async def lifespan(app: FastAPI):
     await get_source_registry().refresh()
     register_all_blocks()
     
-    # Start background health checks
+    # Start background tasks
     health_task = asyncio.create_task(_background_health_check())
     oauth_task = asyncio.create_task(_background_oauth_refresh())
+    mcp_sync_task = asyncio.create_task(_background_marketplace_sync())
     
     yield
     
-    # Cancel background health checks
+    # Cancel background tasks
     health_task.cancel()
     oauth_task.cancel()
-    try:
-        await health_task
-    except asyncio.CancelledError:
-        pass
-    try:
-        await oauth_task
-    except asyncio.CancelledError:
-        pass
+    mcp_sync_task.cancel()
+    for task in (health_task, oauth_task, mcp_sync_task):
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
     
     logger.info("Shutting down Context Gateway server")
+
 
 
 def create_app() -> FastAPI:

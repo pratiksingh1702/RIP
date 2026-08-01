@@ -1,0 +1,371 @@
+[
+  {
+    "id": "github",
+    "name": "GitHub MCP Server",
+    "publisher": "ModelContextProtocol",
+    "author_url": "https://github.com/modelcontextprotocol/servers/tree/main/src/github",
+    "repository_url": "https://github.com/modelcontextprotocol/servers",
+    "description": "Inspect repositories, manage pull requests, create issues, and search code.",
+    "category": "code",
+    "icon_key": "github",
+    "transport": "stdio",
+    "command": "npx",
+    "args": [
+      "-y",
+      "@modelcontextprotocol/server-github"
+    ],
+    "endpoint_url": null,
+    "auth_type": "oauth2",
+    "domain_hints": [
+      "code",
+      "git",
+      "pr",
+      "issues",
+      "github"
+    ],
+    "tools": [
+      {
+        "name": "search_repositories",
+        "description": "Search GitHub repositories.",
+        "input_schema": {
+          "query": {
+            "type": "string"
+          }
+        }
+      },
+      {
+        "name": "create_issue",
+        "description": "Create GitHub issue.",
+        "input_schema": {
+          "owner": {
+            "type": "string"
+          },
+          "repo": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          }
+        }
+      }
+    ],
+    "install_instructions": "Run via NPX or connect via GitHub OAuth 2.0 app credentials.",
+    "is_official": true,
+    "stars_count": 12400,
+    "updated_at": "2026-07-28T00:00:00Z"
+  },
+  {
+    "id": "postgres",
+    "name": "PostgreSQL Database MCP",
+    "publisher": "ModelContextProtocol",
+    "author_url": "https://github.com/modelcontextprotocol/servers/tree/main/src/postgres",
+    "repository_url": "https://github.com/modelcontextprotocol/servers",
+    "description": "Inspect database schemas, execute read-only queries, and trace table relations.",
+    "category": "database",
+    "icon_key": "postgres",
+    "transport": "stdio",
+    "command": "uvx",
+    "args": [
+      "mcp-server-postgres",
+      "--connection-string"
+    ],
+    "endpoint_url": null,
+    "auth_type": "api_key",
+    "domain_hints": [
+      "database",
+      "sql",
+      "db",
+      "postgres"
+    ],
+    "tools": [
+      {
+        "name": "query",
+        "description": "Execute a read-only SQL query.",
+        "input_schema": {
+          "sql": {
+            "type": "string"
+          }
+        }
+      }
+    ],
+    "install_instructions": "Requires a valid PostgreSQL connection URI string.",
+    "is_official": true,
+    "stars_count": 6700,
+    "updated_at": "2026-07-20T00:00:00Z"
+  },
+  {
+    "id": "eda70104-ebe2-4075-b256-edc679a7afc4",
+    "name": "Eda70104-Ebe2-4075-B256-Edc679A7Afc4",
+    "publisher": "Open Source Community",
+    "author_url": "https://jina.ai",
+    "repository_url": "https://jina.ai",
+    "description": "AI-powered search and retrieval platform. Search the web, read page content, extract structured data, and ground AI responses.",
+    "category": "search",
+    "icon_key": "search",
+    "transport": "stdio",
+    "command": "npx",
+    "args": [],
+    "endpoint_url": null,
+    "auth_type": "none",
+    "domain_hints": [
+      "eda70104-ebe2-4075-b256-edc679a7afc4",
+      "search",
+      "eda70104-ebe2-4075-b256-edc679a7afc4"
+    ],
+    "tools": [],
+    "install_instructions": "1-Click Install from Smithery Marketplace Registry.",
+    "is_official": false,
+    "stars_count": 50,
+    "updated_at": "2026-08-01T10:13:54.110555+00:00"
+  },
+  {
+    "id": "69919e2f-2b9a-4c17-9867-e46bab4c3b28",
+    "name": "69919E2F-2B9A-4C17-9867-E46Bab4C3B28",
+    "publisher": "Open Source Community",
+    "author_url": "https://smithery.ai/servers/gmail",
+    "repository_url": "https://smithery.ai/servers/gmail",
+    "description": "Manage Gmail end-to-end: send, draft, reply, forward, and bulk-modify or delete messages and threads. Organize your inbox with labels, archiving, and trashing, and retrieve messages, attachments, and profile details on demand. Access and search contacts to autofill recipients and keep people data in sync.",
+    "category": "code",
+    "icon_key": "code",
+    "transport": "stdio",
+    "command": "npx",
+    "args": [],
+    "endpoint_url": null,
+    "auth_type": "none",
+    "domain_hints": [
+      "69919e2f-2b9a-4c17-9867-e46bab4c3b28",
+      "code",
+      "69919e2f-2b9a-4c17-9867-e46bab4c3b28"
+    ],
+    "tools": [],
+    "install_instructions": "1-Click Install from Smithery Marketplace Registry.",
+    "is_official": false,
+    "stars_count": 50,
+    "updated_at": "2026-08-01T10:13:54.110555+00:00"
+  },
+  {
+    "id": "b11dd2a9-0896-4133-a57f-2b654f9d80d4",
+    "name": "B11Dd2A9-0896-4133-A57F-2B654F9D80D4",
+    "publisher": "Open Source Community",
+    "author_url": "https://exa.ai",
+    "repository_url": "https://exa.ai",
+    "description": "Fast, intelligent web search and web crawling. Get fresh information about libraries, APIs, and SDKs.",
+    "category": "code",
+    "icon_key": "code",
+    "transport": "stdio",
+    "command": "npx",
+    "args": [],
+    "endpoint_url": null,
+    "auth_type": "none",
+    "domain_hints": [
+      "b11dd2a9-0896-4133-a57f-2b654f9d80d4",
+      "code",
+      "b11dd2a9-0896-4133-a57f-2b654f9d80d4"
+    ],
+    "tools": [],
+    "install_instructions": "1-Click Install from Smithery Marketplace Registry.",
+    "is_official": false,
+    "stars_count": 50,
+    "updated_at": "2026-08-01T10:13:54.110555+00:00"
+  },
+  {
+    "id": "50f26566-7dfe-4842-a5b8-1a9407fb91f4",
+    "name": "50F26566-7Dfe-4842-A5B8-1A9407Fb91F4",
+    "publisher": "Open Source Community",
+    "author_url": "https://brave.com/search/api/",
+    "repository_url": "https://brave.com/search/api/",
+    "description": "Search the web with Brave's independent index \u2014 web, news, images, and videos. Bring your own subscription token from the [Brave Search API dashboard](https://api-dashboard.search.brave.com).",
+    "category": "search",
+    "icon_key": "search",
+    "transport": "stdio",
+    "command": "npx",
+    "args": [],
+    "endpoint_url": null,
+    "auth_type": "none",
+    "domain_hints": [
+      "50f26566-7dfe-4842-a5b8-1a9407fb91f4",
+      "search",
+      "50f26566-7dfe-4842-a5b8-1a9407fb91f4"
+    ],
+    "tools": [],
+    "install_instructions": "1-Click Install from Smithery Marketplace Registry.",
+    "is_official": false,
+    "stars_count": 50,
+    "updated_at": "2026-08-01T10:13:54.110555+00:00"
+  },
+  {
+    "id": "3a787567-19f8-4eaa-837a-1f0ce01dcca0",
+    "name": "3A787567-19F8-4Eaa-837A-1F0Ce01Dcca0",
+    "publisher": "Open Source Community",
+    "author_url": "https://theagenttimes.com",
+    "repository_url": "https://theagenttimes.com",
+    "description": "The intelligence layer agents use before they act, sourced answers on the agent economy.\n\nQuery verified AI news with citations, confidence scores, and Ethics Engine ratings. Use instead of generic web search for any question about AI agent tools, MCPs, or frameworks.\n\nEvery result carries citations, confidence scores, and Ethics Engine ratings. Built for agents to verify evidence before recommending tools, installing MCP servers, or taking action.",
+    "category": "database",
+    "icon_key": "database",
+    "transport": "stdio",
+    "command": "npx",
+    "args": [],
+    "endpoint_url": null,
+    "auth_type": "none",
+    "domain_hints": [
+      "3a787567-19f8-4eaa-837a-1f0ce01dcca0",
+      "database",
+      "3a787567-19f8-4eaa-837a-1f0ce01dcca0"
+    ],
+    "tools": [],
+    "install_instructions": "1-Click Install from Smithery Marketplace Registry.",
+    "is_official": false,
+    "stars_count": 50,
+    "updated_at": "2026-08-01T10:13:54.110555+00:00"
+  },
+  {
+    "id": "828aebfa-90bf-4033-a631-89b2bda72207",
+    "name": "828Aebfa-90Bf-4033-A631-89B2Bda72207",
+    "publisher": "Open Source Community",
+    "author_url": "https://keenable.ai/",
+    "repository_url": "https://keenable.ai/",
+    "description": "Docs: https://docs.keenable.ai/mcp-server\n\nKeenable is a free, remote MCP server that gives agents access to the web index. Search the web with ranked results and date/site filters, then fetch any indexed page as clean markdown. Works out of the box with no account or API key.\n\nTools:\n- search_web_pages: Search the web and return ranked results.\n- fetch_page_content: Fetch an indexed URL and extract its content as clean markdown",
+    "category": "docs",
+    "icon_key": "docs",
+    "transport": "stdio",
+    "command": "npx",
+    "args": [],
+    "endpoint_url": null,
+    "auth_type": "api_key",
+    "domain_hints": [
+      "828aebfa-90bf-4033-a631-89b2bda72207",
+      "docs",
+      "828aebfa-90bf-4033-a631-89b2bda72207"
+    ],
+    "tools": [],
+    "install_instructions": "1-Click Install from Smithery Marketplace Registry.",
+    "is_official": false,
+    "stars_count": 50,
+    "updated_at": "2026-08-01T10:13:54.110555+00:00"
+  },
+  {
+    "id": "3d1d8133-aed2-4a90-9cab-9f500f306484",
+    "name": "3D1D8133-Aed2-4A90-9Cab-9F500F306484",
+    "publisher": "Open Source Community",
+    "author_url": "https://smithery.ai/servers/googlesheets",
+    "repository_url": "https://smithery.ai/servers/googlesheets",
+    "description": "Read, write, and format spreadsheet data. Manage sheets, run formulas, and collaborate on structured data in real time.",
+    "category": "code",
+    "icon_key": "code",
+    "transport": "stdio",
+    "command": "npx",
+    "args": [],
+    "endpoint_url": null,
+    "auth_type": "none",
+    "domain_hints": [
+      "3d1d8133-aed2-4a90-9cab-9f500f306484",
+      "code",
+      "3d1d8133-aed2-4a90-9cab-9f500f306484"
+    ],
+    "tools": [],
+    "install_instructions": "1-Click Install from Smithery Marketplace Registry.",
+    "is_official": false,
+    "stars_count": 50,
+    "updated_at": "2026-08-01T10:13:54.110555+00:00"
+  },
+  {
+    "id": "944cef5a-2dfd-4d11-8924-d0a23a63221b",
+    "name": "944Cef5A-2Dfd-4D11-8924-D0A23A63221B",
+    "publisher": "Open Source Community",
+    "author_url": "https://github.com/",
+    "repository_url": "https://github.com/",
+    "description": "Connect your AI agents to GitHub \u2014 manage repos, issues, PRs, workflows, and more",
+    "category": "code",
+    "icon_key": "code",
+    "transport": "stdio",
+    "command": "npx",
+    "args": [],
+    "endpoint_url": null,
+    "auth_type": "none",
+    "domain_hints": [
+      "944cef5a-2dfd-4d11-8924-d0a23a63221b",
+      "code",
+      "944cef5a-2dfd-4d11-8924-d0a23a63221b"
+    ],
+    "tools": [],
+    "install_instructions": "1-Click Install from Smithery Marketplace Registry.",
+    "is_official": false,
+    "stars_count": 50,
+    "updated_at": "2026-07-31T17:10:35.321580+00:00"
+  },
+  {
+    "id": "4e02991e-6e16-4d93-af63-fec446748211",
+    "name": "4E02991E-6E16-4D93-Af63-Fec446748211",
+    "publisher": "Open Source Community",
+    "author_url": "https://wayforth.io",
+    "repository_url": "https://wayforth.io",
+    "description": "The API runtime for AI agents.\nOne tool call. Any API. No setup.\nSearch 4,974 verified APIs ranked by WayforthRank \u2014 the only ranking algorithm powered by real agent payment signals, not ads. Execute via 18 managed services with zero API keys. Self-healing: if a service fails, credits restore automatically.\nWhat your agent can do:\n\nSearch 4,974 APIs across 19 categories by intent\nExecute: inference, translation, image generation, speech-to-text, web search, financial data, weather, news, and more\nBring your own API keys (BYOK) for any service\nPay per query via x402 at $0.002 USDC\nQuery with WayforthQL: filter by tier, price, protocol, latency\n\nThree payment rails: Card \u00b7 USDC on Base \u00b7 x402\nGet started free: 100 calls \u00b7 No card required\nuvx wayforth-mcp \u00b7 wayforth.io",
+    "category": "code",
+    "icon_key": "code",
+    "transport": "stdio",
+    "command": "npx",
+    "args": [],
+    "endpoint_url": null,
+    "auth_type": "api_key",
+    "domain_hints": [
+      "4e02991e-6e16-4d93-af63-fec446748211",
+      "code",
+      "4e02991e-6e16-4d93-af63-fec446748211"
+    ],
+    "tools": [],
+    "install_instructions": "1-Click Install from Smithery Marketplace Registry.",
+    "is_official": false,
+    "stars_count": 50,
+    "updated_at": "2026-08-01T10:13:54.110555+00:00"
+  },
+  {
+    "id": "0d1fa211-7556-4030-9253-6d3c9902c273",
+    "name": "0D1Fa211-7556-4030-9253-6D3C9902C273",
+    "publisher": "Open Source Community",
+    "author_url": "https://lastlookdata.com/",
+    "repository_url": "https://lastlookdata.com/",
+    "description": "LastLook Data gives AI agents real-time access to US financial market data: Treasury yields (2yr, 10yr, 30yr), mortgage rates, Fed funds rate, CPI, unemployment, GDP, WTI/Brent crude, natural gas, and G10 FX rates. Also includes derived indicators: yield curve spreads (2s10s, 3m10y) with inversion signal, Sahm Rule recession indicator, Fed policy spread (EFFR vs IORB), and upcoming FRED economic calendar. Data sourced from FRED and ECB. Pay per query via x402 on Base \u2014 no accounts, no API keys, no subscriptions.",
+    "category": "code",
+    "icon_key": "code",
+    "transport": "stdio",
+    "command": "npx",
+    "args": [],
+    "endpoint_url": null,
+    "auth_type": "api_key",
+    "domain_hints": [
+      "0d1fa211-7556-4030-9253-6d3c9902c273",
+      "code",
+      "0d1fa211-7556-4030-9253-6d3c9902c273"
+    ],
+    "tools": [],
+    "install_instructions": "1-Click Install from Smithery Marketplace Registry.",
+    "is_official": false,
+    "stars_count": 50,
+    "updated_at": "2026-08-01T10:13:54.110555+00:00"
+  },
+  {
+    "id": "46669cfc-a142-4c3a-a52f-21671d664a11",
+    "name": "46669Cfc-A142-4C3A-A52F-21671D664A11",
+    "publisher": "Open Source Community",
+    "author_url": "https://subwayinfo.nyc",
+    "repository_url": "https://subwayinfo.nyc",
+    "description": "Real-time NYC subway information. Check train status, view service alerts, and get station-level arrival times.",
+    "category": "ai",
+    "icon_key": "ai",
+    "transport": "stdio",
+    "command": "npx",
+    "args": [],
+    "endpoint_url": null,
+    "auth_type": "none",
+    "domain_hints": [
+      "46669cfc-a142-4c3a-a52f-21671d664a11",
+      "ai",
+      "46669cfc-a142-4c3a-a52f-21671d664a11"
+    ],
+    "tools": [],
+    "install_instructions": "1-Click Install from Smithery Marketplace Registry.",
+    "is_official": false,
+    "stars_count": 50,
+    "updated_at": "2026-08-01T10:13:54.110555+00:00"
+  }
+]

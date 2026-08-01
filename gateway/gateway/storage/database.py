@@ -36,6 +36,20 @@ __all__ = ["Base", "async_session_factory", "get_async_session", "get_session", 
 async def ensure_storage_schema() -> None:
     """Create local metadata tables when migrations have not been run yet."""
     import gateway.storage.models  # noqa: F401
+    from sqlalchemy import text
 
     async with engine.begin() as connection:
         await connection.run_sync(Base.metadata.create_all)
+        # Handle SQLite column additions if DB was initialized with an older schema
+        for col_def in [
+            "project_id VARCHAR",
+            "usable_as TEXT",
+            "block_display TEXT",
+            "created_by VARCHAR",
+        ]:
+            try:
+                await connection.execute(text(f"ALTER TABLE registered_sources ADD COLUMN {col_def}"))
+            except Exception:
+                pass
+
+

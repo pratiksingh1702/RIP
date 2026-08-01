@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, Body, HTTPException, Query, Request
+
 
 from gateway.core import oauth as oauth_manager
 from gateway.core.permissions.models import UserRole
@@ -121,6 +122,124 @@ async def source_presets():
     return {"presets": PRESET_CATALOG}
 
 
+@router.get("/marketplace/servers")
+@router.get("/marketplace")
+async def get_marketplace_catalog(
+    category: str | None = Query(None),
+    trust_tier: str | None = Query(None),
+    search: str | None = Query(None),
+    include_unverified: bool = Query(True),
+    page: int = Query(1, ge=1),
+    limit: int = Query(30, ge=1, le=100),
+):
+    """Return Official MCP Marketplace catalog entries with auto-sync, pagination, and query filtering."""
+    from gateway.core.marketplace.catalog_service import catalog_service
+    res = catalog_service.list_servers(
+        category=category,
+        trust_tier=trust_tier,
+        search=search,
+        include_unverified=include_unverified,
+        page=page,
+        limit=limit,
+    )
+    if not res["servers"]:
+        await catalog_service.sync()
+        res = catalog_service.list_servers(
+            category=category,
+            trust_tier=trust_tier,
+            search=search,
+            include_unverified=include_unverified,
+            page=page,
+            limit=limit,
+        )
+    return {
+        "servers": res["servers"],
+        "sources": res["servers"],
+        "count": len(res["servers"]),
+        "total": res["total"],
+        "page": res["page"],
+        "limit": res["limit"],
+        "has_more": res["has_more"],
+    }
+
+
+
+
+@router.post("/marketplace/validate")
+async def validate_marketplace_server_json(payload: dict = Body(...)):
+
+    """Validate server.json payload against Official MCP Registry schema validator."""
+    from gateway.core.marketplace.catalog_service import catalog_service
+    return await catalog_service.validate_server_json(payload)
+
+
+@router.get("/marketplace/servers/{source_id:path}/versions/{version}")
+async def get_marketplace_server_version_detail(source_id: str, version: str):
+    """Fetch detailed spec for a specific version from Official Registry."""
+    from gateway.core.marketplace.catalog_service import catalog_service
+    if source_id.startswith("servers/"):
+        source_id = source_id[8:]
+    detail = await catalog_service.get_server_version_detail(source_id, version)
+    if not detail:
+        raise HTTPException(status_code=404, detail=f"Version '{version}' for '{source_id}' not found")
+    return detail
+
+
+@router.get("/marketplace/servers/{source_id:path}/versions")
+async def get_marketplace_server_versions(source_id: str):
+    """Fetch all available versions for a specific MCP server from Official Registry."""
+    from gateway.core.marketplace.catalog_service import catalog_service
+    if source_id.startswith("servers/"):
+        source_id = source_id[8:]
+    if source_id.endswith("/versions"):
+        source_id = source_id[:-9]
+    return await catalog_service.get_server_versions(source_id)
+
+
+@router.get("/marketplace/servers/{source_id:path}")
+@router.get("/marketplace/{source_id:path}")
+async def get_marketplace_detail(source_id: str):
+    """Return detailed MCP spec sheet (author, requirements, capabilities, repo URL)."""
+    from gateway.core.marketplace.catalog_service import catalog_service
+    if source_id.startswith("servers/"):
+        source_id = source_id[8:]
+    detail = catalog_service.get_server_detail(source_id)
+    if detail is None:
+        from gateway.core.sources.marketplace import marketplace_engine
+        detail = marketplace_engine.get_detail(source_id)
+    if detail is None:
+        raise HTTPException(status_code=404, detail=f"Marketplace item '{source_id}' not found")
+    return detail
+
+
+@router.post("/marketplace/servers/{source_id:path}/connect")
+@router.post("/marketplace/{source_id:path}/install")
+async def connect_marketplace_source(source_id: str, request: Request, project_id: str | None = Query(None)):
+    """Connect/install marketplace server with version pinning into SourceStore."""
+    from gateway.core.marketplace.catalog_service import catalog_service
+    if source_id.startswith("servers/"):
+        source_id = source_id[8:]
+    if source_id.endswith("/connect") or source_id.endswith("/install"):
+        source_id = source_id.rsplit("/", 1)[0]
+
+    try:
+        res = await catalog_service.connect_server(source_id, project_id=project_id)
+        record = res["source"]
+        return {
+            "source": record,
+            "status": "connected",
+            "requires_auth": res.get("requires_auth", False),
+            "auth_scheme": res.get("auth_scheme", "none"),
+            "pinned_version": res.get("pinned_version"),
+        }
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+
+
+
+
 @router.get("/settings")
 async def get_settings():
     """Return editable Gateway settings."""
@@ -226,7 +345,8 @@ async def test_source(source_id: str, request: Request, project_id: str | None =
         ok = await source.health_check() if source else False
         return {"status": "ok" if ok else "unreachable", "source": record.name}
     dynamic = DynamicMCPSource(record)
-    return {"status": await dynamic.test_connection(), "source": record.name}
+    return await dynamic.test_connection_detailed()
+
 
 
 @router.post("/{source_id}/oauth/reauthorize")

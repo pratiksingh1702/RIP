@@ -120,7 +120,7 @@ class DynamicMCPSource(BaseSource):
                 for tool in handshake.tools
             ]
             tool_names = {tool["name"] for tool in tools}
-            if self.tool_name not in tool_names:
+            if not tools:
                 await self._persist_status(
                     "no_usable_tool",
                     {
@@ -129,14 +129,22 @@ class DynamicMCPSource(BaseSource):
                     },
                 )
                 return "no_usable_tool"
+
+            # Auto-select active tool if generic 'search' is not offered by server
+            if self.tool_name not in tool_names:
+                self.tool_name = tools[0]["name"]
+                self.mcp_config["tool_name"] = self.tool_name
+
             await self._persist_status(
                 "ok",
                 {
                     "capabilities": {"tools": tools, "server_info": handshake.server_info},
                     "last_test_status": "ok",
+                    "tool_name": self.tool_name,
                 },
             )
             return "ok"
+
         except PermissionError:
             await self._persist_status("auth_failed", {"last_test_status": "auth_failed"})
             return "auth_failed"
@@ -155,6 +163,21 @@ class DynamicMCPSource(BaseSource):
             logger.warning("MCP source test failed", source=self.name, error=str(exc), traceback=True)
             await self._persist_status("unreachable", {"last_test_status": "unreachable"})
             return "unreachable"
+
+    async def test_connection_detailed(self) -> dict[str, Any]:
+        """Return full test status along with discovered tools, schemas, and server_info."""
+        status = await self.test_connection()
+        updated_record = await source_store.get_source(self.record.id)
+        config = (updated_record.mcp_config if updated_record else self.mcp_config) or {}
+        capabilities = config.get("capabilities") or {}
+        return {
+            "status": status,
+            "source": self.name,
+            "server_info": capabilities.get("server_info"),
+            "tools": capabilities.get("tools", []),
+            "active_tool": config.get("tool_name"),
+        }
+
 
     def _client(self) -> UniversalMCPClient:
         return UniversalMCPClient(
