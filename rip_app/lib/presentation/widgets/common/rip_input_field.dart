@@ -10,6 +10,7 @@ class RipTextField extends StatefulWidget {
   final bool isPassword;
   final TextInputType keyboardType;
   final Widget? prefixIcon;
+  final Widget? customSuffixIcon;
   final ValueChanged<String>? onChanged;
 
   const RipTextField({
@@ -20,6 +21,7 @@ class RipTextField extends StatefulWidget {
     this.isPassword = false,
     this.keyboardType = TextInputType.text,
     this.prefixIcon,
+    this.customSuffixIcon,
     this.onChanged,
   });
 
@@ -80,7 +82,7 @@ class _RipTextFieldState extends State<RipTextField> {
                       });
                     },
                   )
-                : null,
+                : widget.customSuffixIcon,
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(16),
               borderSide: const BorderSide(color: AppColors.border, width: 1),

@@ -591,3 +591,24 @@ async def reject_workflow_run(draft_id: UUIDType, run_id: UUIDType, body: Approv
         return {"run_id": run_id, "status": "rejected", "state": state}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+class PostSignalRequest(BaseModel):
+    payload: dict[str, Any] | None = None
+
+
+@router.post("/{draft_id}/runs/{run_id}/signal/{signal_name}")
+async def post_workflow_signal(
+    draft_id: UUIDType,
+    run_id: UUIDType,
+    signal_name: str,
+    body: PostSignalRequest | None = None,
+):
+    """Post an external signal to resume a run waiting on flow.wait_for_signal."""
+    try:
+        engine = get_workflow_engine()
+        payload = body.payload if body else None
+        state = await engine.signal_run(run_id, signal_name, payload)
+        return {"run_id": run_id, "signal": signal_name, "status": "signaled", "state": state}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

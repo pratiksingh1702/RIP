@@ -41,7 +41,7 @@ class NotifyPushBlock(Block):
             return BlockResult(ok=False, error=str(e))
 
     def describe(self) -> dict[str, Any]:
-        return {"id": self.id, "kind": self.kind.value, "name": "Push Notification", "description": "Send a push notification", "category": "Notifications", "display_icon": "📱", "display_color": "#EC4899", "input_schema": self.input_schema, "output_schema": self.output_schema}
+        return {"id": self.id, "kind": self.kind.value, "name": "Push Notification", "description": "Send a push notification", "category": "Notifications", "display_icon": "📱", "display_color": "#EC4899", "input_schema": self.input_schema, "output_schema": self.output_schema, "config_schema": self.config_schema}
 
 
 class NotifySlackBlock(Block):
@@ -77,7 +77,7 @@ class NotifySlackBlock(Block):
             return BlockResult(ok=False, error=str(e))
 
     def describe(self) -> dict[str, Any]:
-        return {"id": self.id, "kind": self.kind.value, "name": "Slack Message", "description": "Send a Slack message", "category": "Notifications", "display_icon": "💬", "display_color": "#EC4899", "input_schema": self.input_schema, "output_schema": self.output_schema}
+        return {"id": self.id, "kind": self.kind.value, "name": "Slack Message", "description": "Send a Slack message", "category": "Notifications", "display_icon": "💬", "display_color": "#EC4899", "input_schema": self.input_schema, "output_schema": self.output_schema, "config_schema": self.config_schema}
 
 
 class NotifyWebhookBlock(Block):
@@ -113,4 +113,4 @@ class NotifyWebhookBlock(Block):
             return BlockResult(ok=False, error=str(e))
 
     def describe(self) -> dict[str, Any]:
-        return {"id": self.id, "kind": self.kind.value, "name": "Webhook", "description": "Call a webhook URL", "category": "Notifications", "display_icon": "🔔", "display_color": "#EC4899", "input_schema": self.input_schema, "output_schema": self.output_schema}
+        return {"id": self.id, "kind": self.kind.value, "name": "Webhook", "description": "Call a webhook URL", "category": "Notifications", "display_icon": "🔔", "display_color": "#EC4899", "input_schema": self.input_schema, "output_schema": self.output_schema, "config_schema": self.config_schema}

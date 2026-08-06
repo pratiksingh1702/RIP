@@ -101,4 +101,5 @@ class TerminalRunTestsBlock(Block):
             "description": "Run tests in a terminal",
             "input_schema": self.input_schema,
             "output_schema": self.output_schema,
+            "config_schema": self.config_schema,
         }

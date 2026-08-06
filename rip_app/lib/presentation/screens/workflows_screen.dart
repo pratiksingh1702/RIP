@@ -4,12 +4,13 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../core/design/design.dart';
 import '../../data/models/pipeline_trace.dart';
 import '../providers/connection_provider.dart';
 import '../providers/gateway_provider.dart';
 import '../providers/project_provider.dart';
 import '../widgets/chat/pipeline_trace_widgets.dart';
-import '../providers/gateway_provider.dart';
 
 // ============================================================
 // MAIN SCREEN - WorkflowsScreen
@@ -40,7 +41,8 @@ class _WorkflowsScreenState extends ConsumerState<WorkflowsScreen> {
   bool _showMinimap = true;
   bool _snapToGrid = false;
   double _gridSize = 20;
-  String? _wireSourceId; // Track which block initiated the wire
+  String? _wireSourceId;
+  String? _wireSourcePort;
 
   @override
   void dispose() {
@@ -81,14 +83,21 @@ class _WorkflowsScreenState extends ConsumerState<WorkflowsScreen> {
     return Map<String, dynamic>.from(items.first as Map);
   }
 // Replace _handleBlockTap (around line 95-110)
-void _handleBlockTap(String stepId, {required bool isOutputTap}) {
+void _handleBlockTap(String stepId, {bool isOutputTap = false, String? outputPort}) {
   if (_wireMode) {
     if (isOutputTap) {
-      setState(() => _wireSourceId = (_wireSourceId == stepId) ? null : stepId);
+      setState(() {
+        if (_wireSourceId == stepId && _wireSourcePort == (outputPort ?? 'output')) {
+          _wireSourceId = null;
+          _wireSourcePort = null;
+        } else {
+          _wireSourceId = stepId;
+          _wireSourcePort = outputPort ?? 'output';
+        }
+      });
     } else {
       if (_wireSourceId != null && _wireSourceId != stepId) {
-        // Show port picker before connecting
-        _showPortPicker(_wireSourceId!, stepId);
+        _showPortPicker(_wireSourceId!, stepId, _wireSourcePort ?? 'output');
       }
     }
     return;
@@ -99,8 +108,7 @@ void _handleBlockTap(String stepId, {required bool isOutputTap}) {
   });
 }
 
-// Add this new method to _WorkflowsScreenState
-Future<void> _showPortPicker(String sourceStepId, String targetStepId) async {
+Future<void> _showPortPicker(String sourceStepId, String targetStepId, String sourcePort) async {
   final targetBlock = _findBlock(_selected!, targetStepId);
   if (targetBlock == null) return;
   
@@ -111,8 +119,8 @@ Future<void> _showPortPicker(String sourceStepId, String targetStepId) async {
   if (properties.isEmpty) {
     // No ports to pick, just connect with default
     _pushUndo();
-    await _connect(_selected!, sourceStepId, targetStepId);
-    setState(() => _wireSourceId = null);
+    await _connect(_selected!, sourceStepId, targetStepId, sourcePort: sourcePort);
+    setState(() { _wireSourceId = null; _wireSourcePort = null; });
     return;
   }
   
@@ -132,15 +140,14 @@ Future<void> _showPortPicker(String sourceStepId, String targetStepId) async {
           Text('Target: $targetStepId (${targetBlock['block_id'] ?? 'block'})',
               style: Theme.of(ctx).textTheme.bodySmall),
           const SizedBox(height: 12),
-          ...portNames.map((port) => RadioListTile<String>(
-                title: Text(_fieldLabel(port)),
+          ...portNames.map((port) => ListTile(
+                leading: const Icon(Icons.input_rounded, size: 20, color: Color(0xFF6366F1)),
+                title: Text(_fieldLabel(port), style: const TextStyle(fontWeight: FontWeight.w600)),
                 subtitle: Text(_schemaHint(properties[port] is Map 
                     ? Map<String, dynamic>.from(properties[port]) 
                     : {})),
-                value: port,
-                groupValue: null,
                 dense: true,
-                onChanged: (v) => Navigator.pop(ctx, v),
+                onTap: () => Navigator.pop(ctx, port),
               )),
         ],
       ),
@@ -148,7 +155,7 @@ Future<void> _showPortPicker(String sourceStepId, String targetStepId) async {
   );
   
   if (pickedPort == null) {
-    setState(() => _wireSourceId = null);
+    setState(() { _wireSourceId = null; _wireSourcePort = null; });
     return;
   }
   
@@ -158,16 +165,18 @@ Future<void> _showPortPicker(String sourceStepId, String targetStepId) async {
     sourceStepId: sourceStepId,
     targetStepId: targetStepId,
     targetPort: pickedPort,
-    sourcePort: 'output',
+    sourcePort: sourcePort,
   );
   _refresh(await ref.read(ripClientProvider).gatewayWorkflowCanvas(
       draftId: _selected!['draft_id'].toString()));
-  setState(() => _wireSourceId = null);
+  setState(() { _wireSourceId = null; _wireSourcePort = null; });
 }
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final workflows = ref.watch(gatewayWorkflowsProvider);
     return Scaffold(
+      backgroundColor: isDark ? const Color(0xFF09090F) : const Color(0xFFF4F5F8),
       extendBodyBehindAppBar: true,
       body: workflows.when(
         loading: () => const Center(child: CircularProgressIndicator()),
@@ -209,6 +218,10 @@ Future<void> _showPortPicker(String sourceStepId, String targetStepId) async {
             onDeleteStep: (id) {
               _pushUndo();
               _deleteStep(selected, id);
+            },
+            onUpdateBlockConfig: (id, config) {
+              _pushUndo();
+              _patchBlockConfig(selected, id, config);
             },
             onMoveBlock: (id, pos) {
               _pushUndo();
@@ -398,26 +411,10 @@ Future<void> _showPortPicker(String sourceStepId, String targetStepId) async {
   }
 
   Future<void> _createWorkflow() async {
-    final ctrl = TextEditingController();
     final name = await showDialog<String>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-                title: const Text('New Workflow'),
-                content: TextField(
-                    controller: ctrl,
-                    autofocus: true,
-                    decoration: const InputDecoration(labelText: 'Name'),
-                    textInputAction: TextInputAction.done,
-                    onSubmitted: (v) => Navigator.pop(ctx, v)),
-                actions: [
-                  TextButton(
-                      onPressed: () => Navigator.pop(ctx),
-                      child: const Text('Cancel')),
-                  FilledButton(
-                      onPressed: () => Navigator.pop(ctx, ctrl.text),
-                      child: const Text('Create'))
-                ]));
-    ctrl.dispose();
+      context: context,
+      builder: (ctx) => const _NewWorkflowDialog(),
+    );
     if (name == null || name.trim().isEmpty) return;
     final pid = ref.read(activeProjectIdProvider);
     final created = await ref
@@ -436,7 +433,8 @@ Future<void> _showPortPicker(String sourceStepId, String targetStepId) async {
         .toList();
     final picked = await showModalBottomSheet<Map<String, dynamic>>(
         context: context,
-        showDragHandle: true,
+        isScrollControlled: true,
+        backgroundColor: Colors.transparent,
         builder: (_) => _BlockPalette(blocks: blocks));
     if (picked == null || !mounted) return;
     final configured =
@@ -465,29 +463,9 @@ Future<void> _showPortPicker(String sourceStepId, String targetStepId) async {
     final wid = (w['draft_id'] ?? w['workflow_id'])?.toString();
     if (wid == null) return;
     final query = await showDialog<String>(
-        context: context,
-        builder: (ctx) {
-          final ctrl = TextEditingController(text: _runQueryController.text);
-          return AlertDialog(
-              title: const Text('Run Workflow'),
-              content: TextField(
-                  controller: ctrl,
-                  autofocus: true,
-                  maxLines: 3,
-                  decoration: const InputDecoration(
-                      hintText: 'Describe what you want...',
-                      border: OutlineInputBorder()),
-                  textInputAction: TextInputAction.done,
-                  onSubmitted: (v) => Navigator.pop(ctx, v)),
-              actions: [
-                TextButton(
-                    onPressed: () => Navigator.pop(ctx),
-                    child: const Text('Cancel')),
-                FilledButton(
-                    onPressed: () => Navigator.pop(ctx, ctrl.text),
-                    child: const Text('Run'))
-              ]);
-        });
+      context: context,
+      builder: (ctx) => _RunWorkflowDialog(initialQuery: _runQueryController.text),
+    );
     if (query == null || query.trim().isEmpty || !mounted) return;
     _runQueryController.text = query.trim();
     try {
@@ -532,6 +510,11 @@ void _startPolling(String wid, String rid) {
         draftId: w['draft_id'].toString(), stepId: id));
   }
 
+  Future<void> _patchBlockConfig(Map<String, dynamic> w, String id, Map<String, dynamic> config) async {
+    _refresh(await ref.read(ripClientProvider).patchGatewayWorkflowBlock(
+        draftId: w['draft_id'].toString(), stepId: id, config: config));
+  }
+
   Future<void> _moveBlock(Map<String, dynamic> w, String id, Offset pos) async {
     _refresh(await ref.read(ripClientProvider).patchGatewayWorkflowBlock(
         draftId: w['draft_id'].toString(),
@@ -539,12 +522,13 @@ void _startPolling(String wid, String rid) {
         position: {'x': pos.dx, 'y': pos.dy}));
   }
 
-  Future<void> _connect(Map<String, dynamic> w, String src, String tgt) async {
+  Future<void> _connect(Map<String, dynamic> w, String src, String tgt, {String sourcePort = 'output', String targetPort = 'query'}) async {
     await ref.read(ripClientProvider).addGatewayWorkflowWire(
         draftId: w['draft_id'].toString(),
         sourceStepId: src,
+        sourcePort: sourcePort,
         targetStepId: tgt,
-        targetPort: _defaultPort(_blocks(w), tgt));
+        targetPort: targetPort);
     _refresh(await ref
         .read(ripClientProvider)
         .gatewayWorkflowCanvas(draftId: w['draft_id'].toString()));
@@ -626,6 +610,7 @@ class _CanvasShell extends StatelessWidget {
       required this.onUndo,
       required this.onRedo,
       required this.onDeleteStep,
+      required this.onUpdateBlockConfig,
       required this.onMoveBlock,
       required this.onConnect,
       required this.onDeleteWire,
@@ -646,9 +631,11 @@ class _CanvasShell extends StatelessWidget {
       required this.onExport,
       required this.onImport,
       required this.onBulkMove,
-      required this.onBlockTap});
+      required this.onBlockTap,
+      required this.paletteBlocks});
   final Map<String, dynamic> workflow;
   final List<dynamic> workflows;
+  final List<dynamic> paletteBlocks;
   final String? runId;
   final Map<String, dynamic>? runState;
   final TextEditingController answerController, runQueryController;
@@ -681,10 +668,11 @@ class _CanvasShell extends StatelessWidget {
       onImport;
   final VoidCallback? onUndo, onRedo;
   final ValueChanged<String> onDeleteStep, onDeleteWire;
+  final void Function(String, Map<String, dynamic>) onUpdateBlockConfig;
   final void Function(String, Offset) onMoveBlock;
   final void Function(String, String) onConnect;
   final void Function(double, double) onBulkMove;
-  final void Function(String, {required bool isOutputTap}) onBlockTap;
+  final void Function(String, {bool isOutputTap, String? outputPort}) onBlockTap;
 
   @override
   Widget build(BuildContext context) {
@@ -711,7 +699,9 @@ class _CanvasShell extends StatelessWidget {
               onDeleteBlock: onDeleteStep,
               onDeleteWire: onDeleteWire,
               onBlockTap: onBlockTap,
-              onBulkMove: onBulkMove)),
+              onBulkMove: onBulkMove,
+              onUpdateBlockConfig: onUpdateBlockConfig,
+              paletteBlocks: paletteBlocks)),
       Positioned(
           top: top + 10,
           left: 12,
@@ -765,14 +755,14 @@ class _CanvasShell extends StatelessWidget {
               onDuplicate: onDuplicateWorkflow,
               onExport: onExport,
               onImport: onImport)),
-      if (isRunning)
+      if (isRunning && state != null)
         Positioned(
             left: 12,
             right: 12,
             bottom: bottom + 14,
             child: _RunPanel(
                 runId: runId,
-                state: state!,
+                state: state,
                 answerController: answerController,
                 onAnswer: onAnswer,
                 onApprove: onApprove,
@@ -1567,8 +1557,11 @@ class _Canvas extends StatefulWidget {
       required this.onDeleteBlock,
       required this.onDeleteWire,
       required this.onBlockTap,
-      required this.onBulkMove});
+      required this.onBulkMove,
+      required this.onUpdateBlockConfig,
+      required this.paletteBlocks});
   final List<Map<String, dynamic>> blocks, wires;
+  final List<dynamic> paletteBlocks;
   final Map<String, dynamic>? runState;
   final Set<String> selectedBlockIds;
   final bool wireMode, showGrid, snapToGrid;
@@ -1576,8 +1569,9 @@ class _Canvas extends StatefulWidget {
   final String? wireSourceId;
   final void Function(String, Offset) onMoveBlock;
   final void Function(String, String) onConnect;
+  final void Function(String, Map<String, dynamic>) onUpdateBlockConfig;
   final ValueChanged<String> onDeleteBlock, onDeleteWire;
-  final void Function(String, {required bool isOutputTap}) onBlockTap;
+  final void Function(String, {bool isOutputTap, String? outputPort}) onBlockTap;
   final void Function(double, double) onBulkMove;
   @override
   State<_Canvas> createState() => _CanvasState();
@@ -1695,6 +1689,12 @@ class _CanvasState extends State<_Canvas> {
               Navigator.pop(context);
               widget.onDeleteBlock(b['step_id']?.toString() ?? '');
             },
+            onConfigChanged: (newConfig) {
+              final stepId = b['step_id']?.toString() ?? '';
+              widget.onUpdateBlockConfig(stepId, newConfig);
+              // Optimistically update local block map to avoid full rebuild flashing
+              b['config'] = newConfig; 
+            },
             onAddNote: (note) {
               b['note'] = note;
               setState(() {});
@@ -1703,107 +1703,130 @@ class _CanvasState extends State<_Canvas> {
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    return ColoredBox(
-        color: cs.surfaceContainerHighest.withValues(alpha: 0.35),
-        child: Stack(children: [
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bgColor = isDark ? const Color(0xFF09090F) : const Color(0xFFF3F4F8);
+    return Container(
+      color: bgColor,
+      child: Stack(
+        children: [
           InteractiveViewer(
-              minScale: 0.25,
-              maxScale: 3.0,
-              boundaryMargin: const EdgeInsets.all(3000),
-              constrained: false,
-              child: SizedBox(
-                  width: _cw,
-                  height: _ch,
-                  child: Stack(children: [
-                    if (widget.showGrid)
-                      CustomPaint(
-                          size: const Size(_cw, _ch),
-                          painter:
-                              _GridPainter(gridSize: widget.gridSize, cs: cs)),
-                    Positioned(
-                        left: 80,
-                        top: 220,
-                        child: _EndPoint(
-                            icon: Icons.login_rounded,
-                            title: 'TRIGGER',
-                            subtitle: 'Chat query',
-                            color: cs.primary)),
-                    Positioned(
-                        left: _cw - 340,
-                        top: 220,
-                        child: _EndPoint(
-                            icon: Icons.logout_rounded,
-                            title: 'RESPONSE',
-                            subtitle: 'Output',
-                            color: const Color(0xFF22C55E))),
-                    GestureDetector(
-                        behavior: HitTestBehavior.translucent,
-                        onTapDown: (d) => _hitWire(d.localPosition),
-                        child: CustomPaint(
-                            size: const Size(_cw, _ch),
-                            painter: _WirePainter(
-                                blocks: widget.blocks,
-                                wires: widget.wires,
-                                runState: widget.runState,
-                                cs: cs,
-                                selWire: _selWire))),
-                    ...widget.blocks.map((b) {
-                      final sid = b['step_id']?.toString() ?? '',
-                          sel = widget.selectedBlockIds.contains(sid);
-                      return Positioned(
-                          left: _pos(b).dx,
-                          top: _pos(b).dy,
-                          width: _bw,
-                          height: _bh,
-                          child: GestureDetector(
-                              onDoubleTap: () => _showBlockDetails(b),
-                              onPanUpdate: (d) {
-                                final p = _snap(_pos(b) + d.delta);
-                                b['position'] = {
-                                  'x': p.dx.clamp(80, _cw - _bw - 240),
-                                  'y': p.dy.clamp(120, _ch - _bh - 240)
-                                };
-                                setState(() {});
-                              },
-                              onPanEnd: (d) =>
-                                  widget.onMoveBlock(sid, _snap(_pos(b))),
-                              child: _BlockCard(
-                                block: b,
-                                status: _stepStatus(widget.runState, sid),
-                                selected: sel,
-                                wireSrc: sid == widget.wireSourceId,
-                                note: b['note']?.toString(),
-                                isWireTarget: widget.wireMode &&
-                                    widget.wireSourceId != null &&
-                                    widget.wireSourceId != sid,
-                                onTapOutput: () => widget.onBlockTap(sid, isOutputTap: true),
-                                onTapInput: () => widget.onBlockTap(sid, isOutputTap: false),
-                              )));
-                    }),
-                    if (_lassoStart != null && _lassoEnd != null)
-                      Positioned.fill(
-                          child: CustomPaint(
-                              painter: _LassoPainter(
-                                  start: _lassoStart!,
-                                  end: _lassoEnd!,
-                                  cs: cs))),
-                  ]))),
+            minScale: 0.25,
+            maxScale: 3.0,
+            boundaryMargin: const EdgeInsets.all(3000),
+            constrained: false,
+            child: SizedBox(
+              width: _cw,
+              height: _ch,
+              child: Stack(
+                children: [
+                  if (widget.showGrid)
+                    CustomPaint(
+                      size: const Size(_cw, _ch),
+                      painter: _GridPainter(gridSize: widget.gridSize, isDark: isDark),
+                    ),
+                  Positioned(
+                    left: 80,
+                    top: 220,
+                    child: _EndPoint(
+                      icon: Icons.login_rounded,
+                      title: 'TRIGGER',
+                      subtitle: 'Chat query',
+                      color: const Color(0xFF6366F1),
+                    ),
+                  ),
+                  Positioned(
+                    left: _cw - 340,
+                    top: 220,
+                    child: _EndPoint(
+                      icon: Icons.logout_rounded,
+                      title: 'RESPONSE',
+                      subtitle: 'Output',
+                      color: const Color(0xFF22C55E),
+                    ),
+                  ),
+                  GestureDetector(
+                    behavior: HitTestBehavior.translucent,
+                    onTapDown: (d) => _hitWire(d.localPosition),
+                    child: CustomPaint(
+                      size: const Size(_cw, _ch),
+                      painter: _WirePainter(
+                        blocks: widget.blocks,
+                        wires: widget.wires,
+                        runState: widget.runState,
+                        isDark: isDark,
+                        selWire: _selWire,
+                      ),
+                    ),
+                  ),
+                  ...widget.blocks.map((b) {
+                    final sid = b['step_id']?.toString() ?? '';
+                    final sel = widget.selectedBlockIds.contains(sid);
+                    return Positioned(
+                      left: _pos(b).dx,
+                      top: _pos(b).dy,
+                      width: _bw,
+                      height: _bh,
+                      child: GestureDetector(
+                        onDoubleTap: () => _showBlockDetails(b),
+                        onPanUpdate: (d) {
+                          final p = _snap(_pos(b) + d.delta);
+                          b['position'] = {
+                            'x': p.dx.clamp(80, _cw - _bw - 240),
+                            'y': p.dy.clamp(120, _ch - _bh - 240)
+                          };
+                          setState(() {});
+                        },
+                        onPanEnd: (d) => widget.onMoveBlock(sid, _snap(_pos(b))),
+                        child: _BlockCard(
+                          block: b,
+                          status: _stepStatus(widget.runState, sid),
+                          selected: sel,
+                          paletteBlocks: widget.paletteBlocks,
+                          wireSrc: sid == widget.wireSourceId,
+                          note: b['note']?.toString(),
+                          isWireTarget: widget.wireMode &&
+                              widget.wireSourceId != null &&
+                              widget.wireSourceId != sid,
+                          onTapOutput: (port) => widget.onBlockTap(sid, isOutputTap: true, outputPort: port),
+                          onTapInput: () => widget.onBlockTap(sid, isOutputTap: false),
+                        ),
+                      ),
+                    );
+                  }),
+                  if (_lassoStart != null && _lassoEnd != null)
+                    Positioned.fill(
+                      child: CustomPaint(
+                        painter: _LassoPainter(
+                          start: _lassoStart!,
+                          end: _lassoEnd!,
+                          isDark: isDark,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
           if (_selWire != null)
             Positioned(
-                left: 12,
-                right: 12,
-                bottom: 12,
-                child: _WireBar(
-                    wire: widget.wires.firstWhere(
-                        (w) => w['id']?.toString() == _selWire,
-                        orElse: () => const {}),
-                    onDelete: () {
-                      widget.onDeleteWire(_selWire!);
-                      setState(() => _selWire = null);
-                    },
-                    onClear: () => setState(() => _selWire = null))),
-        ]));
+              left: 12,
+              right: 12,
+              bottom: 12,
+              child: _WireBar(
+                wire: widget.wires.firstWhere(
+                  (w) => w['id']?.toString() == _selWire,
+                  orElse: () => const {},
+                ),
+                onDelete: () {
+                  widget.onDeleteWire(_selWire!);
+                  setState(() => _selWire = null);
+                },
+                onClear: () => setState(() => _selWire = null),
+              ),
+            ),
+        ],
+      ),
+    );
   }
 }
 
@@ -1811,60 +1834,76 @@ class _CanvasState extends State<_Canvas> {
 // PAINTERS
 // ============================================================
 class _GridPainter extends CustomPainter {
-  const _GridPainter({required this.gridSize, required this.cs});
+  const _GridPainter({required this.gridSize, required this.isDark});
   final double gridSize;
-  final ColorScheme cs;
+  final bool isDark;
+
   @override
   void paint(Canvas c, Size s) {
     final p = Paint()
-      ..color = cs.outlineVariant.withValues(alpha: 0.15)
-      ..strokeWidth = 0.5;
-    for (double x = 0; x < s.width; x += gridSize)
+      ..color = isDark
+          ? Colors.white.withValues(alpha: 0.05)
+          : Colors.black.withValues(alpha: 0.04)
+      ..strokeWidth = 0.75;
+    for (double x = 0; x < s.width; x += gridSize) {
       c.drawLine(Offset(x, 0), Offset(x, s.height), p);
-    for (double y = 0; y < s.height; y += gridSize)
+    }
+    for (double y = 0; y < s.height; y += gridSize) {
       c.drawLine(Offset(0, y), Offset(s.width, y), p);
+    }
   }
 
   @override
-  bool shouldRepaint(covariant _GridPainter o) => o.gridSize != gridSize;
+  bool shouldRepaint(covariant _GridPainter o) =>
+      o.gridSize != gridSize || o.isDark != isDark;
 }
 
 class _LassoPainter extends CustomPainter {
-  const _LassoPainter(
-      {required this.start, required this.end, required this.cs});
+  const _LassoPainter({
+    required this.start,
+    required this.end,
+    required this.isDark,
+  });
+
   final Offset start, end;
-  final ColorScheme cs;
+  final bool isDark;
+
   @override
   void paint(Canvas c, Size s) {
     c.drawRect(
-        Rect.fromPoints(start, end),
-        Paint()
-          ..color = cs.primary.withValues(alpha: 0.15)
-          ..style = PaintingStyle.fill);
+      Rect.fromPoints(start, end),
+      Paint()
+        ..color = const Color(0xFF6366F1).withValues(alpha: 0.15)
+        ..style = PaintingStyle.fill,
+    );
     c.drawRect(
-        Rect.fromPoints(start, end),
-        Paint()
-          ..color = cs.primary.withValues(alpha: 0.6)
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 1.5);
+      Rect.fromPoints(start, end),
+      Paint()
+        ..color = const Color(0xFF6366F1).withValues(alpha: 0.6)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.5,
+    );
   }
 
   @override
   bool shouldRepaint(covariant _LassoPainter o) =>
-      o.start != start || o.end != end;
+      o.start != start || o.end != end || o.isDark != isDark;
 }
 
 class _WirePainter extends CustomPainter {
-  const _WirePainter(
-      {required this.blocks,
-      required this.wires,
-      required this.runState,
-      required this.cs,
-      required this.selWire});
+  const _WirePainter({
+    required this.blocks,
+    required this.wires,
+    required this.runState,
+    required this.isDark,
+    required this.selWire,
+  });
+
   final List<Map<String, dynamic>> blocks, wires;
   final Map<String, dynamic>? runState;
-  final ColorScheme cs;
+  final bool isDark;
   final String? selWire;
+
   @override
   void paint(Canvas c, Size s) {
     final map = {for (final b in blocks) b['step_id']?.toString(): b};
@@ -1879,40 +1918,72 @@ class _WirePainter extends CustomPainter {
         ..cubicTo(a.dx + 90, a.dy, b.dx - 90, b.dy, b.dx, b.dy);
       final st = _stepStatus(runState, w['target_step_id']?.toString()),
           sel = w['id']?.toString() == selWire;
-      c.drawPath(
+
+      final wireColor = _statusColor(st, isDark);
+
+      if (sel || st == 'running') {
+        c.drawPath(
           p,
           Paint()
-            ..color = _statusColor(cs, st).withValues(alpha: 0.82)
-            ..strokeWidth = sel
-                ? 5
-                : st == 'running'
-                    ? 3.4
-                    : 2.2
+            ..color = (sel ? const Color(0xFF6366F1) : wireColor).withValues(alpha: 0.3)
+            ..strokeWidth = sel ? 8 : 6
             ..style = PaintingStyle.stroke
-            ..strokeCap = StrokeCap.round);
-      if (st != 'running') {
-        final mid = Offset.lerp(a, b, 0.5)!;
-        c.drawPath(
-            Path()
-              ..moveTo(mid.dx, mid.dy - 5)
-              ..lineTo(mid.dx + 8, mid.dy)
-              ..lineTo(mid.dx, mid.dy + 5)
-              ..close(),
-            Paint()
-              ..color = _statusColor(cs, st)
-              ..style = PaintingStyle.fill);
+            ..strokeCap = StrokeCap.round
+            ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4),
+        );
       }
-      if (sel)
-        c.drawCircle(Offset.lerp(a, b, 0.5)!, 7, Paint()..color = cs.primary);
+
+      c.drawPath(
+        p,
+        Paint()
+          ..color = wireColor.withValues(alpha: isDark ? 0.9 : 0.85)
+          ..strokeWidth = sel ? 4.5 : (st == 'running' ? 3.5 : 2.2)
+          ..style = PaintingStyle.stroke
+          ..strokeCap = StrokeCap.round,
+      );
+
+      final mid = Offset.lerp(a, b, 0.5)!;
+      if (st != 'running') {
+        c.drawPath(
+          Path()
+            ..moveTo(mid.dx - 4, mid.dy - 5)
+            ..lineTo(mid.dx + 6, mid.dy)
+            ..lineTo(mid.dx - 4, mid.dy + 5)
+            ..close(),
+          Paint()
+            ..color = wireColor
+            ..style = PaintingStyle.fill,
+        );
+      }
+      if (sel) {
+        c.drawCircle(mid, 7, Paint()..color = const Color(0xFF6366F1));
+        c.drawCircle(mid, 4, Paint()..color = Colors.white);
+      }
       if (w['label'] != null) {
         final tp = TextPainter(
-            text: TextSpan(
-                text: w['label'],
-                style: TextStyle(color: cs.onSurface, fontSize: 9)),
-            textDirection: TextDirection.ltr)
-          ..layout();
+          text: TextSpan(
+            text: w['label'],
+            style: TextStyle(
+              color: isDark ? Colors.white70 : Colors.black87,
+              fontSize: 10,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          textDirection: TextDirection.ltr,
+        )..layout();
+        final labelRect = Rect.fromCenter(
+          center: mid - Offset(0, tp.height + 4),
+          width: tp.width + 12,
+          height: tp.height + 4,
+        );
+        c.drawRRect(
+          RRect.fromRectAndRadius(labelRect, const Radius.circular(6)),
+          Paint()..color = isDark ? const Color(0xFF181826) : Colors.white,
+        );
         tp.paint(
-            c, Offset.lerp(a, b, 0.5)! - Offset(tp.width / 2, tp.height + 8));
+          c,
+          mid - Offset(tp.width / 2, tp.height + 6),
+        );
       }
     }
   }
@@ -1922,6 +1993,7 @@ class _WirePainter extends CustomPainter {
       o.blocks != blocks ||
       o.wires != wires ||
       o.runState != runState ||
+      o.isDark != isDark ||
       o.selWire != selWire;
 }
 
@@ -1938,183 +2010,273 @@ class _BlockCard extends StatelessWidget {
     required this.isWireTarget,
     required this.onTapOutput,
     required this.onTapInput,
+    required this.paletteBlocks,
   });
+
   final Map<String, dynamic> block;
+  final List<dynamic> paletteBlocks;
   final String status;
   final bool selected, wireSrc, isWireTarget;
   final String? note;
-  final VoidCallback onTapOutput, onTapInput;
+  final void Function(String) onTapOutput;
+  final VoidCallback onTapInput;
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    final sc = _statusColor(cs, status);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final sc = _statusColor(status, isDark);
     final name = block['display_name']?.toString().isNotEmpty == true
         ? block['display_name'].toString()
         : block['block_id']?.toString() ?? 'Block';
     final tools = (block['config'] as Map?)?['tools'] as List? ?? [];
-    return Material(
-      color: cs.surface,
-      elevation: selected || wireSrc ? 8 : (isWireTarget ? 6 : 2),
-      borderRadius: BorderRadius.circular(10),
-      child: Container(
-        decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(
-                color: wireSrc
-                    ? Colors.orange
-                    : isWireTarget
-                        ? Colors.blue.withValues(alpha: 0.8)
-                        : selected
-                            ? cs.primary
-                            : sc.withValues(alpha: 0.5),
-                width: selected || wireSrc || isWireTarget ? 2.5 : 1)),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+
+    final cardBg = isDark
+        ? const Color(0xFF141422).withValues(alpha: 0.92)
+        : Colors.white.withValues(alpha: 0.95);
+
+    final borderColor = wireSrc
+        ? const Color(0xFFF59E0B)
+        : isWireTarget
+            ? const Color(0xFF3B82F6)
+            : selected
+                ? const Color(0xFF6366F1)
+                : (isDark ? Colors.white.withValues(alpha: 0.12) : Colors.black.withValues(alpha: 0.1));
+
+    return Container(
+      decoration: BoxDecoration(
+        color: cardBg,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: borderColor,
+          width: selected || wireSrc || isWireTarget ? 2 : 1,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.35 : 0.06),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header Bar
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
             decoration: BoxDecoration(
-                color: sc.withValues(alpha: 0.1),
-                borderRadius:
-                    const BorderRadius.vertical(top: Radius.circular(9))),
-            child: Row(children: [
-              Icon(_iconFor(block), size: 16, color: sc),
-              const SizedBox(width: 6),
-              Expanded(
-                  child: Text(name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context)
-                          .textTheme
-                          .labelMedium
-                          ?.copyWith(fontWeight: FontWeight.w600))),
-              if (selected)
-                Icon(Icons.check_circle_rounded, size: 16, color: cs.primary),
-              if (wireSrc)
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: Colors.orange.withValues(alpha: 0.2),
-                    borderRadius: BorderRadius.circular(4),
+              color: sc.withValues(alpha: isDark ? 0.15 : 0.08),
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(13)),
+              border: Border(
+                bottom: BorderSide(
+                  color: isDark ? Colors.white.withValues(alpha: 0.06) : Colors.black.withValues(alpha: 0.05),
+                ),
+              ),
+            ),
+            child: Row(
+              children: [
+                Icon(_iconFor(block), size: 16, color: sc),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: isDark ? Colors.white : Colors.black87,
+                    ),
                   ),
-                  child: const Text('SRC',
+                ),
+                if (selected)
+                  const Icon(Icons.check_circle_rounded, size: 16, color: Color(0xFF6366F1)),
+                if (wireSrc) ...[
+                  const SizedBox(width: 4),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF59E0B).withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: const Text(
+                      'SRC',
                       style: TextStyle(
-                          fontSize: 8,
-                          color: Colors.orange,
-                          fontWeight: FontWeight.bold)),
-                ),
-            ]),
+                        fontSize: 8,
+                        color: Color(0xFFF59E0B),
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
           ),
+          // Content
           Expanded(
-              child: Padding(
-                  padding: const EdgeInsets.all(8),
-                  child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+            child: Padding(
+              padding: const EdgeInsets.all(8),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (tools.isNotEmpty) ...[
+                    Wrap(
+                      spacing: 4,
+                      runSpacing: 2,
+                      children: tools
+                          .take(3)
+                          .map((t) => Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: isDark
+                                      ? Colors.white.withValues(alpha: 0.06)
+                                      : Colors.black.withValues(alpha: 0.04),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Text(
+                                  '$t',
+                                  style: TextStyle(
+                                    fontSize: 9,
+                                    color: isDark ? Colors.white70 : Colors.black87,
+                                  ),
+                                ),
+                              ))
+                          .toList(),
+                    ),
+                    const SizedBox(height: 4),
+                  ],
+                  Text(
+                    _preview(block),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: isDark ? Colors.white54 : Colors.black54,
+                    ),
+                  ),
+                  if (note != null && note!.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Row(
                       children: [
-                        if (tools.isNotEmpty)
-                          Wrap(
-                              spacing: 4,
-                              runSpacing: 2,
-                              children: tools
-                                  .take(3)
-                                  .map((t) => Container(
-                                      padding: const EdgeInsets.symmetric(
-                                          horizontal: 5, vertical: 2),
-                                      decoration: BoxDecoration(
-                                          color: cs.surfaceContainerHighest,
-                                          borderRadius:
-                                              BorderRadius.circular(4)),
-                                      child: Text('$t',
-                                          style: TextStyle(
-                                              fontSize: 9,
-                                              color: cs.onSurfaceVariant))))
-                                  .toList()),
-                        if (tools.isNotEmpty) const SizedBox(height: 4),
-                        Text(_preview(block),
-                            maxLines: 2,
+                        const Icon(Icons.sticky_note_2_rounded, size: 10, color: Colors.amber),
+                        const SizedBox(width: 4),
+                        Expanded(
+                          child: Text(
+                            note!,
+                            maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: Theme.of(context)
-                                .textTheme
-                                .bodySmall
-                                ?.copyWith(fontSize: 10)),
-                        if (note != null && note!.isNotEmpty)
-                          Padding(
-                              padding: const EdgeInsets.only(top: 4),
-                              child: Row(children: [
-                                Icon(Icons.sticky_note_2_rounded,
-                                    size: 10, color: Colors.amber),
-                                const SizedBox(width: 4),
-                                Expanded(
-                                    child: Text(note!,
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: TextStyle(
-                                            fontSize: 9,
-                                            color: Colors.amber.shade700)))
-                              ])),
-                      ]))),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-            decoration: BoxDecoration(
-                color: cs.surfaceContainerHighest.withValues(alpha: 0.5),
-                borderRadius:
-                    const BorderRadius.vertical(bottom: Radius.circular(9))),
-            child: Row(children: [
-              // IN port - click to receive connection
-              GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTap: onTapInput,
-                child: Tooltip(
-                  message: isWireTarget ? 'Click to connect here' : 'Input port - click to receive wire',
-                  child: Container(
-                    padding: const EdgeInsets.all(4),
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: isWireTarget
-                          ? Colors.blue.withValues(alpha: 0.25)
-                          : null,
-                      border: isWireTarget
-                          ? Border.all(color: Colors.blue, width: 2)
-                          : Border.all(color: Colors.blue.withValues(alpha: 0.3), width: 1),
+                            style: TextStyle(
+                              fontSize: 9,
+                              color: isDark ? Colors.amber.shade300 : Colors.amber.shade800,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
-                    child: const _Dot(color: Colors.blue, size: 8),
-                  ),
-                ),
+                  ],
+                ],
               ),
-              const SizedBox(width: 4),
-              Text('IN', style: TextStyle(fontSize: 8, color: cs.outline)),
-              const Spacer(),
-              Text(status, style: TextStyle(fontSize: 8, color: sc)),
-              const Spacer(),
-              Text('OUT', style: TextStyle(fontSize: 8, color: cs.outline)),
-              const SizedBox(width: 4),
-              // OUT port - click to start connection
-              GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTap: onTapOutput,
-                child: Tooltip(
-                  message: wireSrc
-                      ? 'Click again to cancel'
-                      : 'Click to start a wire',
-                  child: Container(
-                    padding: const EdgeInsets.all(4),
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color:
-                          wireSrc ? Colors.orange.withValues(alpha: 0.25) : null,
-                      border: wireSrc
-                          ? Border.all(color: Colors.orange, width: 2)
-                          : Border.all(color: Colors.green.withValues(alpha: 0.3), width: 1),
-                    ),
-                    child: _Dot(
-                      color: wireSrc ? Colors.orange : Colors.green,
-                      size: 8,
-                    ),
-                  ),
-                ),
-              ),
-            ]),
+            ),
           ),
-        ]),
+          // Footer Port Bar
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: isDark ? Colors.black.withValues(alpha: 0.2) : Colors.black.withValues(alpha: 0.03),
+              borderRadius: const BorderRadius.vertical(bottom: Radius.circular(13)),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                // IN port
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 2),
+                  child: Row(
+                    children: [
+                      GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: onTapInput,
+                        child: Tooltip(
+                          message: isWireTarget ? 'Click to connect here' : 'Input port',
+                          child: Container(
+                            padding: const EdgeInsets.all(3),
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: isWireTarget ? Colors.blue.withValues(alpha: 0.25) : null,
+                              border: isWireTarget
+                                  ? Border.all(color: Colors.blue, width: 2)
+                                  : Border.all(color: Colors.blue.withValues(alpha: 0.4), width: 1),
+                            ),
+                            child: const _Dot(color: Colors.blue, size: 7),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      Text('IN', style: TextStyle(fontSize: 8.5, fontWeight: FontWeight.w600, color: isDark ? Colors.white38 : Colors.black38)),
+                    ],
+                  ),
+                ),
+                const Spacer(),
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 2),
+                  child: Text(status.toUpperCase(), style: TextStyle(fontSize: 8, fontWeight: FontWeight.bold, color: sc)),
+                ),
+                const Spacer(),
+                // OUT ports
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: (() {
+                    // Try to get ports from palette definition first (static/structural ports)
+                    final pBlock = paletteBlocks.firstWhere((p) => p['id'] == block['block_id'], orElse: () => null) as Map?;
+                    if (pBlock != null && pBlock['output_ports'] != null) {
+                      final ports = (pBlock['output_ports'] as List).map((p) => (p as Map)['name']?.toString() ?? 'output').toList();
+                      if (ports.isNotEmpty) return ports;
+                    }
+                    // Fallback to instance config or default
+                    final configPorts = (block['config'] as Map?)?['output_ports'] as List?;
+                    if (configPorts != null && configPorts.isNotEmpty) {
+                      return configPorts.map((e) => e.toString()).toList();
+                    }
+                    return ['output'];
+                  })()
+                      .map((portName) {
+                    final isThisPortSrc = wireSrc;
+                    return Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: Row(
+                        children: [
+                          Text(portName == 'output' ? 'OUT' : portName.toUpperCase(), style: TextStyle(fontSize: 8.5, fontWeight: FontWeight.w600, color: isDark ? Colors.white38 : Colors.black38)),
+                          const SizedBox(width: 4),
+                          GestureDetector(
+                            behavior: HitTestBehavior.opaque,
+                            onTap: () => onTapOutput(portName),
+                            child: Tooltip(
+                              message: isThisPortSrc ? 'Click again to cancel' : 'Click to start wire',
+                              child: Container(
+                                padding: const EdgeInsets.all(3),
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: isThisPortSrc ? Colors.orange.withValues(alpha: 0.25) : null,
+                                  border: isThisPortSrc
+                                      ? Border.all(color: Colors.orange, width: 2)
+                                      : Border.all(color: Colors.green.withValues(alpha: 0.4), width: 1),
+                                ),
+                                child: _Dot(
+                                  color: isThisPortSrc ? Colors.orange : const Color(0xFF22C55E),
+                                  size: 7,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -2131,89 +2293,166 @@ class _Dot extends StatelessWidget {
 }
 
 class _EndPoint extends StatelessWidget {
-  const _EndPoint(
-      {required this.icon,
-      required this.title,
-      required this.subtitle,
-      required this.color});
+  const _EndPoint({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.color,
+  });
+
   final IconData icon;
   final String title, subtitle;
   final Color color;
+
   @override
-  Widget build(BuildContext context) => Material(
-      color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.92),
-      elevation: 8,
-      borderRadius: BorderRadius.circular(10),
-      child: Container(
-          width: 180,
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(10),
-              border:
-                  Border.all(color: color.withValues(alpha: 0.8), width: 2)),
-          child: Row(children: [
-            Icon(icon, color: color, size: 22),
-            const SizedBox(width: 10),
-            Expanded(
-                child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                  Text(title,
-                      style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                          color: color, fontWeight: FontWeight.bold)),
-                  Text(subtitle,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.bodySmall)
-                ]))
-          ])));
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Container(
+      width: 180,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF141422).withValues(alpha: 0.9) : Colors.white.withValues(alpha: 0.95),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: color.withValues(alpha: 0.8), width: 1.5),
+        boxShadow: [
+          BoxShadow(
+            color: color.withValues(alpha: isDark ? 0.2 : 0.08),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(6),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(icon, color: color, size: 20),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  title,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 0.6,
+                    color: color,
+                  ),
+                ),
+                Text(
+                  subtitle,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: isDark ? Colors.white54 : Colors.black54,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _WireBar extends StatelessWidget {
-  const _WireBar(
-      {required this.wire, required this.onDelete, required this.onClear});
+  const _WireBar({
+    required this.wire,
+    required this.onDelete,
+    required this.onClear,
+  });
+
   final Map<String, dynamic> wire;
   final VoidCallback onDelete, onClear;
+
   @override
-  Widget build(BuildContext context) => Material(
-      color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.95),
-      elevation: 10,
-      borderRadius: BorderRadius.circular(8),
-      child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-          child: Row(children: [
-            const Icon(Icons.cable_rounded, size: 18),
-            const SizedBox(width: 8),
-          // In _WireBar, replace the Expanded text line:
-          // In _WireBar, replace the Expanded text line:
-            Expanded(
-              child: Text(
-                '${wire['source_step_id'] ?? '?'}:${wire['source_port'] ?? 'out'} \u2192 ${wire['target_step_id'] ?? '?'}:${wire['target_port'] ?? 'in'}',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(12),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: isDark ? const Color(0xFF141422).withValues(alpha: 0.95) : Colors.white.withValues(alpha: 0.95),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: isDark ? Colors.white.withValues(alpha: 0.12) : Colors.black.withValues(alpha: 0.1),
             ),
-            if (wire['label'] != null)
-              Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.08),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Row(
+            children: [
+              const Icon(Icons.cable_rounded, size: 18, color: Color(0xFF6366F1)),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  '${wire['source_step_id'] ?? '?'}:${wire['source_port'] ?? 'out'} \u2192 ${wire['target_step_id'] ?? '?'}:${wire['target_port'] ?? 'in'}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                    color: isDark ? Colors.white : Colors.black87,
+                  ),
+                ),
+              ),
+              if (wire['label'] != null) ...[
+                const SizedBox(width: 6),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                   decoration: BoxDecoration(
-                      color:
-                          Theme.of(context).colorScheme.surfaceContainerHighest,
-                      borderRadius: BorderRadius.circular(4)),
-                  child: Text('${wire['label']}',
-                      style: Theme.of(context).textTheme.labelSmall)),
-            const SizedBox(width: 8),
-            IconButton(
+                    color: const Color(0xFF6366F1).withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    '${wire['label']}',
+                    style: const TextStyle(fontSize: 10, color: Color(0xFF6366F1), fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ],
+              const SizedBox(width: 8),
+              IconButton(
                 tooltip: 'Disconnect',
-                onPressed: onDelete,
-                icon: const Icon(Icons.link_off_rounded, size: 18)),
-            IconButton(
+                onPressed: () {
+                  HapticFeedback.mediumImpact();
+                  onDelete();
+                },
+                icon: const Icon(Icons.link_off_rounded, size: 18, color: Colors.redAccent),
+                visualDensity: VisualDensity.compact,
+              ),
+              IconButton(
                 tooltip: 'Close',
-                onPressed: onClear,
-                icon: const Icon(Icons.close_rounded, size: 18))
-          ])));
+                onPressed: () {
+                  HapticFeedback.selectionClick();
+                  onClear();
+                },
+                icon: Icon(Icons.close_rounded, size: 18, color: isDark ? Colors.white54 : Colors.black54),
+                visualDensity: VisualDensity.compact,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 
@@ -2268,7 +2507,7 @@ class _EmptyCanvas extends StatelessWidget {
       ]);
 }
 
-class _BlockDetails extends ConsumerWidget {
+class _BlockDetails extends ConsumerStatefulWidget {
   const _BlockDetails(
       {required this.block,
       required this.status,
@@ -2277,32 +2516,65 @@ class _BlockDetails extends ConsumerWidget {
       required this.onConnect,
       required this.onDelWires,
       required this.onDel,
+      required this.onConfigChanged,
       required this.onAddNote});
   final Map<String, dynamic> block;
   final String status;
   final Map<String, dynamic>? output;
   final List<Map<String, dynamic>> wires;
   final VoidCallback onConnect, onDelWires, onDel;
+  final ValueChanged<Map<String, dynamic>> onConfigChanged;
   final ValueChanged<String> onAddNote;
+
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final bid = block['block_id']?.toString() ?? 'Block',
-        sid = block['step_id']?.toString() ?? 'step',
-        cs = Theme.of(context).colorScheme;
-    final config = block['config'] as Map? ?? const {};
-    final tools =
-        (config['tools'] as List? ?? []).map((e) => e.toString()).toList();
+  ConsumerState<_BlockDetails> createState() => _BlockDetailsState();
+}
+
+class _BlockDetailsState extends ConsumerState<_BlockDetails> {
+  late final TextEditingController _noteCtrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _noteCtrl = TextEditingController(text: widget.block['note']?.toString() ?? '');
+  }
+
+  @override
+  void didUpdateWidget(covariant _BlockDetails oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.block['note'] != widget.block['note']) {
+      _noteCtrl.text = widget.block['note']?.toString() ?? '';
+    }
+  }
+
+  @override
+  void dispose() {
+    _noteCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final block = widget.block;
+    final status = widget.status;
+    final wires = widget.wires;
+    final output = widget.output;
+    final cs = Theme.of(context).colorScheme;
+
+    final bid = block['block_id']?.toString() ?? 'Block';
+    final sid = block['step_id']?.toString() ?? 'step';
+    final config = Map<String, dynamic>.from(block['config'] as Map? ?? {});
+    final tools = (config['tools'] as List? ?? []).map((e) => e.toString()).toList();
     final name = block['display_name']?.toString().isNotEmpty == true
         ? block['display_name'].toString()
         : bid;
-    final noteCtrl =
-        TextEditingController(text: block['note']?.toString() ?? '');
+
     return Padding(
         padding: EdgeInsets.fromLTRB(
             16, 0, 16, MediaQuery.viewInsetsOf(context).bottom + 18),
         child: ListView(shrinkWrap: true, children: [
           Row(children: [
-            Icon(_iconFor(block), color: _statusColor(cs, status), size: 28),
+            Icon(_iconFor(block), color: _statusColor(status, Theme.of(context).brightness == Brightness.dark), size: 28),
             const SizedBox(width: 10),
             Expanded(
                 child:
@@ -2313,13 +2585,13 @@ class _BlockDetails extends ConsumerWidget {
               style: Theme.of(context).textTheme.labelMedium),
           const Divider(height: 20),
           TextField(
-              controller: noteCtrl,
+              controller: _noteCtrl,
               decoration: const InputDecoration(
                   labelText: 'Note',
                   hintText: 'Add a note...',
                   prefixIcon: Icon(Icons.sticky_note_2_rounded),
                   border: OutlineInputBorder()),
-              onChanged: onAddNote,
+              onChanged: widget.onAddNote,
               minLines: 1,
               maxLines: 2),
           const SizedBox(height: 12),
@@ -2328,7 +2600,15 @@ class _BlockDetails extends ConsumerWidget {
           _Section(
               title: 'Input Bindings',
               lines: _mapLines(block['input_bindings'])),
-          _Section(title: 'Configuration', lines: _mapLines(block['config'])),
+          _ConfigForm(
+            schema: _schemaProps(_schemaMap(block['config_schema'])),
+            config: config,
+            onChanged: (k, v) {
+              final newConfig = Map<String, dynamic>.from(config);
+              newConfig[k] = v;
+              widget.onConfigChanged(newConfig);
+            },
+          ),
           if (wires.isNotEmpty)
             _Section(
                 title: 'Wires (${wires.length})',
@@ -2341,20 +2621,81 @@ class _BlockDetails extends ConsumerWidget {
           const SizedBox(height: 12),
           Wrap(spacing: 8, runSpacing: 8, children: [
             FilledButton.icon(
-                onPressed: onConnect,
+                onPressed: widget.onConnect,
                 icon: const Icon(Icons.cable_rounded),
                 label: const Text('Connect')),
             OutlinedButton.icon(
-                onPressed: wires.isEmpty ? null : onDelWires,
+                onPressed: wires.isEmpty ? null : widget.onDelWires,
                 icon: const Icon(Icons.link_off_rounded),
                 label: const Text('Disconnect All')),
             OutlinedButton.icon(
-                onPressed: onDel,
+                onPressed: widget.onDel,
                 icon: const Icon(Icons.delete_outline_rounded),
                 label: const Text('Delete'),
                 style: OutlinedButton.styleFrom(foregroundColor: cs.error))
           ])
         ]));
+  }
+}
+
+class _ConfigForm extends StatelessWidget {
+  const _ConfigForm({required this.schema, required this.config, required this.onChanged});
+  final Map<String, dynamic> schema;
+  final Map<String, dynamic> config;
+  final void Function(String, dynamic) onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    if (schema.isEmpty) return const SizedBox.shrink();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Padding(
+          padding: EdgeInsets.symmetric(vertical: 12),
+          child: Text('Configuration', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+        ),
+        ...schema.entries.map((e) {
+          final k = e.key;
+          final prop = e.value is Map ? e.value as Map<String, dynamic> : <String, dynamic>{};
+          final type = prop['type']?.toString() ?? 'string';
+          final title = prop['title']?.toString() ?? _fieldLabel(k);
+          final desc = prop['description']?.toString();
+          
+          if (type == 'boolean') {
+            return SwitchListTile(
+              title: Text(title),
+              subtitle: desc != null ? Text(desc) : null,
+              value: config[k] == true || config[k] == 'true',
+              onChanged: (v) => onChanged(k, v),
+              contentPadding: EdgeInsets.zero,
+            );
+          } else if (prop.containsKey('enum')) {
+            final options = (prop['enum'] as List?)?.map((o) => o.toString()).toList() ?? [];
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: DropdownButtonFormField<String>(
+                decoration: InputDecoration(labelText: title, helperText: desc, border: const OutlineInputBorder()),
+                value: config[k]?.toString(),
+                items: options.map((o) => DropdownMenuItem(value: o, child: Text(o))).toList(),
+                onChanged: (v) {
+                  if (v != null) onChanged(k, v);
+                },
+              ),
+            );
+          } else {
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: TextFormField(
+                initialValue: config[k]?.toString() ?? '',
+                decoration: InputDecoration(labelText: title, helperText: desc, border: const OutlineInputBorder()),
+                onChanged: (v) => onChanged(k, v),
+              ),
+            );
+          }
+        }),
+        const Divider(),
+      ],
+    );
   }
 }
 
@@ -2881,24 +3222,40 @@ class _ApprovalQuickConfigState extends State<_ApprovalQuickConfig> {
             Text('Approval Gate',
                 style: Theme.of(context).textTheme.titleLarge),
             const SizedBox(height: 12),
-            RadioListTile<String>(
-                title: const Text('Always pause'),
-                value: 'always',
-                groupValue: _when,
-                onChanged: (v) => setState(() => _when = v!),
-                dense: true),
-            RadioListTile<String>(
-                title: const Text('If high risk'),
-                value: 'risk',
-                groupValue: _when,
-                onChanged: (v) => setState(() => _when = v!),
-                dense: true),
-            RadioListTile<String>(
-                title: const Text('Protected files'),
-                value: 'protected',
-                groupValue: _when,
-                onChanged: (v) => setState(() => _when = v!),
-                dense: true),
+            Column(
+              children: [
+                ListTile(
+                  title: const Text('Always pause'),
+                  leading: Radio<String>(
+                    value: 'always',
+                    groupValue: _when,
+                    onChanged: (v) => setState(() => _when = v!),
+                  ),
+                  dense: true,
+                  onTap: () => setState(() => _when = 'always'),
+                ),
+                ListTile(
+                  title: const Text('If high risk'),
+                  leading: Radio<String>(
+                    value: 'risk',
+                    groupValue: _when,
+                    onChanged: (v) => setState(() => _when = v!),
+                  ),
+                  dense: true,
+                  onTap: () => setState(() => _when = 'risk'),
+                ),
+                ListTile(
+                  title: const Text('Protected files'),
+                  leading: Radio<String>(
+                    value: 'protected',
+                    groupValue: _when,
+                    onChanged: (v) => setState(() => _when = v!),
+                  ),
+                  dense: true,
+                  onTap: () => setState(() => _when = 'protected'),
+                ),
+              ],
+            ),
             const SizedBox(height: 12),
             FilledButton.icon(
                 onPressed: () => Navigator.pop(context,
@@ -3011,178 +3368,516 @@ class _GenericQuickConfig extends StatefulWidget {
 
 class _GenericQuickConfigState extends State<_GenericQuickConfig> {
   final _bindings = <String, String>{};
-  final _portSources = <String, String>{}; // portName -> 'chat' | 'literal' | 'unused'
+  final _portSources = <String, String>{};
+  final _config = <String, dynamic>{};
+
   @override
-@override
-Widget build(BuildContext context) {
-  final inputs = _schemaProps(_schemaMap(widget.block['input_schema']));
-  final required = _schemaRequired(_schemaMap(widget.block['input_schema']));
-  return Padding(
-    padding: EdgeInsets.fromLTRB(16, 0, 16, MediaQuery.viewInsetsOf(context).bottom + 16),
-    child: Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Text(widget.block['name']?.toString() ?? 'Block',
-            style: Theme.of(context).textTheme.titleLarge),
-        const SizedBox(height: 12),
-        if (inputs.isEmpty)
-          Text('No inputs needed.', style: Theme.of(context).textTheme.bodySmall)
-        else
+  void initState() {
+    super.initState();
+    final cProps = _schemaProps(_schemaMap(widget.block['config_schema']));
+    for (final e in cProps.entries) {
+      if (e.value is Map && e.value['default'] != null) {
+        _config[e.key] = e.value['default'];
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final inputs = _schemaProps(_schemaMap(widget.block['input_schema']));
+    final required = _schemaRequired(_schemaMap(widget.block['input_schema']));
+    final cProps = _schemaProps(_schemaMap(widget.block['config_schema']));
+    
+    return Padding(
+      padding: EdgeInsets.fromLTRB(16, 0, 16, MediaQuery.viewInsetsOf(context).bottom + 16),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(widget.block['name']?.toString() ?? 'Block',
+              style: Theme.of(context).textTheme.titleLarge),
+          const SizedBox(height: 12),
           Flexible(
             child: ListView(
               shrinkWrap: true,
-              children: inputs.keys.map((portName) {
-                final isReq = required.contains(portName);
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 10),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('${_fieldLabel(portName)}${isReq ? ' *' : ''}',
-                          style: Theme.of(context).textTheme.titleSmall),
-                      const SizedBox(height: 4),
-                      SegmentedButton<String>(
-                        segments: [
-                          ButtonSegment(value: 'chat', label: Text(isReq ? 'Chat' : 'Unused')),
-                          ButtonSegment(value: 'literal', label: const Text('Value')),
-                        ],
-                        selected: {_portSources[portName] ?? (isReq ? 'chat' : 'unused')},
-                        onSelectionChanged: (v) {
-                          setState(() => _portSources[portName] = v.first);
-                        },
-                      ),
-                      if (_portSources[portName] == 'literal')
-                        TextField(
-                          decoration: InputDecoration(
-                            hintText: 'Enter value...',
-                            border: const OutlineInputBorder(),
-                          ),
-                          onChanged: (v) => _bindings[portName] = v,
-                        ),
-                    ],
+              children: [
+                if (inputs.isNotEmpty) ...[
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 12),
+                    child: Text('Inputs', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
                   ),
-                );
-              }).toList(),
+                  ...inputs.keys.map((portName) {
+                    final isReq = required.contains(portName);
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 10),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('${_fieldLabel(portName)}${isReq ? ' *' : ''}',
+                              style: Theme.of(context).textTheme.titleSmall),
+                          const SizedBox(height: 4),
+                          SegmentedButton<String>(
+                            segments: [
+                              ButtonSegment(value: 'chat', label: Text(isReq ? 'Chat' : 'Unused')),
+                              ButtonSegment(value: 'literal', label: const Text('Value')),
+                            ],
+                            selected: {_portSources[portName] ?? (isReq ? 'chat' : 'unused')},
+                            onSelectionChanged: (v) {
+                              setState(() => _portSources[portName] = v.first);
+                            },
+                          ),
+                          if (_portSources[portName] == 'literal')
+                            TextField(
+                              decoration: InputDecoration(
+                                hintText: 'Enter value...',
+                                border: const OutlineInputBorder(),
+                              ),
+                              onChanged: (v) => _bindings[portName] = v,
+                            ),
+                        ],
+                      ),
+                    );
+                  }),
+                ] else if (cProps.isEmpty)
+                  Text('No inputs or configuration needed.', style: Theme.of(context).textTheme.bodySmall),
+                if (cProps.isNotEmpty)
+                  _ConfigForm(
+                    schema: cProps,
+                    config: _config,
+                    onChanged: (k, v) => setState(() => _config[k] = v),
+                  ),
+              ],
             ),
           ),
-        const SizedBox(height: 12),
-        FilledButton.icon(
-          onPressed: () {
-            final b = <String, dynamic>{};
-            for (final k in inputs.keys) {
-              final source = _portSources[k] ?? 'chat';
-              if (source == 'unused') continue;
-              b[k] = {
-                'source': source == 'literal' ? 'literal' : 'trigger_query',
-                if (source == 'literal' && (_bindings[k]?.isNotEmpty == true))
-                  'value': _bindings[k],
-              };
-            }
-            Navigator.pop(context, _Configured(config: {}, bindings: b));
-          },
-          icon: const Icon(Icons.check_rounded),
-          label: const Text('Add Block'),
-        ),
-      ],
-    ),
-  );
+          const SizedBox(height: 12),
+          FilledButton.icon(
+            onPressed: () {
+              final b = <String, dynamic>{};
+              for (final k in inputs.keys) {
+                final source = _portSources[k] ?? 'chat';
+                if (source == 'unused') continue;
+                b[k] = {
+                  'source': source == 'literal' ? 'literal' : 'trigger_query',
+                  if (source == 'literal' && (_bindings[k]?.isNotEmpty == true))
+                    'value': _bindings[k],
+                };
+              }
+              Navigator.pop(context, _Configured(config: _config, bindings: b));
+            },
+            icon: const Icon(Icons.check_rounded),
+            label: const Text('Add Block'),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 // Add this field to _GenericQuickConfigState:
 
-}
-
-class _BlockPalette extends StatelessWidget {
+class _BlockPalette extends StatefulWidget {
   const _BlockPalette({required this.blocks});
   final List<Map<String, dynamic>> blocks;
 
   @override
+  State<_BlockPalette> createState() => _BlockPaletteState();
+}
+
+class _BlockPaletteState extends State<_BlockPalette> {
+  final TextEditingController _searchCtrl = TextEditingController();
+  String _selectedCategory = 'all';
+  String _searchQuery = '';
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bgSurface = isDark
+        ? const Color(0xFF12121E).withValues(alpha: 0.96)
+        : Colors.white.withValues(alpha: 0.98);
+
+    final categories = ['all', 'trigger', 'retrieval', 'tool', 'prompt', 'approval', 'verification', 'deployment', 'notification', 'memory'];
+
+    final filteredBlocks = widget.blocks.where((b) {
+      final kind = b['kind']?.toString().toLowerCase() ?? 'other';
+      if (_selectedCategory != 'all' && kind != _selectedCategory) return false;
+      if (_searchQuery.trim().isEmpty) return true;
+      final q = _searchQuery.toLowerCase();
+      final name = (b['name'] ?? b['id'] ?? '').toString().toLowerCase();
+      final desc = (b['description'] ?? '').toString().toLowerCase();
+      final tools = (b['tools'] as List? ?? []).join(' ').toLowerCase();
+      return name.contains(q) || desc.contains(q) || tools.contains(q);
+    }).toList();
+
     final grouped = <String, List<Map<String, dynamic>>>{};
-    for (final b in blocks) {
+    for (final b in filteredBlocks) {
       final kind = b['kind']?.toString() ?? 'other';
       grouped.putIfAbsent(kind, () => []).add(b);
     }
-    final cs = Theme.of(context).colorScheme;
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Padding(
-          padding: const EdgeInsets.all(12),
-          child: TextField(
-            decoration: InputDecoration(
-              hintText: 'Search blocks...',
-              prefixIcon: const Icon(Icons.search_rounded),
-              border:
-                  OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-              filled: true,
-              fillColor: cs.surfaceContainerHighest,
+
+    return Container(
+      height: MediaQuery.of(context).size.height * 0.78,
+      decoration: BoxDecoration(
+        color: bgSurface,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        border: Border.all(
+          color: isDark ? Colors.white.withValues(alpha: 0.12) : Colors.black.withValues(alpha: 0.08),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.5 : 0.15),
+            blurRadius: 24,
+            offset: const Offset(0, -8),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          // Drag Handle
+          const SizedBox(height: 10),
+          Center(
+            child: Container(
+              width: 38,
+              height: 4,
+              decoration: BoxDecoration(
+                color: isDark ? Colors.white24 : Colors.black26,
+                borderRadius: BorderRadius.circular(2),
+              ),
             ),
           ),
-        ),
-        Expanded(
-          child: ListView(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-            children: [
-              for (final entry in grouped.entries) ...[
-                Padding(
-                  padding: const EdgeInsets.only(top: 12, bottom: 4),
-                  child: Row(
-                    children: [
-                      Icon(_kindIcon(entry.key), size: 18, color: cs.primary),
-                      const SizedBox(width: 8),
-                      Text(_kindTitle(entry.key),
-                          style: Theme.of(context).textTheme.titleSmall),
-                      const SizedBox(width: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 6, vertical: 1),
-                        decoration: BoxDecoration(
-                          color: cs.surfaceContainerHighest,
-                          borderRadius: BorderRadius.circular(8),
+          const SizedBox(height: 12),
+          // Title & Total Badge
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 18),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF6366F1).withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(Icons.add_box_rounded, color: Color(0xFF6366F1), size: 20),
+                ),
+                const SizedBox(width: 10),
+                Text(
+                  'Add Workflow Block',
+                  style: TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.bold,
+                    color: isDark ? Colors.white : Colors.black87,
+                  ),
+                ),
+                const Spacer(),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF6366F1).withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: const Color(0xFF6366F1).withValues(alpha: 0.3)),
+                  ),
+                  child: Text(
+                    '${filteredBlocks.length} Available',
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF6366F1),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
+          // Hairline Search Field
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Container(
+              height: 42,
+              decoration: BoxDecoration(
+                color: isDark ? Colors.white.withValues(alpha: 0.05) : Colors.black.withValues(alpha: 0.04),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.06),
+                ),
+              ),
+              child: TextField(
+                controller: _searchCtrl,
+                style: TextStyle(fontSize: 13, color: isDark ? Colors.white : Colors.black87),
+                onChanged: (v) => setState(() => _searchQuery = v),
+                decoration: InputDecoration(
+                  hintText: 'Search blocks, sources, or tools...',
+                  hintStyle: TextStyle(fontSize: 13, color: isDark ? Colors.white38 : Colors.black38),
+                  prefixIcon: Icon(Icons.search_rounded, size: 18, color: isDark ? Colors.white54 : Colors.black54),
+                  suffixIcon: _searchQuery.isNotEmpty
+                      ? IconButton(
+                          icon: const Icon(Icons.clear_rounded, size: 16),
+                          onPressed: () {
+                            _searchCtrl.clear();
+                            setState(() => _searchQuery = '');
+                          },
+                        )
+                      : null,
+                  border: InputBorder.none,
+                  contentPadding: const EdgeInsets.symmetric(vertical: 11),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+          // Horizontal Category Filter Bar
+          SizedBox(
+            height: 34,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              itemCount: categories.length,
+              separatorBuilder: (_, __) => const SizedBox(width: 8),
+              itemBuilder: (ctx, idx) {
+                final cat = categories[idx];
+                final isSel = _selectedCategory == cat;
+                final title = cat == 'all' ? 'All Blocks' : _kindTitle(cat);
+                return InkWell(
+                  onTap: () {
+                    HapticFeedback.selectionClick();
+                    setState(() => _selectedCategory = cat);
+                  },
+                  borderRadius: BorderRadius.circular(10),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 180),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: isSel
+                          ? const Color(0xFF6366F1)
+                          : (isDark ? Colors.white.withValues(alpha: 0.06) : Colors.black.withValues(alpha: 0.04)),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: isSel
+                            ? const Color(0xFF6366F1)
+                            : (isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.06)),
+                      ),
+                    ),
+                    child: Text(
+                      title,
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: isSel ? FontWeight.bold : FontWeight.w500,
+                        color: isSel ? Colors.white : (isDark ? Colors.white70 : Colors.black87),
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+          const SizedBox(height: 10),
+          const Divider(height: 1),
+          // Grouped List
+          Expanded(
+            child: filteredBlocks.isEmpty
+                ? Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.search_off_rounded, size: 42, color: isDark ? Colors.white24 : Colors.black26),
+                        const SizedBox(height: 8),
+                        Text(
+                          'No matching blocks found',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: isDark ? Colors.white54 : Colors.black54,
+                          ),
                         ),
+                      ],
+                    ),
+                  )
+                : ListView(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+                    children: [
+                      for (final entry in grouped.entries) ...[
+                        Padding(
+                          padding: const EdgeInsets.only(top: 8, bottom: 8),
+                          child: Row(
+                            children: [
+                              Icon(_kindIcon(entry.key), size: 16, color: const Color(0xFF6366F1)),
+                              const SizedBox(width: 6),
+                              Text(
+                                _kindTitle(entry.key),
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                  letterSpacing: 0.4,
+                                  color: isDark ? Colors.white70 : Colors.black87,
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                                decoration: BoxDecoration(
+                                  color: isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.06),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Text(
+                                  '${entry.value.length}',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w600,
+                                    color: isDark ? Colors.white60 : Colors.black54,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        for (final b in entry.value) ...[
+                          _buildBlockPaletteCard(context, b, isDark),
+                          const SizedBox(height: 8),
+                        ],
+                      ],
+                    ],
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBlockPaletteCard(BuildContext context, Map<String, dynamic> b, bool isDark) {
+    final name = '${b['name'] ?? b['id'] ?? 'Block'}';
+    final desc = '${b['description'] ?? ''}';
+    final tools = (b['tools'] as List? ?? []).map((t) => t.toString()).toList();
+    final blockColor = _displayColor(b);
+    final iconData = _iconFor(b);
+
+    return InkWell(
+      onTap: () {
+        HapticFeedback.mediumImpact();
+        Navigator.pop(context, b);
+      },
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: isDark ? Colors.white.withValues(alpha: 0.04) : Colors.black.withValues(alpha: 0.02),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: isDark ? Colors.white.withValues(alpha: 0.07) : Colors.black.withValues(alpha: 0.06),
+          ),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Icon Container
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: blockColor.withValues(alpha: isDark ? 0.2 : 0.1),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: blockColor.withValues(alpha: 0.3)),
+              ),
+              child: Icon(iconData, color: blockColor, size: 20),
+            ),
+            const SizedBox(width: 12),
+            // Information Column
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
                         child: Text(
-                          '${entry.value.length}',
-                          style: Theme.of(context).textTheme.labelSmall,
+                          name,
+                          style: TextStyle(
+                            fontSize: 13.5,
+                            fontWeight: FontWeight.w600,
+                            color: isDark ? Colors.white : Colors.black87,
+                          ),
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF6366F1).withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: const [
+                            Icon(Icons.add_rounded, size: 12, color: Color(0xFF6366F1)),
+                            SizedBox(width: 2),
+                            Text(
+                              'Add',
+                              style: TextStyle(
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.bold,
+                                color: Color(0xFF6366F1),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ],
                   ),
-                ),
-                for (final b in entry.value)
-                  Card(
-                    margin: const EdgeInsets.only(bottom: 4),
-                    elevation: 0,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                      side: BorderSide(color: cs.outlineVariant),
-                    ),
-                    child: ListTile(
-                      leading:
-                          Icon(_iconFor(b), color: _displayColor(b), size: 22),
-                      title: Text(
-                        '${b['name'] ?? b['id']}',
-                        style: Theme.of(context).textTheme.bodyMedium,
-                        overflow: TextOverflow.ellipsis,
+                  if (desc.isNotEmpty) ...[
+                    const SizedBox(height: 3),
+                    Text(
+                      desc,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 11,
+                        height: 1.3,
+                        color: isDark ? Colors.white60 : Colors.black54,
                       ),
-                      subtitle: Text(
-                        '${b['description'] ?? ''}',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
-                      trailing: const Icon(Icons.add_circle_outline_rounded,
-                          size: 20),
-                      dense: true,
-                      onTap: () => Navigator.pop(context, b),
                     ),
-                  ),
-              ],
-            ],
-          ),
+                  ],
+                  if (tools.isNotEmpty) ...[
+                    const SizedBox(height: 6),
+                    Wrap(
+                      spacing: 4,
+                      runSpacing: 4,
+                      children: tools.take(4).map((t) {
+                        return Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: isDark ? Colors.white.withValues(alpha: 0.07) : Colors.black.withValues(alpha: 0.04),
+                            borderRadius: BorderRadius.circular(5),
+                            border: Border.all(
+                              color: isDark ? Colors.white.withValues(alpha: 0.05) : Colors.black.withValues(alpha: 0.05),
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.build_circle_outlined, size: 10, color: blockColor),
+                              const SizedBox(width: 3),
+                              Text(
+                                t,
+                                style: TextStyle(
+                                  fontSize: 9.5,
+                                  fontWeight: FontWeight.w500,
+                                  color: isDark ? Colors.white70 : Colors.black87,
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
         ),
-      ],
+      ),
     );
   }
 }
@@ -3279,18 +3974,7 @@ Set<String> _schemaRequired(Map<String, dynamic> schema) {
   }
   return const <String>{};
 }
-String _defaultPort(List<Map<String, dynamic>> blocks, String id) {
-  for (final b in blocks) {
-    if (b['step_id']?.toString() == id) {
-      final bid = b['block_id']?.toString() ?? '';
-      if (bid.contains('terminal')) return 'command';
-      if (bid.contains('approval')) return 'title';
-      if (bid.contains('prompt')) return 'variables';
-      return 'query';
-    }
-  }
-  return 'query';
-}
+
 
 String? _missingStep(Map<String, dynamic>? s) {
   final m = s?['missing_inputs'] as Map?;
@@ -3339,24 +4023,42 @@ String _preview(Map<String, dynamic> b) {
       .join('\n');
 }
 
-Color _statusColor(ColorScheme cs, String s) => switch (s) {
-      'running' => cs.primary,
+Color _statusColor(String s, bool isDark) => switch (s) {
+      'running' => const Color(0xFF6366F1),
       'completed' => const Color(0xFF22C55E),
-      'failed' => cs.error,
+      'failed' => const Color(0xFFEF4444),
       'awaiting_input' || 'awaiting_approval' => const Color(0xFFF59E0B),
-      _ => cs.onSurfaceVariant
+      _ => isDark ? Colors.white38 : Colors.black38,
     };
 IconData _iconFor(Map<String, dynamic> b) {
-  final id = b['block_id']?.toString() ?? '';
-  if (id.contains('approval')) return Icons.verified_user_rounded;
-  if (id.contains('terminal')) return Icons.terminal_rounded;
-  if (id.contains('github')) return Icons.call_merge_rounded;
-  if (id.contains('prompt') || id.contains('llm'))
-    return Icons.psychology_rounded;
-  if (id.contains('notification')) return Icons.notifications_rounded;
-  if (id.contains('rip') || id.contains('context') || id.contains('search'))
-    return Icons.search_rounded;
-  return Icons.widgets_rounded;
+  final id = (b['block_id'] ?? b['id'] ?? '')?.toString().toLowerCase() ?? '';
+  final name = (b['display_name'] ?? b['name'] ?? '')?.toString().toLowerCase() ?? '';
+  final kind = (b['kind'] ?? '')?.toString().toLowerCase() ?? '';
+  final combined = '$id $name $kind';
+
+  if (combined.contains('condition') || combined.contains('if/else')) return Icons.alt_route_rounded;
+  if (combined.contains('for_each') || combined.contains('loop')) return Icons.loop_rounded;
+  if (combined.contains('parallel') || combined.contains('fan-out')) return Icons.flash_on_rounded;
+  if (combined.contains('subworkflow')) return Icons.account_tree_rounded;
+  if (combined.contains('wait_for_signal') || combined.contains('signal')) return Icons.hourglass_bottom_rounded;
+  if (combined.contains('cron') || combined.contains('schedule')) return Icons.access_time_filled_rounded;
+  if (combined.contains('webhook')) return Icons.webhook_rounded;
+  if (combined.contains('file_watch')) return Icons.remove_red_eye_rounded;
+  if (combined.contains('transform')) return Icons.transform_rounded;
+  if (combined.contains('vector_write') || combined.contains('memory')) return Icons.memory_rounded;
+  if (combined.contains('agent')) return Icons.smart_toy_rounded;
+  if (combined.contains('approval') || combined.contains('gate')) return Icons.verified_user_rounded;
+  if (combined.contains('terminal') || combined.contains('cmd') || combined.contains('shell')) return Icons.terminal_rounded;
+  if (combined.contains('github') || combined.contains('git')) return Icons.account_tree_rounded;
+  if (combined.contains('prompt') || combined.contains('llm') || combined.contains('ai') || combined.contains('gpt')) return Icons.psychology_rounded;
+  if (combined.contains('notification') || combined.contains('slack') || combined.contains('alert')) return Icons.notifications_rounded;
+  if (combined.contains('search') || combined.contains('retrieval') || combined.contains('context') || combined.contains('rip') || combined.contains('vector')) return Icons.saved_search_rounded;
+  if (combined.contains('db') || combined.contains('database') || combined.contains('sql') || combined.contains('postgres')) return Icons.storage_rounded;
+  if (combined.contains('http') || combined.contains('api') || combined.contains('fetch')) return Icons.http_rounded;
+  if (combined.contains('code') || combined.contains('file') || combined.contains('editor')) return Icons.code_rounded;
+  if (combined.contains('docker') || combined.contains('container') || combined.contains('deploy')) return Icons.inventory_2_rounded;
+  if (combined.contains('verification') || combined.contains('check') || combined.contains('test')) return Icons.fact_check_rounded;
+  return Icons.extension_rounded;
 }
 
 String _fieldLabel(String n) => n
@@ -3366,29 +4068,161 @@ String _fieldLabel(String n) => n
     .map((w) => '${w[0].toUpperCase()}${w.substring(1)}')
     .join(' ');
 String _kindTitle(String k) => switch (k) {
+      'trigger' => 'Triggers',
       'retrieval' => 'Code Intelligence',
       'prompt' => 'AI & Prompts',
-      'tool' => 'Tools',
+      'tool' => 'Tools & Actions',
       'approval' => 'Flow Control',
       'verification' => 'Verification',
       'deployment' => 'Deployment',
       'notification' => 'Notifications',
+      'memory' => 'Memory & Vector',
       _ => 'Other'
     };
 IconData _kindIcon(String k) => switch (k) {
+      'trigger' => Icons.bolt_rounded,
       'retrieval' => Icons.search_rounded,
       'prompt' => Icons.psychology_rounded,
       'tool' => Icons.extension_rounded,
-      'approval' => Icons.verified_user_rounded,
+      'approval' => Icons.alt_route_rounded,
       'verification' => Icons.checklist_rounded,
       'deployment' => Icons.call_merge_rounded,
       'notification' => Icons.notifications_rounded,
+      'memory' => Icons.memory_rounded,
       _ => Icons.widgets_rounded
     };
 Color _displayColor(Map<String, dynamic> b) {
   final h = b['display_color']?.toString() ?? '';
-  return h.startsWith('#') && h.length == 7
-      ? Color(int.parse('FF${h.substring(1)}', radix: 16))
-      : Colors.blueGrey;
+  if (h.startsWith('#') && h.length == 7) {
+    return Color(int.parse('FF${h.substring(1)}', radix: 16));
+  }
+  final id = (b['block_id'] ?? b['id'] ?? '').toString().toLowerCase();
+  final kind = b['kind']?.toString().toLowerCase() ?? '';
+
+  if (id.contains('condition')) return const Color(0xFFF59E0B);
+  if (id.contains('for_each')) return const Color(0xFF10B981);
+  if (id.contains('parallel')) return const Color(0xFF3B82F6);
+  if (id.contains('subworkflow')) return const Color(0xFF8B5CF6);
+  if (id.contains('wait_for_signal')) return const Color(0xFFEC4899);
+  if (id.contains('trigger')) return const Color(0xFFEC4899);
+  if (id.contains('vector_write')) return const Color(0xFF6366F1);
+  if (id.contains('agent')) return const Color(0xFF6366F1);
+  if (id.contains('github')) return const Color(0xFF8B5CF6);
+  if (id.contains('terminal')) return const Color(0xFF10B981);
+  if (id.contains('approval')) return const Color(0xFFF59E0B);
+  if (id.contains('prompt') || id.contains('llm')) return const Color(0xFF6366F1);
+  if (id.contains('notification')) return const Color(0xFFEC4899);
+
+  return switch (kind) {
+    'trigger' => const Color(0xFFEC4899),
+    'retrieval' => const Color(0xFF3B82F6),
+    'prompt' => const Color(0xFF6366F1),
+    'tool' => const Color(0xFF10B981),
+    'approval' => const Color(0xFFF59E0B),
+    'verification' => const Color(0xFF14B8A6),
+    'deployment' => const Color(0xFF8B5CF6),
+    'notification' => const Color(0xFFEC4899),
+    'memory' => const Color(0xFF6366F1),
+    _ => const Color(0xFF64748B),
+  };
+}
+
+class _NewWorkflowDialog extends StatefulWidget {
+  const _NewWorkflowDialog();
+
+  @override
+  State<_NewWorkflowDialog> createState() => _NewWorkflowDialogState();
+}
+
+class _NewWorkflowDialogState extends State<_NewWorkflowDialog> {
+  late final TextEditingController _ctrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('New Workflow'),
+      content: TextField(
+        controller: _ctrl,
+        autofocus: true,
+        decoration: const InputDecoration(labelText: 'Name'),
+        textInputAction: TextInputAction.done,
+        onSubmitted: (v) => Navigator.pop(context, v),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(context, _ctrl.text),
+          child: const Text('Create'),
+        ),
+      ],
+    );
+  }
+}
+
+class _RunWorkflowDialog extends StatefulWidget {
+  const _RunWorkflowDialog({required this.initialQuery});
+  final String initialQuery;
+
+  @override
+  State<_RunWorkflowDialog> createState() => _RunWorkflowDialogState();
+}
+
+class _RunWorkflowDialogState extends State<_RunWorkflowDialog> {
+  late final TextEditingController _ctrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = TextEditingController(text: widget.initialQuery);
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Run Workflow'),
+      content: TextField(
+        controller: _ctrl,
+        autofocus: true,
+        maxLines: 3,
+        decoration: const InputDecoration(
+          hintText: 'Describe what you want...',
+          border: OutlineInputBorder(),
+        ),
+        textInputAction: TextInputAction.done,
+        onSubmitted: (v) => Navigator.pop(context, v),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(context, _ctrl.text),
+          child: const Text('Run'),
+        ),
+      ],
+    );
+  }
 }
 

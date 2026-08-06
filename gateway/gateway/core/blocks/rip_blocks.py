@@ -43,7 +43,7 @@ class RIPSearchBlock(_RIPBlock):
     config_schema = {}
 
     def describe(self) -> dict[str, Any]:
-        return {"id": self.id, "kind": self.kind.value, "name": "RIP Search", "description": "Semantic search across the codebase", "category": "RIP", "display_icon": "🔍", "display_color": "#8B5CF6", "input_schema": self.input_schema, "output_schema": self.output_schema}
+        return {"id": self.id, "kind": self.kind.value, "name": "RIP Search", "description": "Semantic search across the codebase", "category": "RIP", "display_icon": "🔍", "display_color": "#8B5CF6", "input_schema": self.input_schema, "output_schema": self.output_schema, "config_schema": self.config_schema}
 
 
 class RIPTraceBlock(_RIPBlock):
@@ -61,7 +61,7 @@ class RIPTraceBlock(_RIPBlock):
     config_schema = {}
 
     def describe(self) -> dict[str, Any]:
-        return {"id": self.id, "kind": self.kind.value, "name": "RIP Trace", "description": "Trace dependency chains", "category": "RIP", "display_icon": "📊", "display_color": "#8B5CF6", "input_schema": self.input_schema, "output_schema": self.output_schema}
+        return {"id": self.id, "kind": self.kind.value, "name": "RIP Trace", "description": "Trace dependency chains", "category": "RIP", "display_icon": "📊", "display_color": "#8B5CF6", "input_schema": self.input_schema, "output_schema": self.output_schema, "config_schema": self.config_schema}
 
 
 class RIPExplainBlock(_RIPBlock):
@@ -78,7 +78,7 @@ class RIPExplainBlock(_RIPBlock):
     config_schema = {}
 
     def describe(self) -> dict[str, Any]:
-        return {"id": self.id, "kind": self.kind.value, "name": "RIP Explain", "description": "Explain code architecture and structure", "category": "RIP", "display_icon": "💡", "display_color": "#8B5CF6", "input_schema": self.input_schema, "output_schema": self.output_schema}
+        return {"id": self.id, "kind": self.kind.value, "name": "RIP Explain", "description": "Explain code architecture and structure", "category": "RIP", "display_icon": "💡", "display_color": "#8B5CF6", "input_schema": self.input_schema, "output_schema": self.output_schema, "config_schema": self.config_schema}
 
 
 class RIPImpactBlock(_RIPBlock):
@@ -95,7 +95,7 @@ class RIPImpactBlock(_RIPBlock):
     config_schema = {}
 
     def describe(self) -> dict[str, Any]:
-        return {"id": self.id, "kind": self.kind.value, "name": "RIP Impact", "description": "Analyze impact of changes", "category": "RIP", "display_icon": "🔬", "display_color": "#8B5CF6", "input_schema": self.input_schema, "output_schema": self.output_schema}
+        return {"id": self.id, "kind": self.kind.value, "name": "RIP Impact", "description": "Analyze impact of changes", "category": "RIP", "display_icon": "🔬", "display_color": "#8B5CF6", "input_schema": self.input_schema, "output_schema": self.output_schema, "config_schema": self.config_schema}
 
 
 class RIPArchitectureBlock(_RIPBlock):
@@ -112,7 +112,7 @@ class RIPArchitectureBlock(_RIPBlock):
     config_schema = {}
 
     def describe(self) -> dict[str, Any]:
-        return {"id": self.id, "kind": self.kind.value, "name": "RIP Architecture", "description": "Generate architecture overview", "category": "RIP", "display_icon": "🏗️", "display_color": "#8B5CF6", "input_schema": self.input_schema, "output_schema": self.output_schema}
+        return {"id": self.id, "kind": self.kind.value, "name": "RIP Architecture", "description": "Generate architecture overview", "category": "RIP", "display_icon": "🏗️", "display_color": "#8B5CF6", "input_schema": self.input_schema, "output_schema": self.output_schema, "config_schema": self.config_schema}
 
 
 class RIPMetricsBlock(_RIPBlock):
@@ -129,7 +129,7 @@ class RIPMetricsBlock(_RIPBlock):
     config_schema = {}
 
     def describe(self) -> dict[str, Any]:
-        return {"id": self.id, "kind": self.kind.value, "name": "RIP Metrics", "description": "Code metrics and complexity", "category": "RIP", "display_icon": "📈", "display_color": "#8B5CF6", "input_schema": self.input_schema, "output_schema": self.output_schema}
+        return {"id": self.id, "kind": self.kind.value, "name": "RIP Metrics", "description": "Code metrics and complexity", "category": "RIP", "display_icon": "📈", "display_color": "#8B5CF6", "input_schema": self.input_schema, "output_schema": self.output_schema, "config_schema": self.config_schema}
 
 
 class RIPDeadCodeBlock(_RIPBlock):
@@ -146,7 +146,7 @@ class RIPDeadCodeBlock(_RIPBlock):
     config_schema = {}
 
     def describe(self) -> dict[str, Any]:
-        return {"id": self.id, "kind": self.kind.value, "name": "RIP Dead Code", "description": "Detect unused code", "category": "RIP", "display_icon": "💀", "display_color": "#8B5CF6", "input_schema": self.input_schema, "output_schema": self.output_schema}
+        return {"id": self.id, "kind": self.kind.value, "name": "RIP Dead Code", "description": "Detect unused code", "category": "RIP", "display_icon": "💀", "display_color": "#8B5CF6", "input_schema": self.input_schema, "output_schema": self.output_schema, "config_schema": self.config_schema}
 
 
 class RIPOnboardBlock(_RIPBlock):
@@ -163,4 +163,4 @@ class RIPOnboardBlock(_RIPBlock):
     config_schema = {}
 
     def describe(self) -> dict[str, Any]:
-        return {"id": self.id, "kind": self.kind.value, "name": "RIP Onboard", "description": "Generate onboarding guide", "category": "RIP", "display_icon": "📚", "display_color": "#8B5CF6", "input_schema": self.input_schema, "output_schema": self.output_schema}
+        return {"id": self.id, "kind": self.kind.value, "name": "RIP Onboard", "description": "Generate onboarding guide", "category": "RIP", "display_icon": "📚", "display_color": "#8B5CF6", "input_schema": self.input_schema, "output_schema": self.output_schema, "config_schema": self.config_schema}

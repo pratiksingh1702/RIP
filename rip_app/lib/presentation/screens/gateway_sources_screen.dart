@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:app_links/app_links.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -45,97 +46,228 @@ class _GatewaySourcesScreenState extends ConsumerState<GatewaySourcesScreen> {
     final activeProjectAsync = ref.watch(activeProjectProvider);
     final projectsAsync = ref.watch(projectListProvider);
 
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bgColor = isDark ? const Color(0xFF0D0D12) : const Color(0xFFF8F9FA);
+    final cardBgColor = isDark ? const Color(0xFF14141A) : Colors.white;
+    final textColor = isDark ? Colors.white : AppColors.textPrimary;
+    final mutedTextColor = isDark ? Colors.white54 : AppColors.textSecondary;
+
+    final mediaQuery = MediaQuery.of(context);
+    final topPadding = mediaQuery.padding.top;
+    final bottomPadding = mediaQuery.padding.bottom;
+
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Integrations'),
-        actions: [
-          IconButton(
-            tooltip: 'MCP Marketplace',
-            icon: const Icon(Icons.storefront_rounded, color: AppColors.primary),
-            onPressed: () {
+      extendBodyBehindAppBar: true,
+      backgroundColor: bgColor,
+      body: Stack(
+        children: [
+          // 1. SCRAWLABLE BODY CONTENT WITH REFRESH INDICATOR
+          Positioned.fill(
+            child: ColoredBox(
+              color: bgColor,
+              child: RefreshIndicator(
+                color: AppColors.primary,
+                backgroundColor: isDark ? const Color(0xFF1F1F28) : Colors.white,
+                onRefresh: () async {
+                  ref.invalidate(gatewaySourcesProvider);
+                  ref.invalidate(projectListProvider);
+                  await ref.read(gatewaySourcesProvider.future);
+                },
+                child: SingleChildScrollView(
+                  physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
+                  padding: EdgeInsets.fromLTRB(
+                    16,
+                    topPadding + 76,
+                    16,
+                    bottomPadding + 40,
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // --- ACTIVE PROJECT PANEL ---
+                      activeProjectAsync.when(
+                        data: (project) => _ProjectPanel(
+                          project: project,
+                          onAddRepo: _showAddRepo,
+                          isDark: isDark,
+                          cardBgColor: cardBgColor,
+                          textColor: textColor,
+                          mutedTextColor: mutedTextColor,
+                        ),
+                        loading: () => _LoadingPanel(isDark: isDark, cardBgColor: cardBgColor),
+                        error: (error, _) => _ErrorPanel(
+                          message: 'Projects unavailable: $error',
+                          isDark: isDark,
+                          cardBgColor: cardBgColor,
+                        ),
+                      ),
+
+                      if (_statusText != null) ...[
+                        const SizedBox(height: 12),
+                        _StatusBanner(message: _statusText!, isDark: isDark),
+                      ],
+
+                      const SizedBox(height: 20),
+
+                      // --- SECTION 1: ACCOUNT INTEGRATIONS ---
+                      _SectionLabel(
+                        title: 'ACCOUNT INTEGRATIONS',
+                        icon: Icons.vpn_key_rounded,
+                        isDark: isDark,
+                      ),
+                      const SizedBox(height: 8),
+
+                      sourcesAsync.when(
+                        data: (data) {
+                          final sources = _orderedSources(data);
+                          final accountSources = sources.where(_isAccountIntegration).toList();
+                          if (accountSources.isEmpty) {
+                            return _EmptyPanel(
+                              title: 'No account integrations',
+                              message: 'Gateway did not return GitHub, Jira, or Slack yet. Restart the server if you just updated it.',
+                              isDark: isDark,
+                              cardBgColor: cardBgColor,
+                              mutedTextColor: mutedTextColor,
+                            );
+                          }
+                          return Column(
+                            children: [
+                              for (final source in accountSources) ...[
+                                _IntegrationCard(
+                                  source: source,
+                                  busy: _busySourceId == _sourceId(source),
+                                  onConnect: () => _connectOAuth(source),
+                                  onUseToken: () => _useToken(source),
+                                  onReconnect: () => _connectOAuth(source),
+                                  onDisconnect: () => _disconnect(source),
+                                  onAllocate: () => _showAllocationSheet(source),
+                                  isDark: isDark,
+                                  cardBgColor: cardBgColor,
+                                  textColor: textColor,
+                                  mutedTextColor: mutedTextColor,
+                                ),
+                                const SizedBox(height: 10),
+                              ],
+                            ],
+                          );
+                        },
+                        loading: () => _LoadingPanel(isDark: isDark, cardBgColor: cardBgColor),
+                        error: (error, _) => _ErrorPanel(
+                          message: 'Integrations unavailable: $error',
+                          isDark: isDark,
+                          cardBgColor: cardBgColor,
+                        ),
+                      ),
+
+                      const SizedBox(height: 24),
+
+                      // --- SECTION 2: PROJECT MCP TOOLS ---
+                      _SectionLabel(
+                        title: 'PROJECT MCP TOOLS',
+                        icon: Icons.hub_rounded,
+                        isDark: isDark,
+                      ),
+                      const SizedBox(height: 8),
+
+                      projectsAsync.when(
+                        data: (projects) => _CustomToolsSection(
+                          hasProjects: projects.isNotEmpty,
+                          sourcesAsync: sourcesAsync,
+                          onAdd: _showCustomMcpSheet,
+                          onReplaceCredential: _useToken,
+                          onTest: _testCustomSource,
+                          isDark: isDark,
+                          cardBgColor: cardBgColor,
+                          textColor: textColor,
+                          mutedTextColor: mutedTextColor,
+                        ),
+                        loading: () => _LoadingPanel(isDark: isDark, cardBgColor: cardBgColor),
+                        error: (error, _) => _ErrorPanel(
+                          message: 'Projects unavailable: $error',
+                          isDark: isDark,
+                          cardBgColor: cardBgColor,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+
+          // 2. TOP FADE GRADIENT OVERLAY
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            height: topPadding + 100,
+            child: IgnorePointer(
+              child: Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      bgColor,
+                      bgColor.withValues(alpha: 0.85),
+                      bgColor.withValues(alpha: 0.0),
+                    ],
+                    stops: const [0.0, 0.6, 1.0],
+                  ),
+                ),
+              ),
+            ),
+          ),
+
+          // 3. BOTTOM FADE GRADIENT OVERLAY
+          Positioned(
+            bottom: 0,
+            left: 0,
+            right: 0,
+            height: bottomPadding + 90,
+            child: IgnorePointer(
+              child: Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.bottomCenter,
+                    end: Alignment.topCenter,
+                    colors: [
+                      bgColor,
+                      bgColor.withValues(alpha: 0.85),
+                      bgColor.withValues(alpha: 0.0),
+                    ],
+                    stops: const [0.0, 0.6, 1.0],
+                  ),
+                ),
+              ),
+            ),
+          ),
+
+          // 4. FLOATING GLASSMORPHIC HEADER BAR
+          _GatewaySourcesGlassHeader(
+            topPadding: topPadding,
+            isDark: isDark,
+            onBackTap: () {
+              HapticFeedback.selectionClick();
+              Navigator.of(context).pop();
+            },
+            onMarketplaceTap: () {
+              HapticFeedback.selectionClick();
               Navigator.of(context).push(
                 MaterialPageRoute(builder: (_) => const MCPMarketplaceScreen()),
               );
             },
-          ),
-          IconButton(
-            tooltip: 'Add custom MCP',
-            icon: const Icon(Icons.add_rounded),
-            onPressed: _showCustomMcpSheet,
+            onAddCustomTap: () {
+              HapticFeedback.selectionClick();
+              _showCustomMcpSheet();
+            },
+            onRefreshTap: () {
+              HapticFeedback.selectionClick();
+              ref.invalidate(gatewaySourcesProvider);
+              ref.invalidate(projectListProvider);
+            },
           ),
         ],
-      ),
-
-      body: RefreshIndicator(
-        onRefresh: () async {
-          ref.invalidate(gatewaySourcesProvider);
-          ref.invalidate(projectListProvider);
-          await ref.read(gatewaySourcesProvider.future);
-        },
-        child: ListView(
-          padding: const EdgeInsets.all(12),
-          children: [
-            activeProjectAsync.when(
-              data: (project) => _ProjectPanel(
-                project: project,
-                onAddRepo: _showAddRepo,
-              ),
-              loading: () => const _LoadingPanel(),
-              error: (error, _) => _ErrorPanel(message: 'Projects unavailable: $error'),
-            ),
-            if (_statusText != null) ...[
-              const SizedBox(height: 10),
-              _StatusBanner(message: _statusText!),
-            ],
-            const SizedBox(height: 12),
-            Text('Account integrations', style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 8),
-            sourcesAsync.when(
-              data: (data) {
-                final sources = _orderedSources(data);
-                final accountSources = sources.where(_isAccountIntegration).toList();
-                if (accountSources.isEmpty) {
-                  return const _EmptyPanel(
-                    title: 'No account integrations',
-                    message: 'Gateway did not return GitHub, Jira, or Slack yet. Restart the server if you just updated it.',
-                  );
-                }
-                return Column(
-                  children: [
-                    for (final source in accountSources) ...[
-                      _IntegrationCard(
-                        source: source,
-                        busy: _busySourceId == _sourceId(source),
-                        onConnect: () => _connectOAuth(source),
-                        onUseToken: () => _useToken(source),
-                        onReconnect: () => _connectOAuth(source),
-                        onDisconnect: () => _disconnect(source),
-                        onAllocate: () => _showAllocationSheet(source),
-                      ),
-                      const SizedBox(height: 8),
-                    ],
-                  ],
-                );
-              },
-              loading: () => const _LoadingPanel(),
-              error: (error, _) => _ErrorPanel(message: 'Integrations unavailable: $error'),
-            ),
-            const SizedBox(height: 14),
-            Text('Project MCP tools', style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 8),
-            projectsAsync.when(
-              data: (projects) => _CustomToolsSection(
-                hasProjects: projects.isNotEmpty,
-                sourcesAsync: sourcesAsync,
-                onAdd: _showCustomMcpSheet,
-                onReplaceCredential: _useToken,
-                onTest: _testCustomSource,
-              ),
-              loading: () => const _LoadingPanel(),
-              error: (error, _) => _ErrorPanel(message: 'Projects unavailable: $error'),
-            ),
-          ],
-        ),
       ),
     );
   }
@@ -333,42 +465,92 @@ class _GatewaySourcesScreenState extends ConsumerState<GatewaySourcesScreen> {
 }
 
 class _ProjectPanel extends StatelessWidget {
-  const _ProjectPanel({required this.project, required this.onAddRepo});
+  const _ProjectPanel({
+    required this.project,
+    required this.onAddRepo,
+    required this.isDark,
+    required this.cardBgColor,
+    required this.textColor,
+    required this.mutedTextColor,
+  });
 
   final Project? project;
   final VoidCallback onAddRepo;
+  final bool isDark;
+  final Color cardBgColor;
+  final Color textColor;
+  final Color mutedTextColor;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: _panelDecoration(),
+      padding: const EdgeInsets.all(14),
+      decoration: _panelDecoration(isDark, cardBgColor),
       child: Row(
         children: [
-          const Icon(Icons.account_tree_rounded, color: AppColors.primary),
-          const SizedBox(width: 10),
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: isDark ? const Color(0xFF22222E) : AppColors.primary.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Icon(Icons.account_tree_rounded, color: AppColors.primary, size: 22),
+          ),
+          const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   project == null ? 'No active project' : project!.projectName,
-                  style: Theme.of(context).textTheme.titleSmall,
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: textColor,
+                  ),
                 ),
-                const SizedBox(height: 2),
+                const SizedBox(height: 3),
                 Text(
                   project == null
                       ? 'Connect GitHub now, then add a repo when you want project allocation.'
                       : 'Integrations can be allocated to this project after connection.',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary),
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    color: mutedTextColor,
+                    height: 1.3,
+                  ),
                 ),
               ],
             ),
           ),
-          TextButton.icon(
-            onPressed: onAddRepo,
-            icon: const Icon(Icons.add_rounded),
-            label: const Text('Add repo'),
+          const SizedBox(width: 8),
+          InkWell(
+            onTap: () {
+              HapticFeedback.selectionClick();
+              onAddRepo();
+            },
+            borderRadius: BorderRadius.circular(10),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF22222E) : Colors.black.withValues(alpha: 0.05),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: isDark ? Colors.white.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.08),
+                ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.add_rounded, size: 16, color: textColor),
+                  const SizedBox(width: 4),
+                  Text(
+                    'Add repo',
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: textColor),
+                  ),
+                ],
+              ),
+            ),
           ),
         ],
       ),
@@ -385,6 +567,10 @@ class _IntegrationCard extends StatelessWidget {
     required this.onReconnect,
     required this.onDisconnect,
     required this.onAllocate,
+    required this.isDark,
+    required this.cardBgColor,
+    required this.textColor,
+    required this.mutedTextColor,
   });
 
   final Map<String, dynamic> source;
@@ -394,6 +580,10 @@ class _IntegrationCard extends StatelessWidget {
   final VoidCallback onReconnect;
   final VoidCallback onDisconnect;
   final VoidCallback onAllocate;
+  final bool isDark;
+  final Color cardBgColor;
+  final Color textColor;
+  final Color mutedTextColor;
 
   @override
   Widget build(BuildContext context) {
@@ -405,32 +595,51 @@ class _IntegrationCard extends StatelessWidget {
     final tools = _sourceTools(source);
 
     return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: _panelDecoration(),
+      padding: const EdgeInsets.all(14),
+      decoration: _panelDecoration(isDark, cardBgColor),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Icon(_sourceIcon(name), color: connected ? Colors.green : AppColors.primary),
-              const SizedBox(width: 10),
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: isDark ? const Color(0xFF22222E) : Colors.black.withValues(alpha: 0.04),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(
+                  _sourceIcon(name),
+                  color: connected ? const Color(0xFF4ADE80) : AppColors.primary,
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(name, style: Theme.of(context).textTheme.titleMedium),
+                    Text(
+                      name.toUpperCase(),
+                      style: TextStyle(
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.5,
+                        color: textColor,
+                      ),
+                    ),
                     const SizedBox(height: 2),
                     Text(
-                      connected ? '$account - $allocationCount project(s)' : _stateText(state),
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary),
+                      connected ? '$account • $allocationCount project(s)' : _stateText(state),
+                      style: TextStyle(fontSize: 11.5, color: mutedTextColor),
                     ),
                   ],
                 ),
               ),
               if (busy)
-                const SizedBox.square(dimension: 22, child: CircularProgressIndicator(strokeWidth: 2))
+                const SizedBox.square(dimension: 20, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary))
               else
-                _StateChip(state: state, connected: connected),
+                _StateChip(state: state, connected: connected, isDark: isDark),
             ],
           ),
           const SizedBox(height: 12),
@@ -439,38 +648,53 @@ class _IntegrationCard extends StatelessWidget {
             runSpacing: 8,
             children: [
               if (!connected) ...[
-                FilledButton.icon(
+                _GlassActionButton(
+                  icon: Icons.login_rounded,
+                  label: 'Connect',
+                  isPrimary: true,
                   onPressed: busy ? null : onConnect,
-                  icon: const Icon(Icons.login_rounded),
-                  label: const Text('Connect'),
+                  isDark: isDark,
+                  textColor: textColor,
                 ),
-                OutlinedButton.icon(
+                _GlassActionButton(
+                  icon: Icons.vpn_key_rounded,
+                  label: 'Use Token',
+                  isPrimary: false,
                   onPressed: busy ? null : onUseToken,
-                  icon: const Icon(Icons.vpn_key_rounded),
-                  label: const Text('Use token'),
+                  isDark: isDark,
+                  textColor: textColor,
                 ),
               ] else ...[
-                FilledButton.icon(
+                _GlassActionButton(
+                  icon: Icons.rule_rounded,
+                  label: 'Projects',
+                  isPrimary: true,
                   onPressed: busy ? null : onAllocate,
-                  icon: const Icon(Icons.rule_rounded),
-                  label: const Text('Projects'),
+                  isDark: isDark,
+                  textColor: textColor,
                 ),
-                OutlinedButton.icon(
+                _GlassActionButton(
+                  icon: Icons.refresh_rounded,
+                  label: 'Reconnect',
+                  isPrimary: false,
                   onPressed: busy ? null : onReconnect,
-                  icon: const Icon(Icons.refresh_rounded),
-                  label: const Text('Reconnect'),
+                  isDark: isDark,
+                  textColor: textColor,
                 ),
-                OutlinedButton.icon(
+                _GlassActionButton(
+                  icon: Icons.link_off_rounded,
+                  label: 'Disconnect',
+                  isPrimary: false,
                   onPressed: busy ? null : onDisconnect,
-                  icon: const Icon(Icons.link_off_rounded),
-                  label: const Text('Disconnect'),
+                  isDark: isDark,
+                  textColor: textColor,
                 ),
               ],
             ],
           ),
           if (tools.isNotEmpty) ...[
-            const SizedBox(height: 10),
-            _SourceToolsBlock(tools: tools),
+            const SizedBox(height: 12),
+            _SourceToolsBlock(tools: tools, isDark: isDark, textColor: textColor, mutedTextColor: mutedTextColor),
           ],
         ],
       ),
@@ -485,6 +709,10 @@ class _CustomToolsSection extends StatelessWidget {
     required this.onAdd,
     required this.onReplaceCredential,
     required this.onTest,
+    required this.isDark,
+    required this.cardBgColor,
+    required this.textColor,
+    required this.mutedTextColor,
   });
 
   final bool hasProjects;
@@ -492,13 +720,20 @@ class _CustomToolsSection extends StatelessWidget {
   final VoidCallback onAdd;
   final void Function(Map<String, dynamic> source) onReplaceCredential;
   final void Function(Map<String, dynamic> source) onTest;
+  final bool isDark;
+  final Color cardBgColor;
+  final Color textColor;
+  final Color mutedTextColor;
 
   @override
   Widget build(BuildContext context) {
     if (!hasProjects) {
-      return const _EmptyPanel(
+      return _EmptyPanel(
         title: 'No project for custom tools',
         message: 'Add repo first. Custom MCP tools are saved under the active project.',
+        isDark: isDark,
+        cardBgColor: cardBgColor,
+        mutedTextColor: mutedTextColor,
       );
     }
     return sourcesAsync.when(
@@ -509,16 +744,42 @@ class _CustomToolsSection extends StatelessWidget {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            OutlinedButton.icon(
-              onPressed: onAdd,
-              icon: const Icon(Icons.add_rounded),
-              label: const Text('Add custom MCP tool'),
+            InkWell(
+              onTap: () {
+                HapticFeedback.selectionClick();
+                onAdd();
+              },
+              borderRadius: BorderRadius.circular(14),
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                decoration: BoxDecoration(
+                  color: isDark ? const Color(0xFF14141A) : Colors.white,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                    color: isDark ? Colors.white.withValues(alpha: 0.12) : Colors.black.withValues(alpha: 0.08),
+                  ),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.add_rounded, size: 18, color: textColor),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Add custom MCP tool',
+                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: textColor),
+                    ),
+                  ],
+                ),
+              ),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 10),
             if (tools.isEmpty)
-              const _EmptyPanel(
+              _EmptyPanel(
                 title: 'No custom tools',
                 message: 'Add an MCP endpoint or stdio tool for this project.',
+                isDark: isDark,
+                cardBgColor: cardBgColor,
+                mutedTextColor: mutedTextColor,
               )
             else
               for (final source in tools) ...[
@@ -526,74 +787,129 @@ class _CustomToolsSection extends StatelessWidget {
                   source: source,
                   onReplaceCredential: () => onReplaceCredential(source),
                   onTest: () => onTest(source),
+                  isDark: isDark,
+                  cardBgColor: cardBgColor,
+                  textColor: textColor,
+                  mutedTextColor: mutedTextColor,
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 10),
               ],
           ],
         );
       },
-      loading: () => const _LoadingPanel(),
-      error: (error, _) => _ErrorPanel(message: 'Custom tools unavailable: $error'),
+      loading: () => _LoadingPanel(isDark: isDark, cardBgColor: cardBgColor),
+      error: (error, _) => _ErrorPanel(
+        message: 'Custom tools unavailable: $error',
+        isDark: isDark,
+        cardBgColor: cardBgColor,
+      ),
     );
   }
 }
-
 class _CustomToolCard extends StatelessWidget {
   const _CustomToolCard({
     required this.source,
     required this.onReplaceCredential,
     required this.onTest,
+    required this.isDark,
+    required this.cardBgColor,
+    required this.textColor,
+    required this.mutedTextColor,
   });
 
   final Map<String, dynamic> source;
   final VoidCallback onReplaceCredential;
   final VoidCallback onTest;
+  final bool isDark;
+  final Color cardBgColor;
+  final Color textColor;
+  final Color mutedTextColor;
 
   @override
   Widget build(BuildContext context) {
     final tools = _sourceTools(source);
+    final transport = '${source['transport'] ?? 'mcp'}'.toUpperCase();
+    final health = '${source['health_status'] ?? 'unknown'}';
+
     return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: _panelDecoration(),
+      padding: const EdgeInsets.all(14),
+      decoration: _panelDecoration(isDark, cardBgColor),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              const Icon(Icons.hub_rounded, color: AppColors.primary),
-              const SizedBox(width: 10),
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: isDark ? const Color(0xFF22222E) : Colors.black.withValues(alpha: 0.04),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(Icons.hub_rounded, color: AppColors.primary, size: 20),
+              ),
+              const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(_sourceName(source), style: Theme.of(context).textTheme.titleSmall),
                     Text(
-                      '${source['transport'] ?? 'mcp'} - ${source['health_status'] ?? 'unknown'}',
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary),
+                      _sourceName(source).toUpperCase(),
+                      style: TextStyle(
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.5,
+                        color: textColor,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '$transport • $health',
+                      style: TextStyle(fontSize: 11.5, color: mutedTextColor),
                     ),
                   ],
                 ),
               ),
-              IconButton(
-                tooltip: 'Credential',
-                onPressed: onReplaceCredential,
-                icon: const Icon(Icons.vpn_key_rounded),
+              InkWell(
+                onTap: () {
+                  HapticFeedback.selectionClick();
+                  onReplaceCredential();
+                },
+                borderRadius: BorderRadius.circular(8),
+                child: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: isDark ? const Color(0xFF22222E) : Colors.black.withValues(alpha: 0.05),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(Icons.vpn_key_rounded, size: 16, color: textColor),
+                ),
               ),
-              IconButton(
-                tooltip: 'Test',
-                onPressed: onTest,
-                icon: const Icon(Icons.cable_rounded),
+              const SizedBox(width: 6),
+              InkWell(
+                onTap: () {
+                  HapticFeedback.selectionClick();
+                  onTest();
+                },
+                borderRadius: BorderRadius.circular(8),
+                child: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: isDark ? const Color(0xFF22222E) : Colors.black.withValues(alpha: 0.05),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(Icons.cable_rounded, size: 16, color: textColor),
+                ),
               ),
             ],
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 12),
           if (tools.isEmpty)
             Text(
               'Tap Test to discover the tools this server actually offers.',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary),
+              style: TextStyle(fontSize: 12, color: mutedTextColor, fontStyle: FontStyle.italic),
             )
           else
-            _SourceToolsBlock(tools: tools),
+            _SourceToolsBlock(tools: tools, isDark: isDark, textColor: textColor, mutedTextColor: mutedTextColor),
         ],
       ),
     );
@@ -601,9 +917,17 @@ class _CustomToolCard extends StatelessWidget {
 }
 
 class _SourceToolsBlock extends StatelessWidget {
-  const _SourceToolsBlock({required this.tools});
+  const _SourceToolsBlock({
+    required this.tools,
+    required this.isDark,
+    required this.textColor,
+    required this.mutedTextColor,
+  });
 
   final List<Map<String, dynamic>> tools;
+  final bool isDark;
+  final Color textColor;
+  final Color mutedTextColor;
 
   @override
   Widget build(BuildContext context) {
@@ -611,15 +935,20 @@ class _SourceToolsBlock extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Tools offered by this server',
-          style: Theme.of(context).textTheme.labelMedium?.copyWith(color: AppColors.textSecondary),
+          'AVAILABLE TOOLS (${tools.length})',
+          style: TextStyle(
+            fontSize: 10.5,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.8,
+            color: mutedTextColor,
+          ),
         ),
-        const SizedBox(height: 6),
+        const SizedBox(height: 8),
         Wrap(
           spacing: 6,
           runSpacing: 6,
           children: [
-            for (final tool in tools) _SourceToolChip(tool: tool),
+            for (final tool in tools) _SourceToolChip(tool: tool, isDark: isDark, textColor: textColor),
           ],
         ),
       ],
@@ -628,9 +957,15 @@ class _SourceToolsBlock extends StatelessWidget {
 }
 
 class _SourceToolChip extends StatelessWidget {
-  const _SourceToolChip({required this.tool});
+  const _SourceToolChip({
+    required this.tool,
+    required this.isDark,
+    required this.textColor,
+  });
 
   final Map<String, dynamic> tool;
+  final bool isDark;
+  final Color textColor;
 
   @override
   Widget build(BuildContext context) {
@@ -638,15 +973,33 @@ class _SourceToolChip extends StatelessWidget {
     final description = '${tool['description'] ?? ''}'.trim();
     return Tooltip(
       message: description.isEmpty ? name : description,
-      child: Chip(
-        visualDensity: VisualDensity.compact,
-        avatar: const Icon(Icons.build_circle_outlined, size: 16),
-        label: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 180),
-          child: Text(
-            name.isEmpty ? 'tool' : name,
-            overflow: TextOverflow.ellipsis,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        decoration: BoxDecoration(
+          color: isDark ? const Color(0xFF22222E) : Colors.black.withValues(alpha: 0.05),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: isDark ? Colors.white.withValues(alpha: 0.06) : Colors.black.withValues(alpha: 0.04),
           ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.build_circle_outlined,
+              size: 14,
+              color: isDark ? Colors.white70 : AppColors.primary,
+            ),
+            const SizedBox(width: 6),
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 160),
+              child: Text(
+                name.isEmpty ? 'tool' : name,
+                style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w500, color: textColor),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -702,6 +1055,10 @@ class _AllocationSheetState extends State<_AllocationSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final cardBgColor = isDark ? const Color(0xFF14141A) : Colors.white;
+    final mutedTextColor = isDark ? Colors.white54 : AppColors.textSecondary;
+
     return SafeArea(
       child: Padding(
         padding: EdgeInsets.only(
@@ -728,7 +1085,13 @@ class _AllocationSheetState extends State<_AllocationSheet> {
                 if (snapshot.connectionState == ConnectionState.waiting)
                   const Center(child: CircularProgressIndicator())
                 else if (projects.isEmpty)
-                  const _EmptyPanel(title: 'No projects yet', message: 'Use Add repo in the drawer to create one.')
+                  _EmptyPanel(
+                    title: 'No projects yet',
+                    message: 'Use Add repo in the drawer to create one.',
+                    isDark: isDark,
+                    cardBgColor: cardBgColor,
+                    mutedTextColor: mutedTextColor,
+                  )
                 else
                   Flexible(
                     child: ListView(
@@ -775,7 +1138,7 @@ class _AllocationSheetState extends State<_AllocationSheet> {
                 ),
                 if (_error != null) ...[
                   const SizedBox(height: 10),
-                  _StatusBanner(message: _error!),
+                  _StatusBanner(message: _error!, isDark: isDark),
                 ],
               ],
             );
@@ -841,6 +1204,10 @@ class _CustomMcpSheetState extends State<_CustomMcpSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final cardBgColor = isDark ? const Color(0xFF14141A) : Colors.white;
+    final mutedTextColor = isDark ? Colors.white54 : AppColors.textSecondary;
+
     return SafeArea(
       child: Padding(
         padding: EdgeInsets.only(
@@ -857,9 +1224,12 @@ class _CustomMcpSheetState extends State<_CustomMcpSheet> {
               Text('Add custom MCP tool', style: Theme.of(context).textTheme.titleLarge),
               const SizedBox(height: 8),
               if (widget.project == null)
-                const _EmptyPanel(
+                _EmptyPanel(
                   title: 'Select a project first',
                   message: 'Custom MCP tools are stored under the active project. Use Add repo if you have none.',
+                  isDark: isDark,
+                  cardBgColor: cardBgColor,
+                  mutedTextColor: mutedTextColor,
                 )
               else ...[
                 TextField(controller: _name, decoration: const InputDecoration(labelText: 'Name')),
@@ -867,7 +1237,7 @@ class _CustomMcpSheetState extends State<_CustomMcpSheet> {
                 TextField(controller: _endpoint, decoration: const InputDecoration(labelText: 'MCP endpoint URL')),
                 const SizedBox(height: 10),
                 DropdownButtonFormField<String>(
-                  value: _authType,
+                  initialValue: _authType,
                   decoration: const InputDecoration(labelText: 'Auth type'),
                   items: const [
                     DropdownMenuItem(value: 'bearer', child: Text('Bearer token')),
@@ -900,7 +1270,7 @@ class _CustomMcpSheetState extends State<_CustomMcpSheet> {
                 ),
                 if (_status != null) ...[
                   const SizedBox(height: 10),
-                  _StatusBanner(message: _status!),
+                  _StatusBanner(message: _status!, isDark: isDark),
                 ],
               ],
             ],
@@ -937,100 +1307,437 @@ class _CustomMcpSheetState extends State<_CustomMcpSheet> {
   }
 }
 
-class _StateChip extends StatelessWidget {
-  const _StateChip({required this.state, required this.connected});
-
-  final String state;
-  final bool connected;
-
-  @override
-  Widget build(BuildContext context) {
-    return Chip(
-      visualDensity: VisualDensity.compact,
-      avatar: Icon(
-        connected ? Icons.check_circle_rounded : Icons.info_outline_rounded,
-        size: 16,
-        color: connected ? Colors.green : AppColors.primary,
-      ),
-      label: Text(connected ? 'Connected' : 'Connect'),
-    );
-  }
-}
-
 class _StatusBanner extends StatelessWidget {
-  const _StatusBanner({required this.message});
+  const _StatusBanner({required this.message, required this.isDark});
 
   final String message;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        color: AppColors.primary.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppColors.primary.withValues(alpha: 0.18)),
-      ),
-      child: Text(message, style: Theme.of(context).textTheme.bodySmall),
-    );
-  }
-}
-
-class _LoadingPanel extends StatelessWidget {
-  const _LoadingPanel();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: _panelDecoration(),
-      child: const Center(child: CircularProgressIndicator()),
-    );
-  }
-}
-
-class _ErrorPanel extends StatelessWidget {
-  const _ErrorPanel({required this.message});
-
-  final String message;
-
-  @override
-  Widget build(BuildContext context) {
-    return _EmptyPanel(title: 'Unavailable', message: message);
-  }
-}
-
-class _EmptyPanel extends StatelessWidget {
-  const _EmptyPanel({required this.title, required this.message});
-
-  final String title;
-  final String message;
+  final bool isDark;
 
   @override
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(12),
-      decoration: _panelDecoration(),
+      decoration: BoxDecoration(
+        color: AppColors.primary.withValues(alpha: isDark ? 0.12 : 0.08),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.primary.withValues(alpha: 0.25)),
+      ),
+      child: Text(
+        message,
+        style: TextStyle(fontSize: 12, color: isDark ? Colors.white70 : AppColors.textSecondary),
+      ),
+    );
+  }
+}
+
+class _LoadingPanel extends StatelessWidget {
+  const _LoadingPanel({required this.isDark, required this.cardBgColor});
+
+  final bool isDark;
+  final Color cardBgColor;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(28),
+      decoration: _panelDecoration(isDark, cardBgColor),
+      child: const Center(child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary)),
+    );
+  }
+}
+
+class _ErrorPanel extends StatelessWidget {
+  const _ErrorPanel({required this.message, required this.isDark, required this.cardBgColor});
+
+  final String message;
+  final bool isDark;
+  final Color cardBgColor;
+
+  @override
+  Widget build(BuildContext context) {
+    return _EmptyPanel(
+      title: 'Unavailable',
+      message: message,
+      isDark: isDark,
+      cardBgColor: cardBgColor,
+      mutedTextColor: Colors.redAccent,
+    );
+  }
+}
+
+class _EmptyPanel extends StatelessWidget {
+  const _EmptyPanel({
+    required this.title,
+    required this.message,
+    required this.isDark,
+    required this.cardBgColor,
+    required this.mutedTextColor,
+  });
+
+  final String title;
+  final String message;
+  final bool isDark;
+  final Color cardBgColor;
+  final Color mutedTextColor;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: _panelDecoration(isDark, cardBgColor),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(title, style: Theme.of(context).textTheme.titleSmall),
+          Text(
+            title,
+            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: isDark ? Colors.white : Colors.black87),
+          ),
           const SizedBox(height: 4),
-          Text(message, style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.textSecondary)),
+          Text(message, style: TextStyle(fontSize: 12, color: mutedTextColor)),
         ],
       ),
     );
   }
 }
 
-BoxDecoration _panelDecoration() {
-  return BoxDecoration(
-    color: AppColors.surface,
-    borderRadius: BorderRadius.circular(8),
-    border: Border.all(color: AppColors.primary.withValues(alpha: 0.16)),
-  );
+class _GlassActionButton extends StatelessWidget {
+  const _GlassActionButton({
+    required this.icon,
+    required this.label,
+    required this.isPrimary,
+    required this.onPressed,
+    required this.isDark,
+    required this.textColor,
+  });
+
+  final IconData icon;
+  final String label;
+  final bool isPrimary;
+  final VoidCallback? onPressed;
+  final bool isDark;
+  final Color textColor;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onPressed != null
+          ? () {
+              HapticFeedback.selectionClick();
+              onPressed!();
+            }
+          : null,
+      borderRadius: BorderRadius.circular(10),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+        decoration: BoxDecoration(
+          color: isPrimary
+              ? (isDark ? const Color(0xFF22222E) : Colors.black.withValues(alpha: 0.06))
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: isDark ? Colors.white.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.08),
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 14, color: isPrimary ? AppColors.primary : textColor),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: isPrimary ? FontWeight.w600 : FontWeight.w500,
+                color: textColor,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _StateChip extends StatelessWidget {
+  const _StateChip({
+    required this.state,
+    required this.connected,
+    required this.isDark,
+  });
+
+  final String state;
+  final bool connected;
+  final bool isDark;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = connected ? const Color(0xFF4ADE80) : AppColors.primary;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: isDark ? 0.15 : 0.1),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
+      ),
+      child: Text(
+        connected ? 'ACTIVE' : 'DISCONNECTED',
+        style: TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 0.6,
+          color: color,
+        ),
+      ),
+    );
+  }
+}
+
+class _SectionLabel extends StatelessWidget {
+  const _SectionLabel({
+    required this.title,
+    required this.icon,
+    required this.isDark,
+  });
+
+  final String title;
+  final IconData icon;
+  final bool isDark;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Icon(icon, size: 14, color: isDark ? Colors.white54 : AppColors.textSecondary),
+        const SizedBox(width: 6),
+        Text(
+          title,
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.8,
+            color: isDark ? Colors.white54 : AppColors.textSecondary,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _GatewaySourcesGlassHeader extends StatelessWidget {
+  const _GatewaySourcesGlassHeader({
+    required this.topPadding,
+    required this.isDark,
+    required this.onBackTap,
+    required this.onMarketplaceTap,
+    required this.onAddCustomTap,
+    required this.onRefreshTap,
+  });
+
+  final double topPadding;
+  final bool isDark;
+  final VoidCallback onBackTap;
+  final VoidCallback onMarketplaceTap;
+  final VoidCallback onAddCustomTap;
+  final VoidCallback onRefreshTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Positioned(
+      top: topPadding + 8,
+      left: 16,
+      right: 16,
+      child: Row(
+        children: [
+          // 1. BACK ARROW GLASS PILL
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: isDark
+                  ? const Color(0xFF14141A).withValues(alpha: 0.8)
+                  : Colors.white.withValues(alpha: 0.85),
+              shape: BoxShape.circle,
+              border: Border.all(
+                color: isDark ? Colors.white.withValues(alpha: 0.12) : Colors.black.withValues(alpha: 0.08),
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.08),
+                  blurRadius: 16,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: onBackTap,
+                customBorder: const CircleBorder(),
+                child: Icon(
+                  Icons.arrow_back_rounded,
+                  size: 20,
+                  color: isDark ? Colors.white : AppColors.textPrimary,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+
+          // 2. TITLE GLASS PILL
+          Expanded(
+            child: Container(
+              height: 44,
+              padding: const EdgeInsets.symmetric(horizontal: 14),
+              decoration: BoxDecoration(
+                color: isDark
+                    ? const Color(0xFF14141A).withValues(alpha: 0.8)
+                    : Colors.white.withValues(alpha: 0.85),
+                borderRadius: BorderRadius.circular(22),
+                border: Border.all(
+                  color: isDark ? Colors.white.withValues(alpha: 0.12) : Colors.black.withValues(alpha: 0.08),
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.08),
+                    blurRadius: 16,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.hub_rounded,
+                    size: 18,
+                    color: isDark ? Colors.white70 : AppColors.textPrimary,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Gateway Sources',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: isDark ? Colors.white : AppColors.textPrimary,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+
+          // 3. MCP MARKETPLACE GLASS PILL
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: isDark
+                  ? const Color(0xFF14141A).withValues(alpha: 0.8)
+                  : Colors.white.withValues(alpha: 0.85),
+              shape: BoxShape.circle,
+              border: Border.all(
+                color: isDark ? Colors.white.withValues(alpha: 0.12) : Colors.black.withValues(alpha: 0.08),
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.08),
+                  blurRadius: 16,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: onMarketplaceTap,
+                customBorder: const CircleBorder(),
+                child: const Icon(
+                  Icons.storefront_rounded,
+                  size: 20,
+                  color: AppColors.primary,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 6),
+
+          // 4. ADD CUSTOM MCP GLASS PILL
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: isDark
+                  ? const Color(0xFF14141A).withValues(alpha: 0.8)
+                  : Colors.white.withValues(alpha: 0.85),
+              shape: BoxShape.circle,
+              border: Border.all(
+                color: isDark ? Colors.white.withValues(alpha: 0.12) : Colors.black.withValues(alpha: 0.08),
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.08),
+                  blurRadius: 16,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: onAddCustomTap,
+                customBorder: const CircleBorder(),
+                child: Icon(
+                  Icons.add_rounded,
+                  size: 20,
+                  color: isDark ? Colors.white : AppColors.textPrimary,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 6),
+
+          // 5. REFRESH GLASS PILL
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: isDark
+                  ? const Color(0xFF14141A).withValues(alpha: 0.8)
+                  : Colors.white.withValues(alpha: 0.85),
+              shape: BoxShape.circle,
+              border: Border.all(
+                color: isDark ? Colors.white.withValues(alpha: 0.12) : Colors.black.withValues(alpha: 0.08),
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.08),
+                  blurRadius: 16,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: onRefreshTap,
+                customBorder: const CircleBorder(),
+                child: Icon(
+                  Icons.refresh_rounded,
+                  size: 18,
+                  color: isDark ? Colors.white : AppColors.textPrimary,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 List<Map<String, dynamic>> _orderedSources(Map<String, dynamic> data) {
@@ -1117,4 +1824,21 @@ IconData _sourceIcon(String name) {
     default:
       return Icons.hub_rounded;
   }
+}
+
+BoxDecoration _panelDecoration(bool isDark, Color cardBgColor) {
+  return BoxDecoration(
+    color: cardBgColor,
+    borderRadius: BorderRadius.circular(16),
+    border: Border.all(
+      color: isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.06),
+    ),
+    boxShadow: [
+      BoxShadow(
+        color: Colors.black.withValues(alpha: isDark ? 0.25 : 0.04),
+        blurRadius: 12,
+        offset: const Offset(0, 4),
+      ),
+    ],
+  );
 }

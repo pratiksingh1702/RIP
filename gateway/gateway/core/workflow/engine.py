@@ -1,4 +1,4 @@
-﻿"""Workflow engine implementation."""
+"""Workflow engine implementation."""
 
 from __future__ import annotations
 
@@ -517,6 +517,43 @@ class WorkflowEngine:
             asyncio.create_task(self._execute_run(run.id, None, None))
             return run.state
 
+    async def signal_run(
+        self,
+        run_id: UUIDType,
+        signal_name: str,
+        payload: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Post an external signal to resume a run waiting on flow.wait_for_signal."""
+        async with async_session_factory() as session:
+            run = await session.get(WorkflowRun, run_id)
+            if not run:
+                raise ValueError("Run not found")
+
+            state = RunState.from_dict(run.state)
+            signal_step = None
+            for step_id, step_state in state.step_states.items():
+                if step_state.block_id == "flow.wait_for_signal" and step_state.status in ("awaiting_input", "pending"):
+                    signal_step = step_state
+                    break
+
+            if signal_step is not None:
+                signal_step.status = "completed"
+                signal_step.output = {
+                    "signal_name": signal_name,
+                    "signal_received": True,
+                    "payload": payload or {},
+                }
+                signal_step.completed_at = datetime.now(UTC).isoformat()
+
+            state.status = "running"
+            run.status = "running"
+            run.state = state.to_dict()
+            await session.commit()
+
+            import asyncio
+            asyncio.create_task(self._execute_run(run.id, None, None))
+            return run.state
+
     async def _execute_run(
         self,
         run_id: UUIDType,
@@ -579,15 +616,15 @@ class WorkflowEngine:
                     run.state = state.to_dict()
                     await session.commit()
 
-                    if step_state.block_id == "workflow.approval":
-                        step_state.status = "awaiting_approval"
+                    if step_state.block_id in ("workflow.approval", "flow.wait_for_signal"):
+                        step_state.status = "awaiting_approval" if step_state.block_id == "workflow.approval" else "awaiting_input"
                         step_state.inputs = dict(block.get("input_bindings", {}))
-                        state.status = "awaiting_approval"
-                        run.status = "awaiting_approval"
+                        state.status = step_state.status
+                        run.status = step_state.status
                         run.state = state.to_dict()
                         await session.commit()
                         await self.event_bus.publish(
-                            "approval_required",
+                            "approval_required" if step_state.block_id == "workflow.approval" else "signal_required",
                             workflow_run_id=str(run_id),
                             payload={"step_id": step_id, "block_id": step_state.block_id},
                         )
@@ -620,13 +657,43 @@ class WorkflowEngine:
                             project_id=project_id,
                             user_id=user_id,
                         )
-                        result = await block_instance.run(ctx, inputs, block_config)
-                        if result.ok:
+                        
+                        # Handle step retry policy if specified
+                        retry_policy = block.get("retry_policy", {})
+                        max_attempts = int(retry_policy.get("max_attempts", 1))
+                        backoff_ms = int(retry_policy.get("backoff_ms", 1000))
+                        backoff_mult = float(retry_policy.get("backoff_multiplier", 1.5))
+                        
+                        attempts = 0
+                        result = None
+                        start_time = datetime.now(UTC)
+                        
+                        while attempts < max_attempts:
+                            attempts += 1
+                            result = await block_instance.run(ctx, inputs, block_config)
+                            if result.ok:
+                                break
+                            if attempts < max_attempts:
+                                await asyncio.sleep((backoff_ms / 1000.0) * (backoff_mult ** (attempts - 1)))
+                        
+                        end_time = datetime.now(UTC)
+                        dur_ms = int((end_time - start_time).total_seconds() * 1000)
+
+                        if result and result.ok:
                             step_state.status = "completed"
                             step_state.output = result.output
+                            step_state.tokens_used = getattr(result, "tokens_used", 0)
+                            step_state.cost_usd = getattr(result, "cost_usd", 0.0)
+                            step_state.duration_ms = dur_ms
+                            step_state.selected_branch = getattr(result, "selected_branch", None)
+                            
+                            # Aggregate total run metrics
+                            state.total_tokens_used += step_state.tokens_used
+                            state.total_cost_usd += step_state.cost_usd
+                            state.total_duration_ms += step_state.duration_ms
                         else:
                             step_state.status = "failed"
-                            step_state.error = result.error
+                            step_state.error = result.error if result else "Execution failed"
                     else:
                         step_state.status = "failed"
                         step_state.error = (

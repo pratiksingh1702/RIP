@@ -1,4 +1,4 @@
-﻿"""Workflow run state management."""
+"""Workflow run state management."""
 
 from __future__ import annotations
 
@@ -16,6 +16,10 @@ class StepState:
     error: str | None = None
     started_at: str | None = None
     completed_at: str | None = None
+    tokens_used: int = 0
+    cost_usd: float = 0.0
+    duration_ms: int = 0
+    selected_branch: str | None = None
 
 
 @dataclass
@@ -27,6 +31,9 @@ class RunState:
     final_output: dict[str, Any] | None = None
     error: str | None = None
     status: str = "pending"
+    total_tokens_used: int = 0
+    total_cost_usd: float = 0.0
+    total_duration_ms: int = 0
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -40,6 +47,10 @@ class RunState:
                     "error": step.error,
                     "started_at": step.started_at,
                     "completed_at": step.completed_at,
+                    "tokens_used": step.tokens_used,
+                    "cost_usd": step.cost_usd,
+                    "duration_ms": step.duration_ms,
+                    "selected_branch": step.selected_branch,
                 }
                 for step_id, step in self.step_states.items()
             },
@@ -49,6 +60,9 @@ class RunState:
             "final_output": self.final_output,
             "error": self.error,
             "status": self.status,
+            "total_tokens_used": self.total_tokens_used,
+            "total_cost_usd": self.total_cost_usd,
+            "total_duration_ms": self.total_duration_ms,
         }
 
     @classmethod
@@ -64,6 +78,10 @@ class RunState:
                 error=step_data.get("error"),
                 started_at=step_data.get("started_at"),
                 completed_at=step_data.get("completed_at"),
+                tokens_used=int(step_data.get("tokens_used", 0)),
+                cost_usd=float(step_data.get("cost_usd", 0.0)),
+                duration_ms=int(step_data.get("duration_ms", 0)),
+                selected_branch=step_data.get("selected_branch"),
             )
         return cls(
             step_states=step_states,
@@ -73,4 +91,7 @@ class RunState:
             final_output=data.get("final_output"),
             error=data.get("error"),
             status=data.get("status", "pending"),
+            total_tokens_used=int(data.get("total_tokens_used", 0)),
+            total_cost_usd=float(data.get("cost_usd", data.get("total_cost_usd", 0.0))),
+            total_duration_ms=int(data.get("total_duration_ms", 0)),
         )

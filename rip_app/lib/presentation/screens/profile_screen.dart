@@ -157,7 +157,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   controller: controller,
                   style: TextStyle(color: isDark ? Colors.white : Colors.black87),
                   decoration: InputDecoration(
-                    hintText: 'http://192.168.31.113:8000',
+                    hintText: 'http://192.168.1.70:8000',
                     hintStyle: TextStyle(color: isDark ? Colors.white38 : Colors.black38),
                     filled: true,
                     fillColor: isDark ? Colors.white10 : Colors.black.withValues(alpha: 0.05),
@@ -900,7 +900,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       _ActionListTile(
                         iconWidget: Icon(Icons.phonelink_setup_rounded, size: 18, color: isDark ? Colors.white70 : Colors.black87),
                         title: 'Mobile Session',
-                        subtitle: 'Android 14 • IP: 192.168.31.113',
+                        subtitle: 'Android 14 • IP: 192.168.1.70',
                         metaText: 'Active now',
                         isDark: isDark,
                         onTap: () {},

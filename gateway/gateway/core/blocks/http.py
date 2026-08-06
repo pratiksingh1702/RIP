@@ -65,7 +65,7 @@ class HTTPGetBlock(Block):
             return BlockResult(ok=False, error=str(e))
 
     def describe(self) -> dict[str, Any]:
-        return {"id": self.id, "kind": self.kind.value, "name": "HTTP GET", "description": "Make a GET request", "category": "HTTP", "display_icon": "🌐", "display_color": "#0EA5E9", "input_schema": self.input_schema, "output_schema": self.output_schema}
+        return {"id": self.id, "kind": self.kind.value, "name": "HTTP GET", "description": "Make a GET request", "category": "HTTP", "display_icon": "🌐", "display_color": "#0EA5E9", "input_schema": self.input_schema, "output_schema": self.output_schema, "config_schema": self.config_schema}
 
 
 class HTTPPostBlock(Block):
@@ -125,7 +125,7 @@ class HTTPPostBlock(Block):
             return BlockResult(ok=False, error=str(e))
 
     def describe(self) -> dict[str, Any]:
-        return {"id": self.id, "kind": self.kind.value, "name": "HTTP POST", "description": "Make a POST request with JSON body", "category": "HTTP", "display_icon": "📤", "display_color": "#0EA5E9", "input_schema": self.input_schema, "output_schema": self.output_schema}
+        return {"id": self.id, "kind": self.kind.value, "name": "HTTP POST", "description": "Make a POST request with JSON body", "category": "HTTP", "display_icon": "📤", "display_color": "#0EA5E9", "input_schema": self.input_schema, "output_schema": self.output_schema, "config_schema": self.config_schema}
 
 
 class HTTPPutBlock(Block):
@@ -170,7 +170,7 @@ class HTTPPutBlock(Block):
             return BlockResult(ok=False, error=str(e))
 
     def describe(self) -> dict[str, Any]:
-        return {"id": self.id, "kind": self.kind.value, "name": "HTTP PUT", "description": "Make a PUT request", "category": "HTTP", "display_icon": "📤", "display_color": "#0EA5E9", "input_schema": self.input_schema, "output_schema": self.output_schema}
+        return {"id": self.id, "kind": self.kind.value, "name": "HTTP PUT", "description": "Make a PUT request", "category": "HTTP", "display_icon": "📤", "display_color": "#0EA5E9", "input_schema": self.input_schema, "output_schema": self.output_schema, "config_schema": self.config_schema}
 
 
 class HTTPDeleteBlock(Block):
@@ -211,4 +211,4 @@ class HTTPDeleteBlock(Block):
             return BlockResult(ok=False, error=str(e))
 
     def describe(self) -> dict[str, Any]:
-        return {"id": self.id, "kind": self.kind.value, "name": "HTTP DELETE", "description": "Make a DELETE request", "category": "HTTP", "display_icon": "🗑️", "display_color": "#0EA5E9", "input_schema": self.input_schema, "output_schema": self.output_schema}
+        return {"id": self.id, "kind": self.kind.value, "name": "HTTP DELETE", "description": "Make a DELETE request", "category": "HTTP", "display_icon": "🗑️", "display_color": "#0EA5E9", "input_schema": self.input_schema, "output_schema": self.output_schema, "config_schema": self.config_schema}

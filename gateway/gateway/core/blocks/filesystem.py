@@ -90,7 +90,7 @@ class FSReadFileBlock(Block):
             return BlockResult(ok=False, error=str(e))
 
     def describe(self) -> dict[str, Any]:
-        return {"id": self.id, "kind": self.kind.value, "name": "Read File", "description": "Read contents of a file", "category": "Filesystem", "display_icon": "📄", "display_color": "#6366F1", "input_schema": self.input_schema, "output_schema": self.output_schema}
+        return {"id": self.id, "kind": self.kind.value, "name": "Read File", "description": "Read contents of a file", "category": "Filesystem", "display_icon": "📄", "display_color": "#6366F1", "input_schema": self.input_schema, "output_schema": self.output_schema, "config_schema": self.config_schema}
 
 
 class FSWriteFileBlock(Block):
@@ -157,7 +157,7 @@ class FSWriteFileBlock(Block):
             return BlockResult(ok=False, error=str(e))
 
     def describe(self) -> dict[str, Any]:
-        return {"id": self.id, "kind": self.kind.value, "name": "Write File", "description": "Write content to a file", "category": "Filesystem", "display_icon": "✏️", "display_color": "#6366F1", "input_schema": self.input_schema, "output_schema": self.output_schema}
+        return {"id": self.id, "kind": self.kind.value, "name": "Write File", "description": "Write content to a file", "category": "Filesystem", "display_icon": "✏️", "display_color": "#6366F1", "input_schema": self.input_schema, "output_schema": self.output_schema, "config_schema": self.config_schema}
 
 
 class FSListDirectoryBlock(Block):
@@ -213,7 +213,7 @@ class FSListDirectoryBlock(Block):
             return BlockResult(ok=False, error=str(e))
 
     def describe(self) -> dict[str, Any]:
-        return {"id": self.id, "kind": self.kind.value, "name": "List Directory", "description": "List files in a directory", "category": "Filesystem", "display_icon": "📁", "display_color": "#6366F1", "input_schema": self.input_schema, "output_schema": self.output_schema}
+        return {"id": self.id, "kind": self.kind.value, "name": "List Directory", "description": "List files in a directory", "category": "Filesystem", "display_icon": "📁", "display_color": "#6366F1", "input_schema": self.input_schema, "output_schema": self.output_schema, "config_schema": self.config_schema}
 
 
 class FSSearchFilesBlock(Block):
@@ -264,4 +264,4 @@ class FSSearchFilesBlock(Block):
             return BlockResult(ok=False, error=str(e))
 
     def describe(self) -> dict[str, Any]:
-        return {"id": self.id, "kind": self.kind.value, "name": "Search Files", "description": "Find files by pattern", "category": "Filesystem", "display_icon": "🔍", "display_color": "#6366F1", "input_schema": self.input_schema, "output_schema": self.output_schema}
+        return {"id": self.id, "kind": self.kind.value, "name": "Search Files", "description": "Find files by pattern", "category": "Filesystem", "display_icon": "🔍", "display_color": "#6366F1", "input_schema": self.input_schema, "output_schema": self.output_schema, "config_schema": self.config_schema}

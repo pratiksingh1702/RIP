@@ -1,4 +1,4 @@
-﻿"""Prompt ask AI block."""
+"""Prompt ask AI block."""
 
 from __future__ import annotations
 
@@ -133,4 +133,5 @@ class ApprovalBlock(Block):
             "description": "Requires manual approval before continuing",
             "input_schema": self.input_schema,
             "output_schema": self.output_schema,
+            "config_schema": self.config_schema,
         }

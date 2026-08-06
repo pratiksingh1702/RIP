@@ -36,6 +36,10 @@ class BlockResult:
     output: dict[str, Any] | None = None
     error: str | None = None
     events: list[dict[str, Any]] | None = None
+    tokens_used: int = 0
+    cost_usd: float = 0.0
+    duration_ms: int = 0
+    selected_branch: str | None = None
 
 
 class Block(Protocol):

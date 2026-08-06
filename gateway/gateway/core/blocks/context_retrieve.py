@@ -1,4 +1,4 @@
-﻿"""Context retrieve block."""
+"""Context retrieve block."""
 
 from __future__ import annotations
 
@@ -78,4 +78,5 @@ class ContextRetrieveBlock(Block):
             "description": "Retrieves context using the existing Gateway pipeline",
             "input_schema": self.input_schema,
             "output_schema": self.output_schema,
+            "config_schema": self.config_schema,
         }

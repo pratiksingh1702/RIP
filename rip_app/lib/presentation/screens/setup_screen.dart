@@ -275,12 +275,33 @@ class _SetupScreenState extends ConsumerState<SetupScreen> {
                     ),
                     const SizedBox(height: 28),
 
-                    // Server URL Input
                     RipTextField(
                       label: 'Server URL',
                       controller: _serverUrlController,
-                      hintText: 'http://192.168.31.113:8000',
+                      hintText: 'http://192.168.1.70:8000',
                       keyboardType: TextInputType.url,
+                      customSuffixIcon: PopupMenuButton<String>(
+                        icon: const Icon(Icons.arrow_drop_down_rounded, color: AppColors.textSecondary),
+                        onSelected: (String value) {
+                          setState(() {
+                            _serverUrlController.text = value;
+                          });
+                        },
+                        itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
+                          const PopupMenuItem<String>(
+                            value: 'http://192.168.1.70:8000',
+                            child: Text('Default (192.168.1.70)'),
+                          ),
+                          const PopupMenuItem<String>(
+                            value: 'http://localhost:8000',
+                            child: Text('Localhost (iOS/Web)'),
+                          ),
+                          const PopupMenuItem<String>(
+                            value: 'http://10.0.2.2:8000',
+                            child: Text('Emulator (Android)'),
+                          ),
+                        ],
+                      ),
                     ),
                     const SizedBox(height: 24),
 

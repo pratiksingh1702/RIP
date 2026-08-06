@@ -1,4 +1,4 @@
-﻿"""Apply unified diff patches safely with backup creation."""
+"""Apply unified diff patches safely with backup creation."""
 
 from __future__ import annotations
 
@@ -114,4 +114,5 @@ class FSApplyPatchBlock(Block):
             "name": "Apply Patch", "description": "Apply a unified diff to a file with backup",
             "category": "Filesystem", "display_icon": "📝", "display_color": "#6366F1",
             "input_schema": self.input_schema, "output_schema": self.output_schema,
+            "config_schema": self.config_schema,
         }

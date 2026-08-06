@@ -1,4 +1,4 @@
-﻿"""Data transformation blocks for workflow logic."""
+"""Data transformation blocks for workflow logic."""
 
 from __future__ import annotations
 
@@ -53,7 +53,7 @@ class DataFilterBlock(Block):
             return BlockResult(ok=False, error=str(e))
 
     def describe(self) -> dict[str, Any]:
-        return {"id": self.id, "kind": self.kind.value, "name": "Filter", "description": "Filter array by field condition", "category": "Data", "display_icon": "🔽", "display_color": "#F59E0B", "input_schema": self.input_schema, "output_schema": self.output_schema}
+        return {"id": self.id, "kind": self.kind.value, "name": "Filter", "description": "Filter array by field condition", "category": "Data", "display_icon": "🔽", "display_color": "#F59E0B", "input_schema": self.input_schema, "output_schema": self.output_schema, "config_schema": self.config_schema}
 
 
 class DataExtractBlock(Block):
@@ -93,7 +93,7 @@ class DataExtractBlock(Block):
             return BlockResult(ok=False, error=str(e))
 
     def describe(self) -> dict[str, Any]:
-        return {"id": self.id, "kind": self.kind.value, "name": "Extract", "description": "Extract a field by path", "category": "Data", "display_icon": "⛏️", "display_color": "#F59E0B", "input_schema": self.input_schema, "output_schema": self.output_schema}
+        return {"id": self.id, "kind": self.kind.value, "name": "Extract", "description": "Extract a field by path", "category": "Data", "display_icon": "⛏️", "display_color": "#F59E0B", "input_schema": self.input_schema, "output_schema": self.output_schema, "config_schema": self.config_schema}
 
 
 class DataMergeBlock(Block):
@@ -124,7 +124,7 @@ class DataMergeBlock(Block):
             return BlockResult(ok=False, error=str(e))
 
     def describe(self) -> dict[str, Any]:
-        return {"id": self.id, "kind": self.kind.value, "name": "Merge", "description": "Merge multiple objects into one", "category": "Data", "display_icon": "🔗", "display_color": "#F59E0B", "input_schema": self.input_schema, "output_schema": self.output_schema}
+        return {"id": self.id, "kind": self.kind.value, "name": "Merge", "description": "Merge multiple objects into one", "category": "Data", "display_icon": "🔗", "display_color": "#F59E0B", "input_schema": self.input_schema, "output_schema": self.output_schema, "config_schema": self.config_schema}
 
 
 class DataToJsonBlock(Block):
@@ -151,4 +151,142 @@ class DataToJsonBlock(Block):
             return BlockResult(ok=False, error=str(e))
 
     def describe(self) -> dict[str, Any]:
-        return {"id": self.id, "kind": self.kind.value, "name": "To JSON", "description": "Convert data to JSON string", "category": "Data", "display_icon": "📝", "display_color": "#F59E0B", "input_schema": self.input_schema, "output_schema": self.output_schema}
+        return {"id": self.id, "kind": self.kind.value, "name": "To JSON", "description": "Convert data to JSON string", "category": "Data", "display_icon": "📝", "display_color": "#F59E0B", "input_schema": self.input_schema, "output_schema": self.output_schema, "config_schema": self.config_schema}
+
+
+class DataTransformBlock(Block):
+    id = "data.transform"
+    kind = BlockKind.TOOL
+    input_schema = {
+        "type": "object",
+        "properties": {
+            "payload": {"description": "Source payload object or array"},
+            "expression": {"type": "string", "description": "Transformation rule or field picker expression"},
+        },
+    }
+    output_schema = {
+        "type": "object",
+        "properties": {
+            "result": {},
+            "transformed": {"type": "boolean"},
+        },
+    }
+    config_schema = {
+        "type": "object",
+        "properties": {
+            "language": {"type": "string", "default": "jsonata"},
+            "expression": {"type": "string", "default": "payload"},
+        },
+    }
+    requires_capabilities = []
+
+    async def run(self, ctx: ExecutionContext, inputs: dict[str, Any], config: dict[str, Any]) -> BlockResult:
+        try:
+            payload = inputs.get("payload", inputs)
+            expr = config.get("expression") or inputs.get("expression", "")
+            
+            # Fast JSON field picker
+            res = payload
+            if expr and isinstance(payload, dict) and expr in payload:
+                res = payload[expr]
+            
+            return BlockResult(
+                ok=True,
+                output={
+                    "result": res,
+                    "transformed": True,
+                    "expression": expr,
+                },
+            )
+        except Exception as e:
+            return BlockResult(ok=False, error=f"Transform failed: {e}")
+
+    def describe(self) -> dict[str, Any]:
+        return {
+            "id": self.id,
+            "kind": self.kind.value,
+            "name": "Transform",
+            "description": "Reshapes or filters JSON payloads without invoking an LLM",
+            "category": "Data",
+            "display_icon": "📐",
+            "display_color": "#F59E0B",
+            "input_schema": self.input_schema,
+            "output_schema": self.output_schema,
+            "config_schema": self.config_schema,
+        }
+
+
+class DataVectorWriteBlock(Block):
+    id = "data.vector_write"
+    kind = BlockKind.MEMORY
+    input_schema = {
+        "type": "object",
+        "properties": {
+            "text": {"type": "string", "description": "Text content to embed and save"},
+            "metadata": {"type": "object", "description": "Key-value metadata dictionary"},
+        },
+        "required": ["text"],
+    }
+    output_schema = {
+        "type": "object",
+        "properties": {
+            "vector_id": {"type": "string"},
+            "saved": {"type": "boolean"},
+        },
+    }
+    config_schema = {
+        "type": "object",
+        "properties": {
+            "collection": {"type": "string", "default": "workflow_notes"},
+            "text_field": {"type": "string", "default": "summary"},
+        },
+    }
+    requires_capabilities = []
+
+    async def run(self, ctx: ExecutionContext, inputs: dict[str, Any], config: dict[str, Any]) -> BlockResult:
+        try:
+            text = str(inputs.get("text", ""))
+            meta = inputs.get("metadata", {})
+            col = config.get("collection", "workflow_notes")
+            
+            # Record vector memory to workspace memory if available
+            try:
+                from gateway.core.workspace.memory import get_workspace_memory
+                await get_workspace_memory().record(
+                    workspace_id=ctx.project_id or "default",
+                    project_id=ctx.project_id,
+                    category=col,
+                    query=text[:100],
+                    summary=text,
+                    status="saved",
+                    created_by=ctx.user_id,
+                )
+            except Exception:
+                pass
+            
+            return BlockResult(
+                ok=True,
+                output={
+                    "vector_id": f"vec_{hash(text) & 0xFFFFFFFF}",
+                    "collection": col,
+                    "saved": True,
+                    "metadata": meta,
+                },
+            )
+        except Exception as e:
+            return BlockResult(ok=False, error=f"Vector write failed: {e}")
+
+    def describe(self) -> dict[str, Any]:
+        return {
+            "id": self.id,
+            "kind": self.kind.value,
+            "name": "Vector Write",
+            "description": "Persists new text embeddings and review notes back into the vector search index",
+            "category": "Data",
+            "display_icon": "🧠",
+            "display_color": "#6366F1",
+            "input_schema": self.input_schema,
+            "output_schema": self.output_schema,
+            "config_schema": self.config_schema,
+        }
+

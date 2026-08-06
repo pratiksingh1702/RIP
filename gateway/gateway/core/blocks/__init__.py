@@ -1,10 +1,31 @@
-﻿from gateway.core.blocks.base import Block, BlockKind, BlockResult, ExecutionContext
+from gateway.core.blocks.base import Block, BlockKind, BlockResult, ExecutionContext
 from gateway.core.blocks.context_retrieve import ContextRetrieveBlock
-from gateway.core.blocks.data_blocks import DataExtractBlock, DataFilterBlock, DataMergeBlock, DataToJsonBlock
+from gateway.core.blocks.data_blocks import (
+    DataExtractBlock,
+    DataFilterBlock,
+    DataMergeBlock,
+    DataToJsonBlock,
+    DataTransformBlock,
+    DataVectorWriteBlock,
+)
 from gateway.core.blocks.filesystem import FSListDirectoryBlock, FSReadFileBlock, FSSearchFilesBlock, FSWriteFileBlock
-from gateway.core.blocks.agent_block import AgentBlock
+from gateway.core.blocks.agent_block import AgentBlock, PromptAgentBlock
 from gateway.core.blocks.fs_apply_patch import FSApplyPatchBlock
-from gateway.core.blocks.flow import FlowDelayBlock, FlowLogBlock, FlowSetVariableBlock
+from gateway.core.blocks.flow import (
+    FlowConditionBlock,
+    FlowDelayBlock,
+    FlowForEachBlock,
+    FlowLogBlock,
+    FlowParallelBlock,
+    FlowSetVariableBlock,
+    FlowSubworkflowBlock,
+    FlowWaitForSignalBlock,
+)
+from gateway.core.blocks.trigger_blocks import (
+    TriggerCronBlock,
+    TriggerFileWatchBlock,
+    TriggerWebhookBlock,
+)
 from gateway.core.blocks.github_deployment import (
     GitHubCommitFilesBlock,
     GitHubCreateBranchBlock,
@@ -52,6 +73,7 @@ def register_all_blocks():
     # AI + Approval
     registry.register(PromptAskAIBlock())
     registry.register(ApprovalBlock())
+    registry.register(PromptAgentBlock())
 
     # GitHub deployment
     registry.register(GitHubCreateBranchBlock())
@@ -75,6 +97,13 @@ def register_all_blocks():
     registry.register(DataExtractBlock())
     registry.register(DataMergeBlock())
     registry.register(DataToJsonBlock())
+    registry.register(DataTransformBlock())
+    registry.register(DataVectorWriteBlock())
+
+    # Triggers
+    registry.register(TriggerCronBlock())
+    registry.register(TriggerWebhookBlock())
+    registry.register(TriggerFileWatchBlock())
 
     # Notifications
     registry.register(NotifyPushBlock())
@@ -85,6 +114,11 @@ def register_all_blocks():
     registry.register(FlowDelayBlock())
     registry.register(FlowSetVariableBlock())
     registry.register(FlowLogBlock())
+    registry.register(FlowConditionBlock())
+    registry.register(FlowForEachBlock())
+    registry.register(FlowParallelBlock())
+    registry.register(FlowSubworkflowBlock())
+    registry.register(FlowWaitForSignalBlock())
 
     # Agent Runtime
     registry.register(AgentBlock())
